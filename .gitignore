@@ -1,0 +1,7 @@
+# converted model data stays local (not published)
+viewer/data/
+viewer/data_*/
+work/
+__pycache__/
+*.pyc
+.claude/
