@@ -9,7 +9,11 @@ Format notes (recovered from libpvsparser_vs16.dll):
   * Varints are LEB128.  A "symbol" is a varint v: 0 = empty, even = inline
     string of v>>1 bytes, odd = index v>>1 into the symbol table.
   * Tag 1 = symbol table, 2 = structure, 0x20 = component, 0x21 = component
-    instance (child of a component), 0x23 = shape source (.ol file + bbox).
+    instance (child of a component), 0x23 = shape source (.ol file + bbox),
+    0x26 = thumbnail image (.jpg) of the component.
+  * Tag 3 = properties: children 0x2a, one per component in order (flag bit 0:
+    a varint gives the index step instead of 1), each holding 0x2b records =
+    symbol name + symbol value.
 """
 import struct
 import zlib
@@ -130,7 +134,10 @@ class PVS:
                 r.p = body + ln
                 if ch:
                     self._structure(r)
-                break
+            elif tid == 3:
+                r.p = body + ln
+                if ch:
+                    self._properties(r)
             elif tid == 0:
                 continue
             else:
@@ -151,9 +158,38 @@ class PVS:
                 if ch:
                     r.skip_children()
 
+    def _properties(self, r):
+        idx = -1
+        while True:
+            tid, ln, fl, ch = r.tag()
+            if tid == 0:
+                return
+            body = r.p
+            if tid == 0x2A:
+                idx += r.varint() if fl & 1 else 1
+            r.p = body + ln
+            if not ch:
+                continue
+            props = {}
+            while True:
+                t, cln, cfl, cch = r.tag()
+                if t == 0:
+                    break
+                cbody = r.p
+                if t == 0x2B:
+                    k = self.symbol(r)
+                    v = self.symbol(r)
+                    if v and v != "null":
+                        props[k] = v
+                r.p = cbody + cln
+                if cch:
+                    r.skip_children()
+            if tid == 0x2A and 0 <= idx < len(self.components):
+                self.components[idx]["props"] = props
+
     def _component(self, r, ln, fl, ch, body):
         comp = {"index": len(self.components), "name": self.symbol(r), "flags": fl,
-                "shape": None, "bbox": None, "children": []}
+                "shape": None, "bbox": None, "thumb": None, "props": {}, "children": []}
         r.p = body + ln
         self.components.append(comp)
         if not ch:
@@ -169,6 +205,8 @@ class PVS:
                 comp["shape"] = self.symbol(r)
                 if cfl & 1:
                     comp["bbox"] = struct.unpack("<6f", r.raw(24))
+            elif tid == 0x26:
+                comp["thumb"] = self.symbol(r)
             r.p = cbody + cln
             if cch:
                 r.skip_children()

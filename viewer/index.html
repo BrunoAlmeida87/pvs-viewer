@@ -4,49 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Visualizador PVS</title>
-<style>
-  :root {
-    --bg: #f4f5f7; --panel: #ffffff; --border: #d9dce1; --text: #1d2330; --muted: #6b7280;
-    --accent: #e8590c; --hover: #eef1f5; --sel: #ffe8d6;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
-  #app { display: grid; grid-template-columns: 340px 1fr; grid-template-rows: 44px 1fr 26px; height: 100%; }
-  header { grid-column: 1 / 3; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
-  header h1 { font-size: 14px; margin: 0 12px 0 0; font-weight: 600; }
-  header .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
-  button { font: inherit; padding: 4px 10px; border: 1px solid var(--border); background: var(--panel); border-radius: 4px; cursor: pointer; color: var(--text); }
-  button:hover { background: var(--hover); }
-  button.on { background: var(--sel); border-color: var(--accent); }
-  #side { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--border); }
-  #search { margin: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
-  #tree { flex: 1; overflow: auto; padding: 2px 0 8px; user-select: none; }
-  .row { display: flex; align-items: center; white-space: nowrap; height: 22px; padding-right: 8px; cursor: default; }
-  .row:hover { background: var(--hover); }
-  .row.sel { background: var(--sel); }
-  .tw { width: 16px; text-align: center; color: var(--muted); cursor: pointer; flex: none; }
-  .row input { margin: 0 4px 0 0; flex: none; }
-  .row .nm { overflow: hidden; text-overflow: ellipsis; }
-  .row .cnt { color: var(--muted); margin-left: 6px; font-size: 11px; }
-  #info { border-top: 1px solid var(--border); padding: 8px 10px; max-height: 30%; overflow: auto; font-size: 12px; }
-  #info .path { color: var(--muted); word-break: break-all; }
-  #view { position: relative; min-width: 0; min-height: 0; }
-  #view canvas { display: block; width: 100%; height: 100%; outline: none; }
-  #status { grid-column: 1 / 3; display: flex; align-items: center; gap: 16px; padding: 0 10px; background: var(--panel); border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
-  #bar { width: 200px; height: 6px; background: var(--hover); border-radius: 3px; overflow: hidden; }
-  #bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-  #results .row { padding-left: 8px; }
-  #open { position: absolute; inset: 0; margin: auto; width: min(440px, calc(100% - 32px)); height: fit-content;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px 22px; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
-  #open[hidden] { display: none; }
-  #open h2 { margin: 0 0 8px; font-size: 16px; }
-  #open code { background: var(--hover); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
-  #open .muted { color: var(--muted); font-size: 12px; }
-  .btn { display: inline-block; padding: 6px 14px; border-radius: 4px; border: 0; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
-  .btn:hover { background: var(--accent); }
-  .btn:hover { filter: brightness(1.08); }
-  #openErr { color: #b42318; margin: 8px 0 0; }
-</style>
+<link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -58,26 +16,123 @@
 <div id="app">
   <header>
     <h1 id="title">Visualizador PVS</h1>
-    <button id="fit" title="Enquadrar tudo (F)">Enquadrar</button>
-    <button id="zoomSel" title="Enquadrar seleção (Z)">Zoom seleção</button>
-    <span class="sep"></span>
-    <button data-view="iso">Iso</button>
-    <button data-view="front">Frente</button>
-    <button data-view="side">Lado</button>
-    <button data-view="top">Topo</button>
-    <span class="sep"></span>
-    <button id="isolate" title="Mostrar só a seleção (I)">Isolar</button>
-    <button id="hideSel" title="Ocultar seleção (H)">Ocultar</button>
-    <button id="showAll" title="Mostrar tudo (A)">Mostrar tudo</button>
-    <span class="sep"></span>
-    <button id="ortho">Ortográfica</button>
+    <div class="group">
+      <button id="fit" title="Enquadrar tudo (F)">Enquadrar</button>
+      <button id="zoomSel" title="Enquadrar seleção (Z)">Zoom seleção</button>
+      <div class="menu">
+        <button class="menuBtn">Vistas ▾</button>
+        <div class="menuBody">
+          <button data-view="iso">Isométrica</button>
+          <button data-view="front">Frente</button>
+          <button data-view="side">Lado</button>
+          <button data-view="top">Topo</button>
+          <hr>
+          <button id="ortho">Ortográfica</button>
+        </div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="menu">
+        <button class="menuBtn">Seleção ▾</button>
+        <div class="menuBody">
+          <button id="selInvert">Inverter seleção</button>
+          <button id="selParent">Selecionar pai</button>
+          <button id="selChildren">Selecionar filhos</button>
+          <button id="selSiblings">Selecionar irmãos</button>
+          <hr>
+          <button id="selSameColor">Mesma cor</button>
+          <div class="menuRow">Mesmo valor de <select id="selSameKey"></select><button id="selSame">OK</button></div>
+          <hr>
+          <button id="selClear">Limpar seleção (Esc)</button>
+          <p class="hint">Ctrl+clique soma/remove · Shift+arrastar seleciona por área · Alt+clique sobe um nível</p>
+        </div>
+      </div>
+      <button id="isolate" title="Mostrar só a seleção (I)">Isolar</button>
+      <button id="hideSel" title="Ocultar seleção (H)">Ocultar</button>
+      <button id="showAll" title="Mostrar tudo (A)">Mostrar tudo</button>
+    </div>
+    <div class="group">
+      <input type="color" id="colorPick" value="#e8590c" title="Cor">
+      <button id="colorApply" title="Aplicar cor à seleção">Colorir</button>
+      <label class="opacity" title="Opacidade da seleção">Opac. <input type="range" id="opacity" min="5" max="100" value="100"></label>
+      <button id="opacityApply" title="Aplicar opacidade à seleção">Aplicar</button>
+      <button id="ghost" title="Deixa transparente o que não está selecionado (G)">Fantasma</button>
+      <label class="rule">Colorir por <select id="rule"></select></label>
+      <button id="resetColors" title="Volta às cores originais">Restaurar cores</button>
+    </div>
+    <div class="group right">
+      <button id="listBtn" title="Lista de peças e estatísticas (L)">Lista de peças</button>
+    </div>
   </header>
+
   <aside id="side">
-    <input id="search" placeholder="Buscar componente…" autocomplete="off">
-    <div id="tree"></div>
-    <div id="info">Clique numa peça no modelo ou na árvore.</div>
+    <nav class="tabs">
+      <button data-tab="treeTab" class="on">Árvore</button>
+      <button data-tab="searchTab">Busca</button>
+      <button data-tab="setsTab">Conjuntos</button>
+    </nav>
+    <section id="treeTab" class="tab on"><div id="tree"></div></section>
+    <section id="searchTab" class="tab">
+      <div class="searchBox">
+        <input id="q" placeholder="Buscar… (texto, ou /regex/)" autocomplete="off">
+        <div class="row2">
+          <select id="qField" title="Onde buscar"></select>
+          <select id="qOp" title="Como comparar">
+            <option value="contains">contém</option>
+            <option value="equals">igual a (aceita *)</option>
+            <option value="starts">começa com</option>
+            <option value="regex">regex</option>
+            <option value="notcontains">não contém</option>
+            <option value="gt">&gt; (número)</option>
+            <option value="lt">&lt; (número)</option>
+            <option value="ge">≥ (número)</option>
+            <option value="le">≤ (número)</option>
+            <option value="ne">≠</option>
+            <option value="exists">tem valor</option>
+            <option value="empty">sem valor</option>
+          </select>
+        </div>
+        <div id="conds"></div>
+        <div class="row2">
+          <button id="addCond" title="Adicionar outra condição">+ condição</button>
+          <select id="qJoin" title="Como combinar as condições"><option value="and">todas (E)</option><option value="or">qualquer (OU)</option></select>
+          <select id="qScope" title="Que tipo de item"><option value="parts">só peças</option><option value="all">peças e montagens</option><option value="asm">só montagens</option></select>
+        </div>
+        <div class="row2">
+          <label><input type="checkbox" id="qCase"> diferenciar maiúsculas</label>
+          <button id="qRun" class="primary">Buscar</button>
+        </div>
+      </div>
+      <div id="qActions" hidden>
+        <div id="qCount"></div>
+        <div class="actions">
+          <button data-act="select">Selecionar</button>
+          <button data-act="add">+ Seleção</button>
+          <button data-act="isolate">Isolar</button>
+          <button data-act="hide">Ocultar</button>
+          <button data-act="show">Mostrar</button>
+          <button data-act="color">Colorir</button>
+          <button data-act="zoom">Zoom</button>
+          <button data-act="list">Listar</button>
+        </div>
+      </div>
+      <div id="results"></div>
+    </section>
+    <section id="setsTab" class="tab">
+      <h3>Conjuntos de seleção</h3>
+      <div class="row2"><input id="setName" placeholder="Nome do conjunto"><button id="setSave">Salvar seleção</button></div>
+      <div id="setList"></div>
+      <h3>Esquemas de cores</h3>
+      <div class="row2"><input id="schemeName" placeholder="Nome do esquema"><button id="schemeSave">Salvar cores</button></div>
+      <div id="schemeList"></div>
+      <p class="hint">Ficam salvos neste navegador, por modelo.</p>
+    </section>
+    <div id="info"><div class="muted">Clique numa peça no modelo ou na árvore.</div></div>
   </aside>
+
   <main id="view">
+    <div id="legend" hidden></div>
+    <div id="boxSel" hidden></div>
     <div id="open" hidden>
       <h2>Abrir modelo</h2>
       <p>Escolha a pasta do modelo Creo View, a que contém o arquivo <code>.pvs</code> e os arquivos <code>.ol</code>.
@@ -89,11 +144,36 @@
       <input id="folder" type="file" webkitdirectory directory multiple hidden>
       <p id="openErr"></p>
     </div>
+    <div id="bom" hidden>
+      <div class="bomBar">
+        <nav class="tabs small">
+          <button data-btab="list" class="on">Lista</button>
+          <button data-btab="stats">Estatísticas</button>
+        </nav>
+        <select id="bomScope" title="Quais peças">
+          <option value="all">Todas as peças</option>
+          <option value="sel">Seleção</option>
+          <option value="vis">Visíveis</option>
+          <option value="res">Resultado da busca</option>
+        </select>
+        <input id="bomFilter" placeholder="Filtrar…">
+        <label id="groupBy" hidden>Agrupar por <select id="statsKey"></select></label>
+        <span id="bomCount" class="muted"></span>
+        <span class="spacer"></span>
+        <button id="bomCsv" title="Exportar para CSV (abre no Excel)">Exportar CSV</button>
+        <button id="bomClose" title="Fechar">✕</button>
+      </div>
+      <div id="bomHead"></div>
+      <div id="bomBody"><div id="bomSpacer"></div><div id="bomRows"></div></div>
+    </div>
   </main>
+
   <footer id="status">
     <div id="bar"><div></div></div>
-    <span id="load">Carregando estrutura…</span>
+    <span id="load">Carregando…</span>
     <span id="stats"></span>
+    <span class="spacer"></span>
+    <span id="selInfo"></span>
   </footer>
 </div>
 <script type="module" src="viewer.js"></script>

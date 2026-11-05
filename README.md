@@ -31,8 +31,20 @@ em **Abrir pasta do modelo…**. Para servir uma pasta original:
 Os modelos (`viewer/data/`) não vão para o repositório (`.gitignore`). O visualizador precisa de internet para
 baixar Three.js e fflate de um CDN.
 
+## Recursos
+
+- **Árvore** da montagem com visibilidade por nó; **propriedades** e miniatura da peça selecionada.
+- **Busca** por nome ou propriedade: contém, igual (com `*`), começa com, regex (`/.../`), números (`>`, `<`, `≥`, `≤`),
+  várias condições com E/OU; ações em todos os resultados (selecionar, isolar, ocultar, colorir, zoom, listar).
+- **Seleção**: clique, Ctrl+clique (soma/remove), Shift+arrastar (área), Alt+clique (sobe um nível); inverter,
+  pai/filhos/irmãos, mesma cor, mesmo valor de uma propriedade.
+- **Cores**: colorir e mudar a opacidade da seleção, modo fantasma, colorir por regra (material, espessura, seção,
+  subsistema…) com legenda clicável, restaurar cores.
+- **Conjuntos** de seleção e **esquemas de cores** com nome, salvos no navegador.
+- **Lista de peças** com filtro, ordenação e exportação CSV; **estatísticas** por grupo (contagem e soma de Unit weight).
+
 Mouse: esquerdo gira, direito/meio desloca, roda dá zoom no cursor. Clique seleciona, duplo clique enquadra a peça.
-Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · Esc limpar seleção.
+Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista · Esc limpar seleção.
 
 Funcionalidades planejadas: [ROADMAP.md](ROADMAP.md).
 
@@ -40,7 +52,7 @@ Funcionalidades planejadas: [ROADMAP.md](ROADMAP.md).
 
 | Arquivo | Formato | Leitores |
 |---|---|---|
-| `.pvs` | `PV-PVS0301C` + membros gzip; tags de 16 bits (id 9 bits, tamanho, flags, filhos), varints LEB128, tabela de símbolos. Tag 0x20 componente, 0x21 instância (posição em double + matriz 3×3), 0x23 arquivo `.ol` + bbox | `tools/pvs.py`, `viewer/lib/pvs.js` |
+| `.pvs` | `PV-PVS0301C` + membros gzip; tags de 16 bits (id 9 bits, tamanho, flags, filhos), varints LEB128, tabela de símbolos. Tag 0x20 componente, 0x21 instância (posição em double + matriz 3×3), 0x23 arquivo `.ol` + bbox, 0x26 miniatura; tag 3 propriedades (0x2a por componente, 0x2b nome + valor) | `tools/pvs.py`, `viewer/lib/pvs.js` |
 | `.ol` | `DIV-OL07BL`, índice de seções gzip; registros `u32 tag / i32 tamanho`. Seção 0 materiais, seção 1 malhas (face 0x0D → vértices 0x16 → malha 0x18 → strips 0x1A / triângulos 0x1B / fans 0x19), seção 2 arestas | `tools/ol.py`, `viewer/lib/olworker.js` |
 
 O formato foi obtido por engenharia reversa de `libpvsparser_vs16.dll` e `libolparser_vs16.dll` (Creo View Express).

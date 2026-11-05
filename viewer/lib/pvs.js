@@ -59,7 +59,7 @@ export function parsePVS(buffer) {
   };
 
   const component = (ln, body, ch) => {
-    const c = { name: symbol(), shape: null, bbox: null, children: [] };
+    const c = { name: symbol(), shape: null, bbox: null, thumb: null, props: null, children: [] };
     p = body + ln;
     comps.push(c);
     if (!ch) return;
@@ -71,7 +71,7 @@ export function parsePVS(buffer) {
       else if (id === 0x23) {
         c.shape = symbol();
         if (cfl & 1) { c.bbox = [0, 1, 2, 3, 4, 5].map((k) => dv.getFloat32(p + 4 * k, true)); p += 24; }
-      }
+      } else if (id === 0x26) c.thumb = symbol();
       p = cbody + cln;
       if (cch) skipChildren();
     }
@@ -96,7 +96,33 @@ export function parsePVS(buffer) {
           else { p = cbody + cln; if (cch) skipChildren(); }
         }
       }
-      break;
+    } else if (id === 3) {
+      // properties: one 0x2a block per component (flag bit 0: varint index step), 0x2b = name + value
+      p = body + ln;
+      if (ch) {
+        let idx = -1;
+        for (;;) {
+          const [cid, cln, cfl, cch] = tag();
+          if (cid === 0) break;
+          const cbody = p;
+          if (cid === 0x2a) idx += cfl & 1 ? varint() : 1;
+          p = cbody + cln;
+          if (!cch) continue;
+          const props = [];
+          for (;;) {
+            const [t, tln, , tch] = tag();
+            if (t === 0) break;
+            const tbody = p;
+            if (t === 0x2b) {
+              const k = symbol(), v = symbol();
+              if (v && v !== "null") props.push(k, v);
+            }
+            p = tbody + tln;
+            if (tch) skipChildren();
+          }
+          if (cid === 0x2a && idx >= 0 && idx < comps.length) comps[idx].props = props;
+        }
+      }
     } else if (id !== 0) {
       p = body + ln;
       if (ch) skipChildren();
@@ -113,7 +139,8 @@ export function buildTree(comps) {
   for (const c of comps) for (const i of c.children) used[i.comp] = 1;
   let root = comps.length - 1;
   for (let i = comps.length - 1; i >= 0; i--) if (!used[i]) { root = i; break; }
-  const names = [], parent = [], part = [], p0 = [], p1 = [], shapes = [], boxes = [];
+  const names = [], parent = [], part = [], p0 = [], p1 = [], shapes = [], boxes = [], thumbs = [];
+  const keys = [], keyIx = new Map(), vals = [], valIx = new Map(), start = [0], kv = [];
   const stack = [[root, -1, false]];
   while (stack.length) {
     const [ci, par, done] = stack.pop();
@@ -121,6 +148,18 @@ export function buildTree(comps) {
     const node = names.length;
     const c = comps[ci];
     names.push(c.name);
+    thumbs.push(c.thumb || "");
+    if (c.props) {
+      for (let i = 0; i < c.props.length; i += 2) {
+        const k = c.props[i], v = c.props[i + 1];
+        let ki = keyIx.get(k);
+        if (ki === undefined) { ki = keys.length; keys.push(k); keyIx.set(k, ki); }
+        let vi = valIx.get(v);
+        if (vi === undefined) { vi = vals.length; vals.push(v); valIx.set(v, vi); }
+        kv.push(ki, vi);
+      }
+    }
+    start.push(kv.length / 2);
     parent.push(par);
     p0.push(shapes.length);
     p1.push(0);
@@ -129,5 +168,5 @@ export function buildTree(comps) {
     stack.push([ci, node, true]);
     for (let k = c.children.length - 1; k >= 0; k--) stack.push([c.children[k].comp, node, false]);
   }
-  return { names, parent, part, p0, p1, shapes, boxes };
+  return { names, parent, part, p0, p1, shapes, boxes, thumbs, props: { keys, vals, start, kv } };
 }

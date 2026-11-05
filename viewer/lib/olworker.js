@@ -25,21 +25,30 @@ async function runTask(m) {
   {
     const writer = new ChunkWriter();
     let tris = 0, missing = 0;
+    const boxParts = [], boxes = [];
     for (const { part, name, file } of m.parts) {
       let buf;
       try { buf = await readFile(name, file); } catch { missing++; continue; }
       if (!buf) { missing++; continue; }
       let groups;
       try { groups = loadOL(new Uint8Array(buf)); } catch (err) { missing++; continue; }
+      const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
       for (const g of groups) {
         const w = weld(g.pos, g.tris);
         if (!w) continue;
         writer.add(part, g.rgba, w.pos, w.idx);
         tris += w.idx.length / 3;
+        const P = w.pos;
+        for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) {
+          if (P[i + a] < b[a]) b[a] = P[i + a];
+          if (P[i + a] > b[a + 3]) b[a + 3] = P[i + a];
+        }
       }
+      if (b[0] <= b[3]) { boxParts.push(part); boxes.push(...b); }
     }
     writer.flush();
-    self.postMessage({ type: "done", id: m.id, tris, missing });
+    const bp = Uint32Array.from(boxParts), bb = Float32Array.from(boxes);
+    self.postMessage({ type: "done", id: m.id, tris, missing, boxParts: bp, boxes: bb }, [bp.buffer, bb.buffer]);
   }
 }
 

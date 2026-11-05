@@ -6,21 +6,21 @@ Dados disponíveis no modelo: propriedades por peça no PVS (Material, Section, 
 Unit weight, Description, libelle, part_objectid), arestas e superfícies analíticas (planos, cilindros) nos `.ol`,
 miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 
-## Fase 1 — base do dia a dia
-- [ ] [F] Painel de propriedades da peça selecionada (+ miniatura `.jpg`)
-- [ ] [F] Busca por texto, regex e palavra exata — no nome ou em qualquer propriedade
-- [ ] [F] Busca por propriedade (`Material = S355*`, `Thickness > 10`, `Section contém TUBE`)
-- [ ] [M] Filtros combinados E/OU
-- [ ] [F] Ações sobre resultados (um ou todos): selecionar, isolar, ocultar, colorir, zoom
-- [ ] [F] Seleção múltipla (Ctrl+clique, retângulo), inverter, selecionar pai/filhos/irmãos
-- [ ] [F] Selecionar tudo com a mesma cor / material / valor de propriedade
-- [ ] [F] Conjuntos de seleção com nome
-- [ ] [F] Mudar cor e transparência de peça, grupo, nó da árvore ou resultados de busca
-- [ ] [F] Modo fantasma (o que não está selecionado fica transparente)
-- [ ] [M] Colorir por regra com legenda (material, espessura, seção, nível da árvore, qualquer propriedade)
-- [ ] [F] Restaurar cores originais; salvar esquemas de cores
-- [ ] [M] Lista de peças (BOM) com filtros/ordenação e exportação CSV/Excel
-- [ ] [F] Estatísticas (peças por material/seção)
+## Fase 1 — base do dia a dia ✅
+- [x] Painel de propriedades da peça selecionada (+ miniatura `.jpg`, quando o modelo é aberto direto da pasta original)
+- [x] Busca por texto, regex e palavra exata — no nome ou em qualquer propriedade
+- [x] Busca por propriedade (`Material = S355*`, `Thickness > 10`, `Section contém TUBE`)
+- [x] Filtros combinados E/OU
+- [x] Ações sobre resultados (um ou todos): selecionar, isolar, ocultar, colorir, zoom, listar
+- [x] Seleção múltipla (Ctrl+clique, Shift+arrastar), inverter, selecionar pai/filhos/irmãos
+- [x] Selecionar tudo com a mesma cor / mesmo valor de propriedade
+- [x] Conjuntos de seleção com nome
+- [x] Mudar cor e transparência de peça, grupo, nó da árvore ou resultados de busca
+- [x] Modo fantasma (o que não está selecionado fica transparente)
+- [x] Colorir por regra com legenda (material, espessura, seção, subsistema, qualquer propriedade, cor por peça)
+- [x] Restaurar cores originais; salvar esquemas de cores (cores, transparência, visibilidade, regra)
+- [x] Lista de peças com filtro/ordenação e exportação CSV (abre no Excel)
+- [x] Estatísticas (peças e soma de Unit weight por material/seção/subsistema/propriedade)
 
 ## Fase 2 — visualização e cortes
 - [ ] [F] Sombreado suave (normais)

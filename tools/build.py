@@ -1,7 +1,8 @@
 """Convert a Creo View PVS + OL model into the web viewer's compact format.
 
 Output (in <out>/):
-  tree.json   - assembly tree in DFS order: names, parent, part range
+  tree.json   - assembly tree in DFS order: names, parent, part range,
+                properties (keys/vals tables + per-node pairs) and thumbnail names
   items.bin   - per draw item: u32 part index, u8 r,g,b,a  (8 bytes)
   parts.bin   - per part: f32 min xyz, max xyz (24 bytes)
   chunks.json - list of chunks with bbox, item offset/count, sizes
@@ -148,7 +149,7 @@ def main():
     print("structure: %d components, %.1fs" % (len(comps), time.time() - t0), flush=True)
 
     # DFS: tree nodes + parts in order
-    names, parents, part_of, ends, shapes = [], [], [], [], []
+    names, parents, part_of, ends, shapes, node_comp = [], [], [], [], [], []
     stack = [(root, -1, False)]
     while stack:
         ci, parent, done = stack.pop()
@@ -158,6 +159,7 @@ def main():
         node = len(names)
         c = comps[ci]
         names.append(c["name"])
+        node_comp.append(ci)
         parents.append(parent)
         ends.append(0)
         if c["shape"]:
@@ -175,8 +177,23 @@ def main():
         pstart[n] = running
         if part_of[n] >= 0:
             running += 1
+    # properties: keys / unique values tables + flat (key, value) pairs per node
+    keys, key_ix, vals, val_ix = [], {}, [], {}
+    kv_start, pkv, thumbs = [0], [], []
+    for ci in node_comp:
+        c = comps[ci]
+        for k, v in c.get("props", {}).items():
+            if k not in key_ix:
+                key_ix[k] = len(keys)
+                keys.append(k)
+            if v not in val_ix:
+                val_ix[v] = len(vals)
+                vals.append(v)
+            pkv += [key_ix[k], val_ix[v]]
+        kv_start.append(len(pkv) // 2)
+        thumbs.append(c.get("thumb") or "")
     tree = {"names": names, "parent": parents, "p0": pstart, "p1": ends, "part": part_of,
-            "partNames": [names[n] for n in range(len(names)) if part_of[n] >= 0]}
+            "props": {"keys": keys, "vals": vals, "start": kv_start, "kv": pkv}, "thumbs": thumbs, "shapes": shapes}
     with open(os.path.join(out_dir, "tree.json"), "w", encoding="utf-8") as f:
         json.dump(tree, f, ensure_ascii=False, separators=(",", ":"))
     print("tree: %d nodes, %d parts" % (len(names), len(shapes)), flush=True)
