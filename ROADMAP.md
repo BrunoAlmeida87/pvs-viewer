@@ -22,17 +22,17 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Lista de peças com filtro/ordenação e exportação CSV (abre no Excel)
 - [x] Estatísticas (peças e soma de Unit weight por material/seção/subsistema/propriedade)
 
-## Fase 2 — visualização e cortes
-- [ ] [F] Sombreado suave (normais)
-- [ ] [M] Arestas pretas, sombreado + arestas, wireframe
-- [ ] [M] Linhas ocultas (hidden line), raio-X
-- [ ] [M] Oclusão ambiente (SSAO), fundo e iluminação configuráveis
-- [ ] [F] Centro de rotação no ponto clicado, ViewCube
-- [ ] [M] Modo caminhada (primeira pessoa)
-- [ ] [M] Vista explodida
-- [ ] [F] Planos de corte X/Y/Z móveis
-- [ ] [M] Caixa de corte (section box)
-- [ ] [D] Corte com tampa (capping)
+## Fase 2 — visualização e cortes ✅
+- [x] Sombreado suave (normais do CAD nas faces curvas)
+- [x] Arestas do CAD (seção 2 dos `.ol`), sombreado + arestas, só arestas (wireframe)
+- [x] Linhas ocultas (hidden line), raio-X
+- [x] Oclusão ambiente (SSAO), fundo e iluminação configuráveis
+- [x] Centro de rotação no ponto clicado, cubo de vistas (faces, arestas e cantos)
+- [x] Modo caminhada (primeira pessoa)
+- [x] Vista explodida (por seção, subsistema, nível 3 ou peça; opcionalmente só a seleção)
+- [x] Planos de corte X/Y/Z móveis
+- [x] Caixa de corte (section box), inclusive em volta da seleção
+- [x] Corte com tampa (capping) hachurada
 
 ## Fase 3 — medição, vistas e anotações
 - [ ] [M] Distância ponto a ponto, coordenadas, ângulo

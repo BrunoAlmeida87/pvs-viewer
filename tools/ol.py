@@ -13,6 +13,10 @@ Format notes (recovered from libolparser_vs16.dll):
     2 rgba, 4 uv), u32 count, per-vertex floats} > 0x17 polyform > 0x18 mesh
     {i32 type, i32 material, u8, u8, u8 vtype} > 0x19 fan / 0x1A strip /
     0x1B triangles / 0x1C polyline / 0x1D lines (u32 indices).
+  * Section 2 (edges): 0x12 edge {u32 id, f32 t0, f32 t1} > 0x16 points > 0x17 > 0x18
+    > 0x1C polyline | 0x1D line pairs.
+  * Triangles are counter-clockwise around the CAD normals (outward); the few that are not
+    are flipped here.
 """
 import struct
 import zlib
@@ -105,7 +109,7 @@ class OLMesh:
 
     def __init__(self):
         self.groups = {}  # rgb tuple -> (list of pos arrays, list of normal arrays, list of index arrays)
-        self.edges = []   # list of (N,3) float32 polylines
+        self.edges = None  # (points (N,3) float32, segments (M,2) uint32) or None
 
 
 def load_ol(path, with_edges=False):
@@ -170,24 +174,55 @@ def load_ol(path, with_edges=False):
                             tris.extend(_fan_to_tris(idx.tolist()))
                     if not tris:
                         continue
+                    T = np.asarray(tris, dtype=np.uint32)
+                    if nrm is not None:
+                        a, b, c = pos[T[:, 0]], pos[T[:, 1]], pos[T[:, 2]]
+                        s = nrm[T[:, 0]] + nrm[T[:, 1]] + nrm[T[:, 2]]
+                        flip = (np.cross(b - a, c - a) * s).sum(1) < 0
+                        if flip.any():
+                            T[flip] = T[flip][:, [0, 2, 1]]
                     g = mesh.groups.setdefault(color_of(mi), ([], [], []))
                     g[0].append(pos)
                     g[1].append(nrm)
-                    g[2].append(np.asarray(tris, dtype=np.uint32))
+                    g[2].append(T)
     _walk(r1, face)
 
     if with_edges and 2 in secs:
         r2 = parse_records(secs[2])
+        pts, segs = [], []
+        count = [0]
 
         def edge(rec):
-            if rec.tag == 0x16 and len(rec.payload) >= 5:
-                flags = rec.payload[0]
-                cnt = struct.unpack_from("<I", rec.payload, 1)[0]
-                stride = 3 + (3 if flags & 1 else 0)
-                if cnt >= 2 and len(rec.payload) >= 5 + cnt * stride * 4:
-                    a = np.frombuffer(rec.payload, dtype="<f4", count=cnt * stride, offset=5).reshape(cnt, stride)
-                    mesh.edges.append(a[:, :3].copy())
+            if rec.tag != 0x16 or len(rec.payload) < 5:
+                return
+            flags = rec.payload[0]
+            cnt = struct.unpack_from("<I", rec.payload, 1)[0]
+            stride = 3 + (3 if flags & 1 else 0) + (4 if flags & 2 else 0) + (2 if flags & 4 else 0)
+            if len(rec.payload) < 5 + cnt * stride * 4:
+                return
+            used = False
+            stack = list(rec.children)
+            while stack:
+                r = stack.pop()
+                stack.extend(r.children)
+                if r.tag not in (0x1C, 0x1D):
+                    continue
+                ix = np.frombuffer(r.payload, dtype="<u4").astype(np.int64)
+                if r.tag == 0x1C:
+                    s = np.stack([ix[:-1], ix[1:]], 1)
+                else:
+                    s = ix[: len(ix) // 2 * 2].reshape(-1, 2)
+                s = s[(s < cnt).all(1)]
+                if len(s):
+                    segs.append(s + count[0])
+                    used = True
+            if used:
+                a = np.frombuffer(rec.payload, dtype="<f4", count=cnt * stride, offset=5).reshape(cnt, stride)
+                pts.append(a[:, :3])
+                count[0] += cnt
         _walk(r2, edge)
+        if segs:
+            mesh.edges = (np.concatenate(pts).astype(np.float32), np.concatenate(segs).astype(np.uint32))
     return mesh, materials
 
 
@@ -199,4 +234,4 @@ if __name__ == "__main__":
         allp = np.concatenate(ps)
         print(col, "verts", sum(len(p) for p in ps), "tris", sum(len(i) for i in ix),
               "bbox", allp.min(0), allp.max(0))
-    print("edges", len(m.edges))
+    print("edges", 0 if m.edges is None else len(m.edges[1]))

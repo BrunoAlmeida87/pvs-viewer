@@ -30,6 +30,39 @@
           <button id="ortho">Ortográfica</button>
         </div>
       </div>
+      <div class="menu">
+        <button class="menuBtn">Exibição ▾</button>
+        <div class="menuBody form">
+          <div class="menuRow"><span>Estilo</span><select id="dStyle" title="Estilo (E arestas · X raio-X)">
+            <option value="0">Sombreado</option>
+            <option value="1">Sombreado + arestas</option>
+            <option value="2">Linhas ocultas</option>
+            <option value="3">Só arestas (wireframe)</option>
+            <option value="4">Raio-X</option>
+          </select></div>
+          <label class="menuRow"><input type="checkbox" id="dSmooth" checked> Sombreado suave</label>
+          <label class="menuRow"><input type="checkbox" id="dSSAO"> Oclusão ambiente (SSAO)</label>
+          <hr>
+          <div class="menuRow"><span>Fundo</span><select id="dBg">
+            <option value="grad">Gradiente claro</option>
+            <option value="white">Branco</option>
+            <option value="dark">Gradiente escuro</option>
+            <option value="black">Preto</option>
+          </select></div>
+          <div class="menuRow"><span>Luz</span><select id="dLight">
+            <option value="cam">Câmera</option>
+            <option value="sky">Céu + câmera</option>
+            <option value="flat">Sem sombreamento</option>
+          </select></div>
+          <div class="menuRow"><span>Brilho</span><input type="range" id="dBright" min="60" max="160" value="100"></div>
+          <hr>
+          <label class="menuRow"><input type="checkbox" id="dCube" checked> Cubo de vistas</label>
+          <p class="hint">Arraste para girar em torno do ponto clicado. Clique numa face, aresta ou canto do cubo para mudar a vista.</p>
+        </div>
+      </div>
+      <button id="cutBtn" title="Planos e caixa de corte (C)">Corte</button>
+      <button id="explodeBtn" title="Vista explodida">Explodir</button>
+      <button id="walkBtn" title="Modo caminhada: WASD move, arraste olha, Esc sai">Caminhar</button>
     </div>
     <div class="group">
       <div class="menu">
@@ -133,6 +166,36 @@
   <main id="view">
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
+    <div id="pivot" hidden></div>
+    <div id="floaters">
+      <div id="cutPanel" class="panel" hidden>
+        <div class="ph">Corte <button class="x" data-close="cutPanel" title="Fechar">✕</button></div>
+        <div class="cutRow" data-axis="0"><label><input type="checkbox"> X</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+        <div class="cutRow" data-axis="1"><label><input type="checkbox"> Y</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+        <div class="cutRow" data-axis="2"><label><input type="checkbox"> Z</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+        <p class="hint">Cada eixo tem dois limites (mínimo e máximo). Um eixo ligado é um plano de corte; os três formam uma caixa.</p>
+        <label><input type="checkbox" id="cutInvert"> Inverter (remove o que está dentro)</label>
+        <label><input type="checkbox" id="cutCap" checked> Tampa nas peças cortadas</label>
+        <label><input type="checkbox" id="cutShow" checked> Mostrar a caixa</label>
+        <div class="row2"><button id="cutSel" title="Caixa em volta da seleção">Caixa da seleção</button><button id="cutReset">Limpar corte</button></div>
+      </div>
+      <div id="explodePanel" class="panel" hidden>
+        <div class="ph">Vista explodida <button class="x" data-close="explodePanel" title="Fechar">✕</button></div>
+        <div class="row2"><span>Separar por</span><select id="exLevel">
+          <option value="1">Seção (nível 1)</option>
+          <option value="2">Subsistema (nível 2)</option>
+          <option value="3">Nível 3</option>
+          <option value="0">Peça</option>
+        </select></div>
+        <div class="row2"><span>Distância</span><input type="range" id="exAmount" min="0" max="300" value="0"></div>
+        <label><input type="checkbox" id="exSel"> Só a seleção</label>
+        <div class="row2"><button id="exReset">Recolher</button></div>
+      </div>
+    </div>
+    <div id="walkHint" hidden>
+      <b>Caminhada</b> · W/S frente e trás · A/D lados · Q/E desce e sobe · arraste para olhar ·
+      Shift corre · roda do mouse muda a velocidade (<span id="walkSpeed"></span>) · Esc sai
+    </div>
     <div id="open" hidden>
       <h2>Abrir modelo</h2>
       <p>Escolha a pasta do modelo Creo View, a que contém o arquivo <code>.pvs</code> e os arquivos <code>.ol</code>.
