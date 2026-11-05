@@ -42,7 +42,8 @@
   #open h2 { margin: 0 0 8px; font-size: 16px; }
   #open code { background: var(--hover); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
   #open .muted { color: var(--muted); font-size: 12px; }
-  .btn { display: inline-block; padding: 6px 14px; border-radius: 4px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .btn { display: inline-block; padding: 6px 14px; border-radius: 4px; border: 0; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .btn:hover { background: var(--accent); }
   .btn:hover { filter: brightness(1.08); }
   #openErr { color: #b42318; margin: 8px 0 0; }
 </style>
@@ -79,12 +80,13 @@
   <main id="view">
     <div id="open" hidden>
       <h2>Abrir modelo</h2>
-      <p>Converta um modelo Creo View (<code>.pvs</code> + <code>.ol</code>) com
-        <code>python tools/build.py modelo.pvs pasta_saida</code> e escolha a pasta gerada.</p>
-      <p class="muted">Os arquivos são lidos no seu navegador e não são enviados para nenhum servidor.</p>
-      <label class="btn">Abrir pasta do modelo…
-        <input id="folder" type="file" webkitdirectory directory multiple hidden>
-      </label>
+      <p>Escolha a pasta do modelo Creo View, a que contém o arquivo <code>.pvs</code> e os arquivos <code>.ol</code>.
+        Também aceita uma pasta convertida por <code>tools/build.py</code>, que abre mais rápido.</p>
+      <p class="muted">Os arquivos são lidos no seu navegador e não são enviados para nenhum servidor.
+        No Chrome e no Edge o navegador só pede permissão para <em>ver</em> a pasta. Em outros navegadores aparece
+        um aviso de “upload”, mas os arquivos também não saem do seu computador.</p>
+      <button class="btn" id="openBtn">Abrir pasta do modelo…</button>
+      <input id="folder" type="file" webkitdirectory directory multiple hidden>
       <p id="openErr"></p>
     </div>
   </main>

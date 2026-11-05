@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { parsePVS, buildTree as buildPVSTree } from "./lib/pvs.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -101,127 +102,51 @@ const shared = {
 };
 
 // ---------------------------------------------------------------- state
-let meta, tree, nItems, itemPart, itemColor, itemTexData, itemTex, partBox;
-let nParts, partVisible, partSelected, partNode, partItemsStart, partItems;
-let visPrefix;
+let title = "", tree, partBox, modelMin, modelMax;
+let nItems = 0, itemPart = null, itemColor = null, itemTexData, itemTex;
+let nParts, partVisible, partSelected, partNode, visPrefix;
 let selectedNode = -1;
-const loaded = { chunks: 0, tris: 0 };
+const loaded = { chunks: 0, tris: 0, parts: 0 };
 
-// ---------------------------------------------------------------- data sources
-// Model data comes either from the server (viewer/data/) or from a local folder
-// the user picks; a picked folder is read in the browser and never uploaded.
-let src = null;
-
-function ok(r, name) { if (!r.ok) throw new Error(name + ": HTTP " + r.status); return r; }
-const httpSource = {
-  json: (n) => fetch(DATA + n).then((r) => ok(r, n).json()),
-  buf: (n) => fetch(DATA + n).then((r) => ok(r, n).arrayBuffer()),
-};
-
-function folderSource(files) {
-  const all = new Map();
-  for (const f of files) all.set((f.webkitRelativePath || f.name).replace(/\\/g, "/"), f);
-  const meta = [...all.keys()].filter((k) => k.endsWith("chunks.json")).sort((a, b) => a.length - b.length)[0];
-  if (!meta) throw new Error("a pasta não contém chunks.json (gerado por tools/build.py)");
-  const prefix = meta.slice(0, -"chunks.json".length);
-  const get = (n) => {
-    const f = all.get(prefix + n);
-    if (!f) throw new Error("arquivo ausente: " + n);
-    return f;
-  };
-  return {
-    json: async (n) => JSON.parse(await get(n).text()),
-    buf: async (n) => get(n).arrayBuffer(),
-  };
-}
-
-async function pickSource() {
-  if (!new URLSearchParams(location.search).has("abrir")) {
-    try {
-      await httpSource.json("chunks.json");
-      return httpSource;
-    } catch {
-      // no model on the server: ask for a local folder
-    }
-  }
-  $("#load").textContent = "Nenhum modelo carregado";
-  const card = $("#open");
-  card.hidden = false;
-  return new Promise((resolve) => {
-    const input = $("#folder");
-    input.onchange = () => {
-      try {
-        const s = folderSource(input.files);
-        card.hidden = true;
-        resolve(s);
-      } catch (e) {
-        $("#openErr").textContent = e.message;
-      }
-    };
-  });
-}
-
-async function main() {
-  resize();
-  src = await pickSource();
-  $("#load").textContent = "Carregando estrutura…";
-  const [m, t, itemsBuf, partsBuf] = await Promise.all([
-    src.json("chunks.json"),
-    src.json("tree.json"),
-    src.buf("items.bin"),
-    src.buf("parts.bin"),
-  ]);
-  meta = m; tree = t;
-  $("#title").textContent = meta.source;
-  document.title = meta.source + " · Visualizador PVS";
-
-  nItems = itemsBuf.byteLength / 8;
-  const dv = new DataView(itemsBuf);
-  itemPart = new Uint32Array(nItems);
-  itemColor = new Uint8Array(nItems * 4);
-  for (let i = 0; i < nItems; i++) {
-    itemPart[i] = dv.getUint32(i * 8, true);
-    for (let k = 0; k < 4; k++) itemColor[i * 4 + k] = dv.getUint8(i * 8 + 4 + k);
-  }
-  partBox = new Float32Array(partsBuf);
-  nParts = partBox.length / 6;
-  partVisible = new Uint8Array(nParts).fill(1);
-  partSelected = new Uint8Array(nParts);
-  partNode = new Int32Array(nParts).fill(-1);
-  tree.part.forEach((p, n) => { if (p >= 0) partNode[p] = n; });
-  // CSR part -> items
-  const counts = new Uint32Array(nParts + 1);
-  for (let i = 0; i < nItems; i++) counts[itemPart[i] + 1]++;
-  for (let p = 0; p < nParts; p++) counts[p + 1] += counts[p];
-  partItemsStart = counts;
-  partItems = new Uint32Array(nItems);
-  const fill = counts.slice();
-  for (let i = 0; i < nItems; i++) partItems[fill[itemPart[i]]++] = i;
-
-  const rows = Math.max(1, Math.ceil(nItems / TEX_W));
-  itemTexData = new Uint8Array(TEX_W * rows * 4);
+function allocItems(cap) {
+  const rows = Math.max(1, Math.ceil(cap / TEX_W));
+  const n = rows * TEX_W;
+  const np = new Uint32Array(n), nc = new Uint8Array(n * 4);
+  if (itemPart) { np.set(itemPart.subarray(0, nItems)); nc.set(itemColor.subarray(0, nItems * 4)); }
+  itemPart = np; itemColor = nc;
+  itemTexData = new Uint8Array(n * 4);
+  if (itemTex) itemTex.dispose();
   itemTex = new THREE.DataTexture(itemTexData, TEX_W, rows, THREE.RGBAFormat, THREE.UnsignedByteType);
   itemTex.minFilter = itemTex.magFilter = THREE.NearestFilter;
   itemTex.generateMipmaps = false;
   shared.itemTex.value = itemTex;
-  refreshItems();
-
-  buildTree();
-  fitAll(false);
-  loadChunks();
-  animate();
 }
 
-// ---------------------------------------------------------------- items / visibility
-function refreshItems() {
-  for (let i = 0; i < nItems; i++) {
-    const p = itemPart[i];
-    const o = i * 4;
+// Register draw items (part index + RGBA); returns the global offset of the first one.
+function addItems(parts, colors) {
+  const off = nItems, n = parts.length;
+  const grow = off + n > itemPart.length;
+  if (grow) allocItems(Math.ceil((off + n) * 1.25));
+  itemPart.set(parts, off);
+  itemColor.set(colors, off * 4);
+  nItems += n;
+  if (grow) refreshItems();
+  else { writeItems(off, off + n); itemTex.needsUpdate = true; }
+  return off;
+}
+
+function writeItems(a, b) {
+  for (let i = a; i < b; i++) {
+    const p = itemPart[i], o = i * 4;
     itemTexData[o] = itemColor[o];
     itemTexData[o + 1] = itemColor[o + 1];
     itemTexData[o + 2] = itemColor[o + 2];
     itemTexData[o + 3] = !partVisible[p] ? 0 : partSelected[p] ? 128 : 255;
   }
+}
+
+function refreshItems() {
+  writeItems(0, nItems);
   itemTex.needsUpdate = true;
   visPrefix = new Uint32Array(nParts + 1);
   for (let p = 0; p < nParts; p++) visPrefix[p + 1] = visPrefix[p] + partVisible[p];
@@ -250,33 +175,223 @@ function select(node, reveal = true) {
   showInfo(node);
 }
 
-// ---------------------------------------------------------------- chunk loading
-async function loadChunks() {
-  const list = meta.chunks.map((c, i) => ({ c, i }));
+// ---------------------------------------------------------------- model sources
+// A model is either a folder converted by tools/build.py (chunks.json, tree.json, ...)
+// or an original Creo View folder (.pvs + .ol files) that is parsed here in the browser.
+// Local folders are read by the browser and are never uploaded.
+function ok(r, name) { if (!r.ok) throw new Error(name + ": HTTP " + r.status); return r; }
+
+const httpConverted = {
+  json: (n) => fetch(DATA + n).then((r) => ok(r, n).json()),
+  buf: (n) => fetch(DATA + n).then((r) => ok(r, n).arrayBuffer()),
+};
+
+function filesConverted(all, prefix) {
+  const get = (n) => { const f = all.get(prefix + n); if (!f) throw new Error("arquivo ausente: " + n); return f; };
+  return { json: async (n) => JSON.parse(await get(n).text()), buf: async (n) => get(n).arrayBuffer() };
+}
+
+function dirConverted(dir) {
+  const file = async (n) => {
+    const parts = n.split("/");
+    let d = dir;
+    for (const s of parts.slice(0, -1)) d = await d.getDirectoryHandle(s);
+    return (await d.getFileHandle(parts[parts.length - 1])).getFile();
+  };
+  return { json: async (n) => JSON.parse(await (await file(n)).text()), buf: async (n) => (await file(n)).arrayBuffer() };
+}
+
+function status(t) { $("#load").textContent = t; }
+
+async function pickModel() {
+  const params = new URLSearchParams(location.search);
+  if (params.get("pvs")) {
+    const url = params.get("pvs");
+    const buf = await fetch(url).then((r) => ok(r, url).arrayBuffer());
+    return { kind: "raw", name: decodeURIComponent(url.split("/").pop()), pvs: buf, access: { base: new URL(url.slice(0, url.lastIndexOf("/") + 1), location.href).href } };
+  }
+  if (!params.has("abrir")) {
+    try { await httpConverted.json("chunks.json"); return { kind: "converted", src: httpConverted }; } catch { /* none on server */ }
+  }
+  status("Nenhum modelo carregado");
+  const card = $("#open");
+  card.hidden = false;
+  return new Promise((resolve) => {
+    const fail = (e) => { if (e && e.name !== "AbortError") $("#openErr").textContent = e.message || String(e); };
+    $("#openBtn").onclick = async () => {
+      $("#openErr").textContent = "";
+      if (window.showDirectoryPicker) {
+        try {
+          const dir = await window.showDirectoryPicker({ id: "pvs-model", mode: "read" });
+          status("Procurando o modelo na pasta…");
+          const m = await fromDirectory(dir);
+          card.hidden = true;
+          resolve(m);
+        } catch (e) { fail(e); }
+      } else {
+        $("#folder").click();
+      }
+    };
+    $("#folder").onchange = async () => {
+      try {
+        const m = await fromFileList($("#folder").files);
+        card.hidden = true;
+        resolve(m);
+      } catch (e) { fail(e); }
+    };
+  });
+}
+
+async function fromDirectory(dir) {
+  try { await dir.getFileHandle("chunks.json"); return { kind: "converted", src: dirConverted(dir) }; } catch { /* not converted */ }
+  const found = [];
+  for await (const [name, h] of dir.entries()) {
+    if (h.kind === "file" && name.toLowerCase().endsWith(".pvs")) { found.push(h); break; }
+  }
+  if (!found.length) throw new Error("A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.");
+  const f = await found[0].getFile();
+  return { kind: "raw", name: f.name, pvs: await f.arrayBuffer(), access: { dir } };
+}
+
+async function fromFileList(files) {
+  const all = new Map();
+  for (const f of files) all.set((f.webkitRelativePath || f.name).replace(/\\/g, "/"), f);
+  const keys = [...all.keys()];
+  const meta = keys.filter((k) => k.endsWith("chunks.json")).sort((a, b) => a.length - b.length)[0];
+  if (meta) return { kind: "converted", src: filesConverted(all, meta.slice(0, -"chunks.json".length)) };
+  const pvs = keys.filter((k) => k.toLowerCase().endsWith(".pvs")).sort((a, b) => a.length - b.length)[0];
+  if (!pvs) throw new Error("A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.");
+  const prefix = pvs.slice(0, pvs.lastIndexOf("/") + 1);
+  const byName = new Map();
+  for (const [k, f] of all) if (k.startsWith(prefix) && !k.slice(prefix.length).includes("/")) byName.set(k.slice(prefix.length), f);
+  const f = all.get(pvs);
+  return { kind: "raw", name: f.name, pvs: await f.arrayBuffer(), access: { files: byName } };
+}
+
+// ---------------------------------------------------------------- model setup
+function setModel(name, t, boxes, lo, hi) {
+  title = name;
+  tree = t;
+  partBox = boxes;
+  modelMin = lo; modelMax = hi;
+  nParts = partBox.length / 6;
+  partVisible = new Uint8Array(nParts).fill(1);
+  partSelected = new Uint8Array(nParts);
+  partNode = new Int32Array(nParts).fill(-1);
+  tree.part.forEach((p, n) => { if (p >= 0) partNode[p] = n; });
+  $("#title").textContent = name;
+  document.title = name + " · Visualizador PVS";
+  allocItems(Math.max(nParts * 1.3, TEX_W));
+  refreshItems();
+  buildTree();
+  fitAll(false);
+}
+
+async function main() {
+  resize();
+  animate();
+  const m = await pickModel();
+  status("Carregando estrutura…");
+  if (m.kind === "converted") await loadConverted(m.src);
+  else await loadRaw(m);
+}
+
+async function loadConverted(src) {
+  const [meta, t, itemsBuf, partsBuf] = await Promise.all([
+    src.json("chunks.json"), src.json("tree.json"), src.buf("items.bin"), src.buf("parts.bin"),
+  ]);
+  setModel(meta.source, t, new Float32Array(partsBuf), meta.min, meta.max);
+  const n = itemsBuf.byteLength / 8, dv = new DataView(itemsBuf);
+  const parts = new Uint32Array(n), colors = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    parts[i] = dv.getUint32(i * 8, true);
+    for (let k = 0; k < 4; k++) colors[i * 4 + k] = dv.getUint8(i * 8 + 4 + k);
+  }
+  addItems(parts, colors);
+  const list = meta.chunks;
   let next = 0;
-  const total = list.length;
   const bar = $("#bar > div");
-  async function worker() {
+  async function fetcher() {
     while (next < list.length) {
-      const { c } = list[next++];
+      const c = list[next++];
       const buf = await src.buf("c/" + c.f);
-      addChunk(c, buf);
+      addChunk(c, new Uint16Array(buf, 0, c.nv * 4), new Uint16Array(buf, c.nv * 8, c.ni), c.io);
       loaded.chunks++;
-      loaded.tris += c.ni / 3;
-      bar.style.width = (100 * loaded.chunks / total).toFixed(1) + "%";
-      $("#load").textContent = loaded.chunks < total ? `Carregando geometria ${loaded.chunks}/${total}` : "Modelo carregado";
-      $("#stats").textContent = `${(loaded.tris / 1e6).toFixed(1)} M triângulos · ${nParts.toLocaleString("pt-BR")} peças`;
-      requestRender();
+      bar.style.width = (100 * loaded.chunks / list.length).toFixed(1) + "%";
+      status(loaded.chunks < list.length ? `Carregando geometria ${loaded.chunks}/${list.length}` : "Modelo carregado");
     }
   }
-  await Promise.all(Array.from({ length: 6 }, worker));
+  await Promise.all(Array.from({ length: 6 }, fetcher));
+}
+
+async function loadRaw(m) {
+  const t0 = performance.now();
+  const pvs = parsePVS(m.pvs);
+  const t = buildPVSTree(pvs.components);
+  const boxes = new Float32Array(t.shapes.length * 6);
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  t.boxes.forEach((b, i) => {
+    if (!b) return;
+    boxes.set(b, i * 6);
+    for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], b[a]); hi[a] = Math.max(hi[a], b[a + 3]); }
+  });
+  setModel(m.name, t, boxes, lo, hi);
+  if (pvs.transformed) console.warn("O modelo tem instâncias com transformação; esta versão ainda não as aplica.");
+
+  const total = t.shapes.length;
+  const TASK = 150;
+  const tasks = [];
+  for (let s = 0; s < total; s += TASK) tasks.push(s);
+  const nWorkers = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1));
+  const bar = $("#bar > div");
+  let missing = 0, next = 0;
+  const files = m.access.files;
+  const runWorker = () => new Promise((resolve, reject) => {
+    const w = new Worker(new URL("./lib/olworker.js", import.meta.url), { type: "module" });
+    w.postMessage({ type: "init", dir: m.access.dir, base: m.access.base });
+    const send = () => {
+      if (next >= tasks.length) { w.terminate(); resolve(); return; }
+      const s = tasks[next++];
+      const parts = [];
+      for (let p = s; p < Math.min(total, s + TASK); p++) {
+        const name = t.shapes[p];
+        parts.push({ part: p, name, file: files ? files.get(name) || null : undefined });
+      }
+      w.postMessage({ type: "task", id: s, parts });
+    };
+    w.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === "chunk") {
+        const io = addItems(d.items, d.colors);
+        addChunk(d, d.verts, d.idx, io);
+      } else if (d.type === "error") {
+        console.error("worker:", d.message);
+        missing += TASK;
+        loaded.parts = Math.min(total, loaded.parts + TASK);
+        send();
+      } else if (d.type === "done") {
+        loaded.parts = Math.min(total, loaded.parts + TASK);
+        missing += d.missing;
+        bar.style.width = (100 * loaded.parts / total).toFixed(1) + "%";
+        const secs = ((performance.now() - t0) / 1000).toFixed(0);
+        status(`Lendo peças ${loaded.parts.toLocaleString("pt-BR")}/${total.toLocaleString("pt-BR")} · ${secs}s`);
+        send();
+      }
+    };
+    w.onerror = (e) => { w.terminate(); reject(new Error(e.message || "erro no worker")); };
+    send();
+  });
+  await Promise.all(Array.from({ length: nWorkers }, runWorker));
+  const secs = ((performance.now() - t0) / 1000).toFixed(0);
+  status(`Modelo carregado em ${secs}s` + (missing ? ` · ${missing} arquivo(s) .ol ausente(s) ou ilegível(is)` : ""));
 }
 
 function disposeArray() { this.array = null; }
 
-function addChunk(c, buf) {
-  const verts = new Uint16Array(buf, 0, c.nv * 4);
-  const idx = new Uint16Array(buf, c.nv * 8, c.ni);
+function addChunk(c, verts, idx, io) {
+  loaded.tris += c.ni / 3;
+  $("#stats").textContent = `${(loaded.tris / 1e6).toFixed(1)} M triângulos · ${nParts.toLocaleString("pt-BR")} peças`;
+  requestRender();
   const g = new THREE.BufferGeometry();
   const q = new THREE.BufferAttribute(verts, 4);
   q.gpuType = THREE.IntType;
@@ -295,7 +410,7 @@ function addChunk(c, buf) {
     uniforms: {
       bmin: { value: min },
       bext: { value: max.clone().sub(min) },
-      itemOffset: { value: c.io },
+      itemOffset: { value: io },
       itemTex: shared.itemTex,
       pickMode: shared.pickMode,
       ortho: shared.ortho,
@@ -308,7 +423,7 @@ function addChunk(c, buf) {
 }
 
 // ---------------------------------------------------------------- camera helpers
-function modelBox() { return new THREE.Box3(new THREE.Vector3(...meta.min), new THREE.Vector3(...meta.max)); }
+function modelBox() { return new THREE.Box3(new THREE.Vector3(...modelMin), new THREE.Vector3(...modelMax)); }
 
 function nodeBox(node) {
   const b = new THREE.Box3();
@@ -616,7 +731,7 @@ function animate() {
   needRender = false;
   if (camera === persp) {
     const d = camera.position.distanceTo(controls.target);
-    const size = modelBox().getSize(new THREE.Vector3()).length();
+    const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
     persp.near = Math.max(d / 2000, 0.0005);
     persp.far = d + size * 2;
     persp.updateProjectionMatrix();
