@@ -32,6 +32,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return os.path.join(model_dir, os.path.basename(name))
         return super().translate_path(path)
 
+    def end_headers(self):
+        # the viewer's own files change during development: always revalidate them
+        if not self.path.startswith(("/model/", "/data/")):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def log_message(self, *args):
         pass
 

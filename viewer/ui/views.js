@@ -47,17 +47,21 @@ export function initViews(app) {
 
   // ------------------------------------------------------------ view state
   function capture() {
+    // with the neighbourhood on, keep the visibility from before it plus its settings
+    const base = app.nbSaved ? app.nbSaved() : null;
     return {
+      nb: app.nbState ? app.nbState() : null,
       v: 1, model: app.title, camera: app.getCamera(),
       display: { ...app.display, perf: undefined },
       clip: JSON.parse(JSON.stringify(app.clip)), explode: { ...app.explode },
-      visible: runs(app.partVisible, 1), color: runs(app.partColor, -1), opacity: runs(app.partOpacity, 255),
+      visible: runs(base ? base.visible : app.partVisible, 1), color: runs(app.partColor, -1), opacity: runs(base ? base.opacity : app.partOpacity, 255),
       rule: app.ruleSpec || "", ghost: app.ghost, sel: [...app.selNodes].slice(0, 20000),
       notes, measurements: app.measurements ? app.measurements() : [],
     };
   }
   function apply(s) {
     if (!s || !app.tree) return;
+    if (app.nbApply) app.nbApply(null);
     app.partColor.fill(-1); app.partOpacity.fill(255); app.partVisible.fill(1);
     for (const [a, n, v] of s.color || []) app.partColor.fill(v, a, a + n);
     for (const [a, n, v] of s.opacity || []) app.partOpacity.fill(v, a, a + n);
@@ -74,6 +78,7 @@ export function initViews(app) {
     if (s.rule) app.applyRule(s.rule); else { app.partRule = null; app.emit("rule", ""); app.refresh(); }
     if (s.notes) { notes = s.notes; renderNotes(); }
     if (s.measurements && app.setMeasurements) app.setMeasurements(s.measurements);
+    if (s.nb && app.nbApply) app.nbApply(s.nb);
     app.setCamera(s.camera);
   }
   app.captureView = capture;

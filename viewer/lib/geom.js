@@ -321,6 +321,52 @@ function solve3(M, r) {
   return [A[0][3] / A[0][0], A[1][3] / A[1][1], A[2][3] / A[2][2]];
 }
 
+// ------------------------------------------------------------------ region tests
+// Does any part of the mesh surface come within r of c?
+export function meshInSphere(mesh, c, r) {
+  const { pos, idx } = mesh, r2 = r * r, q = [0, 0, 0];
+  for (let i = 0; i < pos.length; i += 3) if ((pos[i] - c[0]) ** 2 + (pos[i + 1] - c[1]) ** 2 + (pos[i + 2] - c[2]) ** 2 <= r2) return true;
+  for (let t = 0; t < idx.length; t += 3) {
+    closestOnTriangle(c, V(pos, idx[t]), V(pos, idx[t + 1]), V(pos, idx[t + 2]), q);
+    if ((q[0] - c[0]) ** 2 + (q[1] - c[1]) ** 2 + (q[2] - c[2]) ** 2 <= r2) return true;
+  }
+  return false;
+}
+
+// Triangle / axis-aligned box overlap (separating axis test, Akenine-Möller).
+function triBox(c, h, a, b, d) {
+  const v0 = [a[0] - c[0], a[1] - c[1], a[2] - c[2]], v1 = [b[0] - c[0], b[1] - c[1], b[2] - c[2]], v2 = [d[0] - c[0], d[1] - c[1], d[2] - c[2]];
+  for (let k = 0; k < 3; k++) {
+    if (Math.min(v0[k], v1[k], v2[k]) > h[k] || Math.max(v0[k], v1[k], v2[k]) < -h[k]) return false;
+  }
+  const e = [[v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]], [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]], [v0[0] - v2[0], v0[1] - v2[1], v0[2] - v2[2]]];
+  const n = [e[0][1] * e[1][2] - e[0][2] * e[1][1], e[0][2] * e[1][0] - e[0][0] * e[1][2], e[0][0] * e[1][1] - e[0][1] * e[1][0]];
+  const rn = h[0] * Math.abs(n[0]) + h[1] * Math.abs(n[1]) + h[2] * Math.abs(n[2]);
+  if (Math.abs(n[0] * v0[0] + n[1] * v0[1] + n[2] * v0[2]) > rn) return false;
+  const vs = [v0, v1, v2];
+  for (const ed of e) {
+    for (let k = 0; k < 3; k++) { // axis = unit vector k × edge
+      const ax = [0, 0, 0];
+      const u = [0, 0, 0]; u[k] = 1;
+      ax[0] = u[1] * ed[2] - u[2] * ed[1]; ax[1] = u[2] * ed[0] - u[0] * ed[2]; ax[2] = u[0] * ed[1] - u[1] * ed[0];
+      let lo = Infinity, hi = -Infinity;
+      for (const v of vs) { const p = v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2]; if (p < lo) lo = p; if (p > hi) hi = p; }
+      const rad = h[0] * Math.abs(ax[0]) + h[1] * Math.abs(ax[1]) + h[2] * Math.abs(ax[2]);
+      if (lo > rad || hi < -rad) return false;
+    }
+  }
+  return true;
+}
+// Does any part of the mesh surface lie inside the box (center c, half sizes h)?
+export function meshInBox(mesh, c, h) {
+  const { pos, idx } = mesh;
+  for (let i = 0; i < pos.length; i += 3) {
+    if (Math.abs(pos[i] - c[0]) <= h[0] && Math.abs(pos[i + 1] - c[1]) <= h[1] && Math.abs(pos[i + 2] - c[2]) <= h[2]) return true;
+  }
+  for (let t = 0; t < idx.length; t += 3) if (triBox(c, h, V(pos, idx[t]), V(pos, idx[t + 1]), V(pos, idx[t + 2]))) return true;
+  return false;
+}
+
 // Closest point to p on segment ab, and its squared distance.
 export function closestOnSegment(p, a, b) {
   const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];

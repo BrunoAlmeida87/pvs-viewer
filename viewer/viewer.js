@@ -11,6 +11,7 @@ import { initMeasure } from "./ui/measure.js";
 import { initViews } from "./ui/views.js";
 import { initAnalysis } from "./ui/analysis.js";
 import { initLayout } from "./ui/layout.js";
+import { initNeighbor } from "./ui/neighbor.js";
 import { initTree } from "./ui/tree.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
@@ -103,7 +104,15 @@ uniform int clipOn;
 uniform int clipInvert;
 uniform vec3 clipMin;
 uniform vec3 clipMax;
+uniform int nbClip;   // neighbourhood cut: 0 off, 1 sphere, 2 box
+uniform vec3 nbC;
+uniform float nbR;
+uniform vec3 nbMin;
+uniform vec3 nbMax;
 bool clipped(vec3 w) {
+  if (nbClip == 1 && distance(w, nbC) > nbR) return true;
+  if (nbClip == 2 && (any(lessThan(w, nbMin)) || any(greaterThan(w, nbMax)))) return true;
+  if (clipOn == 0) return false;
   bool inside = all(greaterThanEqual(w, clipMin)) && all(lessThanEqual(w, clipMax));
   return clipInvert == 1 ? inside : !inside;
 }
@@ -183,13 +192,13 @@ uniform float skyMix;
 uniform float bright;
 out vec4 outColor;
 void main() {
-  if (clipOn == 1 && clipped(vWorld)) discard;
+  if ((clipOn == 1 || nbClip > 0) && clipped(vWorld)) discard;
   if (pickMode == 1) { outColor = packId(vId); return; }
   if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
   vec3 base = vCol.rgb;
   if (style == 2) base = vec3(1.0);
   if (vSel > 0.5) base = mix(base, vec3(1.0, 0.42, 0.05), style == 2 ? 0.35 : 0.7);
-  if (capOn == 1 && clipOn == 1 && !gl_FrontFacing) {
+  if (capOn == 1 && (clipOn == 1 || nbClip > 0) && !gl_FrontFacing) {
     // inside of a cut solid: flat hatched cap
     vec3 c = base * 0.62 * bright;
     if (mod(gl_FragCoord.x - gl_FragCoord.y, 7.0) < 1.3) c *= 0.55;
@@ -237,7 +246,7 @@ flat in float vSel;
 flat in uint vId;
 out vec4 outColor;
 void main() {
-  if (clipOn == 1 && clipped(vWorld)) discard;
+  if ((clipOn == 1 || nbClip > 0) && clipped(vWorld)) discard;
   if (pickMode == 1) { outColor = packId(vId); return; }
   if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
   vec3 c = style == 3 ? vCol.rgb * 0.9 : style == 2 ? vec3(0.08) : vCol.rgb * 0.22;
@@ -250,6 +259,8 @@ const shared = {
   style: { value: 0 }, smoothOn: { value: 1 }, exploded: { value: 0 },
   clipOn: { value: 0 }, clipInvert: { value: 0 }, capOn: { value: 1 },
   clipMin: { value: new THREE.Vector3() }, clipMax: { value: new THREE.Vector3() },
+  nbClip: { value: 0 }, nbC: { value: new THREE.Vector3() }, nbR: { value: 1 },
+  nbMin: { value: new THREE.Vector3() }, nbMax: { value: new THREE.Vector3() },
   light: { value: new THREE.Vector3(0.32, 0.68, 0.1) }, skyDir: { value: new THREE.Vector3(0, 0, 1) },
   skyMix: { value: 0 }, bright: { value: 1 },
 };
@@ -583,6 +594,48 @@ app.setClip = function (patch) {
   app.emit("clip");
   requestRender();
 };
+// ---------------------------------------------------------------- neighbourhood region
+// Outline of the region (sphere: 3 great circles + equator band, box: 12 edges) and the cut.
+const nbHelper = new THREE.Group();
+{
+  const mat = new THREE.LineBasicMaterial({ color: 0x2563eb, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false });
+  const circle = (axis) => {
+    const pts = [];
+    for (let i = 0; i <= 96; i++) {
+      const t = (i / 96) * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
+      pts.push(axis === 0 ? new THREE.Vector3(0, c, s) : axis === 1 ? new THREE.Vector3(c, 0, s) : new THREE.Vector3(c, s, 0));
+    }
+    return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+  };
+  const sphere = new THREE.Group();
+  sphere.add(circle(0), circle(1), circle(2));
+  const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2)), mat);
+  nbHelper.add(sphere, box);
+  nbHelper.userData = { sphere, box };
+  nbHelper.visible = false;
+  nbHelper.renderOrder = 11;
+  sphere.children.forEach((c) => { c.renderOrder = 11; });
+  box.renderOrder = 11;
+  scene.add(nbHelper);
+}
+// r: {shape: "sphere"|"box", center, radius, half: [hx,hy,hz], clip, outline} or null to clear.
+app.setRegion = function (r) {
+  if (!r) { shared.nbClip.value = 0; nbHelper.visible = false; requestRender(); return; }
+  const c = new THREE.Vector3(...r.center);
+  shared.nbC.value.copy(c);
+  shared.nbR.value = r.radius;
+  shared.nbMin.value.set(c.x - r.half[0], c.y - r.half[1], c.z - r.half[2]);
+  shared.nbMax.value.set(c.x + r.half[0], c.y + r.half[1], c.z + r.half[2]);
+  shared.nbClip.value = r.clip ? (r.shape === "sphere" ? 1 : 2) : 0;
+  const { sphere, box } = nbHelper.userData;
+  sphere.visible = r.shape === "sphere";
+  box.visible = r.shape === "box";
+  nbHelper.position.copy(c);
+  if (r.shape === "sphere") sphere.scale.setScalar(r.radius); else box.scale.set(...r.half);
+  nbHelper.visible = !!r.outline;
+  requestRender();
+};
+
 // Normalised [lo, hi] of a world box on each axis, for the section box around the selection.
 app.clipFromBox = function (box) {
   const { lo, ext } = clipRange();
@@ -1162,8 +1215,9 @@ function pickRender(mode, x0, y0, x1, y1) {
   const rw = Math.max(1, Math.min(w - rx, Math.ceil(Math.abs(x1 - x0)) || 1));
   const rh = Math.max(1, Math.min(h - ry, Math.ceil(Math.abs(y1 - y0)) || 1));
   shared.pickMode.value = mode;
-  const boxVis = clipBox.visible;
+  const boxVis = clipBox.visible, nbVis = nbHelper.visible;
   clipBox.visible = false;
+  nbHelper.visible = false;
   pickRT.scissor.set(rx, h - ry - rh, rw, rh);
   pickRT.scissorTest = true;
   renderer.setRenderTarget(pickRT);
@@ -1173,6 +1227,7 @@ function pickRender(mode, x0, y0, x1, y1) {
   renderer.readRenderTargetPixels(pickRT, rx, h - ry - rh, rw, rh, buf);
   renderer.setRenderTarget(null);
   clipBox.visible = boxVis;
+  nbHelper.visible = nbVis;
   shared.pickMode.value = 0;
   requestRender();
   return { buf, rw, rh };
@@ -1257,6 +1312,7 @@ app.setCamera = function (c) {
   requestRender();
 };
 app.frameBox = (b) => frame(b);
+app.frameMinMax = (a, b) => frame(new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)));
 app.partBoxes = () => partBox;
 app.modelBox = () => modelBox();
 app.scene = scene;
@@ -1624,6 +1680,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "x") app.toggleStyle(4);
   else if (k === "c") $("#cutBtn").click();
   else if (k === "m") $("#measureBtn").click();
+  else if (k === "n") $("#nbBtn").click();
   else if (k === "p") app.togglePerf();
   else if (k === "escape") app.clearSelection();
 });
@@ -1725,6 +1782,7 @@ initSets(app);
 initColors(app);
 initTable(app);
 initDisplay(app);
+initNeighbor(app);
 initLayout(app);
 initRegions(app);
 initMeasure(app);

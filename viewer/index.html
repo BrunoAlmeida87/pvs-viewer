@@ -112,7 +112,7 @@
 
     <div class="tg" aria-label="Ferramentas">
       <button id="cutBtn" class="tb" title="Planos e caixa de corte (C)"><svg><use href="#i-cut"/></svg><span>Corte</span></button>
-      <button id="nbBtn" class="tb" title="Ver só a seleção e o que está em volta, numa esfera ou cubo (N)" hidden><svg><use href="#i-sphere"/></svg><span>Vizinhança</span></button>
+      <button id="nbBtn" class="tb" title="Ver só a seleção e o que está em volta, numa esfera ou cubo (N)"><svg><use href="#i-sphere"/></svg><span>Vizinhança</span></button>
       <button id="explodeBtn" class="tb" title="Vista explodida"><svg><use href="#i-explode"/></svg><span>Explodir</span></button>
       <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
@@ -280,6 +280,25 @@
       </div>
     </div>
     <div id="floaters">
+      <div id="nbPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-sphere"/></svg>Vizinhança <button class="x" data-close="nbPanel" title="Fechar (a vizinhança continua ativa até Sair)">✕</button></div>
+        <div class="pb">
+          <p class="hint">Mostra só as peças selecionadas e o que está em volta delas.</p>
+          <div class="row2"><button id="nbUseSel" class="primary" title="Usa as peças selecionadas agora como centro da vizinhança">Usar a seleção</button><button id="nbExit" title="Volta a visibilidade de antes">Sair</button></div>
+          <h4>Região</h4>
+          <nav class="seg" id="nbShape"><button data-s="sphere" class="on">Esfera</button><button data-s="box">Cubo</button></nav>
+          <div class="row2" id="nbSizeRow"><span id="nbSizeLbl">Raio</span><input type="range" id="nbSize" min="0" max="1000" value="400"><input id="nbVal" class="short" title="Metros"><span class="muted">m</span></div>
+          <label id="nbAxesL" hidden><input type="checkbox" id="nbAxes"> Medidas diferentes em X, Y e Z</label>
+          <div class="row2" id="nbAxesRow" hidden><span>X · Y · Z</span><input id="nbX" class="short"><input id="nbY" class="short"><input id="nbZ" class="short"><span class="muted">m</span></div>
+          <div class="row2"><span>Centro</span><button id="nbCenterSel">Da seleção</button><button id="nbCenterPick">Clicar um ponto</button></div>
+          <h4>Mostrar</h4>
+          <nav class="seg" id="nbMode"><button data-m="whole" class="on">Peças inteiras</button><button data-m="clip">Recortar na forma</button></nav>
+          <label><input type="checkbox" id="nbGhost"> Vizinhas semitransparentes</label>
+          <label><input type="checkbox" id="nbShow" checked> Mostrar o contorno da região</label>
+          <div id="nbCount" class="hint"></div>
+          <div class="row2"><button id="nbFrame">Enquadrar a região</button></div>
+        </div>
+      </div>
       <div id="measurePanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-ruler"/></svg>Medir <button class="x" data-close="measurePanel" title="Fechar">✕</button></div>
         <div class="pb">
