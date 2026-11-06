@@ -1,0 +1,91 @@
+// Page layout: light/dark theme, collapsible side bar and properties, floating panels (one at a
+// time, draggable by the header, position remembered), "Abrir" button and the GPU chip.
+import { $, store } from "./util.js";
+
+export function initLayout(app) {
+  // ------------------------------------------------------------ theme
+  const root = document.documentElement;
+  const setTheme = (t) => {
+    root.dataset.theme = t;
+    store.set("pvs-viewer:theme", t);
+    // the 3D background follows the theme when it is one of the two gradients
+    if (t === "dark" && app.display.bg === "grad") app.setDisplay({ bg: "dark" });
+    if (t === "light" && app.display.bg === "dark") app.setDisplay({ bg: "grad" });
+  };
+  try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) root.dataset.theme = JSON.parse(t); } catch { /* default light */ }
+  $("#themeBtn").onclick = () => setTheme(root.dataset.theme === "dark" ? "light" : "dark");
+
+  // ------------------------------------------------------------ side bar and properties
+  const appEl = $("#app");
+  if (store.get("pvs-viewer:noSide", false)) appEl.classList.add("noSide");
+  $("#sideToggle").onclick = () => {
+    appEl.classList.toggle("noSide");
+    store.set("pvs-viewer:noSide", appEl.classList.contains("noSide"));
+  };
+  if (store.get("pvs-viewer:infoClosed", false)) $("#infoBox").classList.add("closed");
+  $("#infoHead").onclick = () => {
+    $("#infoBox").classList.toggle("closed");
+    store.set("pvs-viewer:infoClosed", $("#infoBox").classList.contains("closed"));
+  };
+
+  // ------------------------------------------------------------ floating panels
+  const panels = [...document.querySelectorAll("#floaters .panel")];
+  const pos = store.get("pvs-viewer:panelPos", {});
+  const place = (p) => {
+    const v = $("#view").getBoundingClientRect(), r = pos[p.id];
+    if (!r) { p.style.left = ""; p.style.top = ""; return; }
+    p.style.left = Math.max(0, Math.min(v.width - 120, r[0])) + "px";
+    p.style.top = Math.max(0, Math.min(v.height - 60, r[1])) + "px";
+  };
+  for (const p of panels) {
+    place(p);
+    // only one panel open at a time: opening one closes the others (through their own close button)
+    new MutationObserver(() => {
+      if (p.hidden) return;
+      place(p);
+      for (const q of panels) if (q !== p && !q.hidden) q.querySelector("[data-close]")?.click();
+    }).observe(p, { attributes: true, attributeFilter: ["hidden"] });
+    const head = p.querySelector(".ph");
+    head.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("button")) return;
+      e.preventDefault();
+      const v = $("#view").getBoundingClientRect();
+      const r = p.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      head.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        const x = Math.max(0, Math.min(v.width - 80, ev.clientX - v.left - dx));
+        const y = Math.max(0, Math.min(v.height - 40, ev.clientY - v.top - dy));
+        p.style.left = x + "px"; p.style.top = y + "px";
+        pos[p.id] = [x, y];
+      };
+      const up = () => {
+        head.removeEventListener("pointermove", move);
+        head.removeEventListener("pointerup", up);
+        store.set("pvs-viewer:panelPos", pos);
+      };
+      head.addEventListener("pointermove", move);
+      head.addEventListener("pointerup", up);
+    });
+    head.addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; delete pos[p.id]; store.set("pvs-viewer:panelPos", pos); place(p); });
+    head.title = "Arraste para mover · duplo clique volta à posição inicial";
+  }
+
+  // ------------------------------------------------------------ open another model
+  $("#openModelBtn").onclick = () => {
+    const u = new URL(location.href);
+    u.searchParams.delete("pvs");
+    u.searchParams.set("abrir", "");
+    u.hash = "";
+    location.href = u.href.replace(/abrir=(&|$)/, "abrir$1");
+  };
+
+  // ------------------------------------------------------------ GPU chip
+  const chip = $("#gpuChip");
+  const short = app.gpu.replace(/^ANGLE \(/, "").replace(/\)$/, "").replace(/ Direct3D.*$/, "").replace(/\s*\(0x[0-9A-F]+\)/i, "").replace(/^[^,]+,\s*/, "");
+  chip.querySelector("span").textContent = short.length > 34 ? short.slice(0, 33) + "…" : short;
+  chip.classList.add(app.gpuIntegrated ? "bad" : "good");
+  if (app.gpuIntegrated) chip.title = "O navegador está usando a placa de vídeo integrada (mais lenta). Clique para ver o desempenho e como trocar.";
+  chip.hidden = false;
+  chip.onclick = () => app.togglePerf();
+}

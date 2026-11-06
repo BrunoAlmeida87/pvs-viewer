@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Visualizador PVS</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}</script>
 <link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": {
@@ -13,25 +15,66 @@
 </script>
 </head>
 <body>
+<!-- icons (stroke drawings, 24 × 24) -->
+<svg width="0" height="0" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <defs>
+    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12l8-4.6M12 12v9.2M12 12L4 7.4"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8M10.5 7.5v6M7.5 10.5h6"/></symbol>
+    <symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><path d="M4 4l16 16"/></symbol>
+    <symbol id="i-cut" viewBox="0 0 24 24"><path d="M3 15.5l9-4.5 9 4.5-9 4.5z"/><path d="M12 3v8M8.5 6.5L12 3l3.5 3.5"/></symbol>
+    <symbol id="i-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="8.5" ry="3.2"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-explode" viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M4 4h4v4H4zM16 4h4v4h-4zM4 16h4v4H4zM16 16h4v4h-4z"/></symbol>
+    <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3.5 16.5L16.5 3.5l4 4-13 13z"/><path d="M7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2"/></symbol>
+    <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2"/><path d="M10 21l2.5-6.5L15 17v4M12.5 14.5L11 9l-3.5 2v3.5M11 9l3 1.5 2.5 3"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5l9 4.8-9 4.8-9-4.8z"/><path d="M3 12.5l9 4.8 9-4.8M3 16.5l9 4.8 9-4.8"/></symbol>
+    <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3.5l13.5 7.2-5.8 1.7-2.4 5.8z"/><path d="M13 13l5 5"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" stroke-dasharray="3 2.5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1.5" fill="currentColor" fill-opacity=".25"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.6-.7 1.6-1.5 0-1-.9-1.4-.9-2.4 0-.9.8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.9 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5.5 20V10.5a6.5 6.5 0 0 1 13 0V20l-2.2-1.6-2.1 1.6-2.2-1.6L9.8 20l-2.1-1.6z"/><circle cx="9.5" cy="10.5" r=".9" fill="currentColor"/><circle cx="14.5" cy="10.5" r=".9" fill="currentColor"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></symbol>
+    <symbol id="i-side" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.5 4.5v15"/></symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="6" height="5" rx="1"/><rect x="12.5" y="10" width="8" height="4.5" rx="1"/><rect x="12.5" y="16.5" width="8" height="4.5" rx="1"/><path d="M6.5 8.5v10.3h6M6.5 12.3h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></symbol>
+    <symbol id="i-keys" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+    <symbol id="i-gpu" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
+  </defs>
+</svg>
+
 <div id="app">
-  <header>
-    <h1 id="title">Visualizador PVS</h1>
-    <div class="group">
-      <button id="fit" title="Enquadrar tudo (F)">Enquadrar</button>
-      <button id="zoomSel" title="Enquadrar seleção (Z)">Zoom seleção</button>
+  <header id="bar1">
+    <button id="sideToggle" class="ib" title="Mostrar/ocultar a barra lateral"><svg><use href="#i-side"/></svg></button>
+    <div class="brand"><svg class="logo"><use href="#i-logo"/></svg><h1 id="title">Visualizador PVS</h1></div>
+
+    <div class="tg" aria-label="Modelo">
+      <button id="openModelBtn" class="tb" title="Abrir outro modelo"><svg><use href="#i-open"/></svg><span>Abrir</span></button>
+      <button id="loadMoreBtn" class="tb" title="Carregar outras partes do modelo" hidden><svg><use href="#i-more"/></svg><span>Carregar</span></button>
+    </div>
+
+    <div class="tg" aria-label="Vista">
+      <button id="fit" class="tb" title="Enquadrar tudo (F)"><svg><use href="#i-fit"/></svg><span>Enquadrar</span></button>
+      <button id="zoomSel" class="tb" title="Enquadrar a seleção (Z)"><svg><use href="#i-zoom"/></svg><span>Seleção</span></button>
       <div class="menu">
-        <button class="menuBtn">Vistas ▾</button>
+        <button class="menuBtn tb" title="Vistas padrão e projeção"><svg><use href="#i-cube"/></svg><span>Vistas<svg class="dd"><use href="#i-down"/></svg></span></button>
         <div class="menuBody">
           <button data-view="iso">Isométrica</button>
           <button data-view="front">Frente</button>
           <button data-view="side">Lado</button>
           <button data-view="top">Topo</button>
           <hr>
-          <button id="ortho">Ortográfica</button>
+          <button id="ortho">Projeção ortográfica</button>
         </div>
       </div>
       <div class="menu">
-        <button class="menuBtn">Exibição ▾</button>
+        <button class="menuBtn tb" title="Estilo, luz, fundo e qualidade"><svg><use href="#i-eye"/></svg><span>Exibição<svg class="dd"><use href="#i-down"/></svg></span></button>
         <div class="menuBody form">
           <div class="menuRow"><span>Estilo</span><select id="dStyle" title="Estilo (E arestas · X raio-X)">
             <option value="0">Sombreado</option>
@@ -63,19 +106,22 @@
           </select></div>
           <label class="menuRow"><input type="checkbox" id="dPerf"> Mostrar desempenho (P)</label>
           <label class="menuRow"><input type="checkbox" id="dCube" checked> Cubo de vistas</label>
-          <p class="hint">Arraste para girar em torno do ponto clicado. Clique numa face, aresta ou canto do cubo para mudar a vista.</p>
         </div>
       </div>
-      <button id="cutBtn" title="Planos e caixa de corte (C)">Corte</button>
-      <button id="explodeBtn" title="Vista explodida">Explodir</button>
-      <button id="walkBtn" title="Modo caminhada: WASD move, arraste olha, Esc sai">Caminhar</button>
-      <button id="measureBtn" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)">Medir</button>
-      <button id="analysisBtn" title="Comparar versões e verificar interferências">Análise</button>
-      <button id="loadMoreBtn" title="Carregar outras partes do modelo" hidden>Carregar…</button>
     </div>
-    <div class="group">
+
+    <div class="tg" aria-label="Ferramentas">
+      <button id="cutBtn" class="tb" title="Planos e caixa de corte (C)"><svg><use href="#i-cut"/></svg><span>Corte</span></button>
+      <button id="nbBtn" class="tb" title="Ver só a seleção e o que está em volta, numa esfera ou cubo (N)" hidden><svg><use href="#i-sphere"/></svg><span>Vizinhança</span></button>
+      <button id="explodeBtn" class="tb" title="Vista explodida"><svg><use href="#i-explode"/></svg><span>Explodir</span></button>
+      <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
+      <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
+      <button id="analysisBtn" class="tb" title="Comparar versões e verificar interferências"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
+    </div>
+
+    <div class="tg" aria-label="Seleção">
       <div class="menu">
-        <button class="menuBtn">Seleção ▾</button>
+        <button class="menuBtn tb" title="Ferramentas de seleção"><svg><use href="#i-cursor"/></svg><span>Selecionar<svg class="dd"><use href="#i-down"/></svg></span></button>
         <div class="menuBody">
           <button id="selInvert">Inverter seleção</button>
           <button id="selParent">Selecionar pai</button>
@@ -89,29 +135,51 @@
           <p class="hint">Ctrl+clique soma/remove · Shift+arrastar seleciona por área · Alt+clique sobe um nível</p>
         </div>
       </div>
-      <button id="isolate" title="Mostrar só a seleção (I)">Isolar</button>
-      <button id="hideSel" title="Ocultar seleção (H)">Ocultar</button>
-      <button id="showAll" title="Mostrar tudo (A)">Mostrar tudo</button>
+      <button id="isolate" class="tb" title="Mostrar só a seleção (I)"><svg><use href="#i-focus"/></svg><span>Isolar</span></button>
+      <button id="hideSel" class="tb" title="Ocultar a seleção (H)"><svg><use href="#i-eyeoff"/></svg><span>Ocultar</span></button>
+      <button id="showAll" class="tb" title="Mostrar tudo (A)"><svg><use href="#i-eye"/></svg><span>Mostrar</span></button>
     </div>
-    <div class="group">
-      <input type="color" id="colorPick" value="#e8590c" title="Cor">
-      <button id="colorApply" title="Aplicar cor à seleção">Colorir</button>
-      <label class="opacity" title="Opacidade da seleção">Opac. <input type="range" id="opacity" min="5" max="100" value="100"></label>
-      <button id="opacityApply" title="Aplicar opacidade à seleção">Aplicar</button>
-      <button id="ghost" title="Deixa transparente o que não está selecionado (G)">Fantasma</button>
-      <label class="rule">Colorir por <select id="rule"></select></label>
-      <button id="resetColors" title="Volta às cores originais">Restaurar cores</button>
+
+    <div class="tg" aria-label="Cores">
+      <div class="menu">
+        <button class="menuBtn tb" title="Cor, transparência e colorir por propriedade"><svg><use href="#i-palette"/></svg><span>Cores<svg class="dd"><use href="#i-down"/></svg></span></button>
+        <div class="menuBody form">
+          <div class="menuRow"><span>Cor</span><input type="color" id="colorPick" value="#e8590c"><button id="colorApply" title="Aplicar a cor à seleção">Colorir seleção</button></div>
+          <div class="menuRow"><span>Opacidade</span><input type="range" id="opacity" min="5" max="100" value="100"><button id="opacityApply" title="Aplicar a opacidade à seleção">Aplicar</button></div>
+          <hr>
+          <div class="menuRow"><span>Colorir por</span><select id="rule"></select></div>
+          <hr>
+          <button id="resetColors" title="Volta às cores originais">Restaurar cores originais</button>
+        </div>
+      </div>
+      <button id="ghost" class="tb" title="Deixa transparente o que não está selecionado (G)"><svg><use href="#i-ghost"/></svg><span>Fantasma</span></button>
     </div>
-    <div class="group right">
-      <button id="listBtn" title="Lista de peças e estatísticas (L)">Lista de peças</button>
+
+    <span class="spacer"></span>
+    <div class="tg end">
+      <button id="listBtn" class="tb" title="Lista de peças e estatísticas (L)"><svg><use href="#i-table"/></svg><span>Lista</span></button>
+      <div class="menu right">
+        <button class="menuBtn ib" title="Atalhos de teclado"><svg><use href="#i-keys"/></svg></button>
+        <div class="menuBody keys">
+          <div><kbd>F</kbd> enquadrar tudo</div><div><kbd>Z</kbd> enquadrar seleção</div>
+          <div><kbd>I</kbd> isolar</div><div><kbd>H</kbd> ocultar</div><div><kbd>A</kbd> mostrar tudo</div>
+          <div><kbd>G</kbd> fantasma</div><div><kbd>E</kbd> arestas</div><div><kbd>X</kbd> raio-X</div>
+          <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>M</kbd> medir</div>
+          <div><kbd>L</kbd> lista de peças</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
+          <hr>
+          <div>Arrastar: gira em torno do ponto · botão direito ou do meio: desloca · roda: zoom</div>
+          <div>Ctrl+clique soma · Shift+arrastar seleciona área · Alt+clique sobe um nível · duplo clique enquadra</div>
+        </div>
+      </div>
+      <button id="themeBtn" class="ib" title="Tema claro / escuro"><svg class="moon"><use href="#i-moon"/></svg><svg class="sun"><use href="#i-sun"/></svg></button>
     </div>
   </header>
 
   <aside id="side">
     <nav class="tabs">
-      <button data-tab="treeTab" class="on">Árvore</button>
-      <button data-tab="searchTab">Busca</button>
-      <button data-tab="setsTab">Vistas</button>
+      <button data-tab="treeTab" class="on"><svg><use href="#i-tree"/></svg>Árvore</button>
+      <button data-tab="searchTab"><svg><use href="#i-search"/></svg>Busca</button>
+      <button data-tab="setsTab"><svg><use href="#i-bookmark"/></svg>Vistas</button>
     </nav>
     <section id="treeTab" class="tab on"><div id="tree"></div></section>
     <section id="searchTab" class="tab">
@@ -162,10 +230,10 @@
     </section>
     <section id="setsTab" class="tab">
       <h3>Vistas salvas</h3>
-      <div class="row2"><input id="viewName" placeholder="Nome da vista"><button id="viewSave" title="Câmera, visibilidade, cores, estilo, corte, explosão, seleção, notas e medições">Salvar vista</button></div>
+      <div class="row2"><input id="viewName" placeholder="Nome da vista"><button id="viewSave" class="primary" title="Câmera, visibilidade, cores, estilo, corte, explosão, vizinhança, seleção, notas e medições">Salvar</button></div>
       <div id="viewList"></div>
       <h3>Compartilhar</h3>
-      <div class="row2"><button id="viewLink" title="Copia um link com a vista atual">Copiar link</button><button id="viewExport">Exportar arquivo</button><button id="viewImport">Importar</button></div>
+      <div class="row2"><button id="viewLink" title="Copia um link com a vista atual">Copiar link</button><button id="viewExport">Exportar</button><button id="viewImport">Importar</button></div>
       <input id="viewFile" type="file" accept=".json" hidden>
       <h3>Imagem</h3>
       <div class="row2"><select id="shotScale"><option value="1">Tamanho da tela</option><option value="2" selected>2× (alta resolução)</option><option value="4">4× (impressão)</option></select><button id="shotBtn">Salvar PNG</button></div>
@@ -186,7 +254,10 @@
       <div id="schemeList"></div>
       <p class="hint">Ficam salvos neste navegador, por modelo.</p>
     </section>
-    <div id="info"><div class="muted">Clique numa peça no modelo ou na árvore.</div></div>
+    <section id="infoBox">
+      <button id="infoHead" class="sectionHead" title="Mostrar/ocultar as propriedades"><span>Propriedades</span><svg class="dd"><use href="#i-down"/></svg></button>
+      <div id="info"><div class="muted">Clique numa peça no modelo ou na árvore.</div></div>
+    </section>
   </aside>
 
   <main id="view">
@@ -210,54 +281,62 @@
     </div>
     <div id="floaters">
       <div id="measurePanel" class="panel" hidden>
-        <div class="ph">Medir <button class="x" data-close="measurePanel" title="Fechar">✕</button></div>
-        <nav class="seg" id="mModes">
-          <button data-m="dist" class="on">Distância</button><button data-m="angle">Ângulo</button><button data-m="coord">Ponto</button><button data-m="radius">Raio / Ø</button><button data-m="min">Folga</button>
-        </nav>
-        <p class="hint" id="mHint"></p>
-        <label><input type="checkbox" id="mSnap" checked> Ajustar a vértices e arestas</label>
-        <div class="row2"><button id="mPair" title="Folga (distância mínima) entre os 2 itens selecionados">Folga entre as 2 selecionadas</button></div>
-        <div class="row2"><button id="mBox">Dimensões da seleção</button><button id="mWeight">Peso da seleção</button></div>
-        <div class="row2"><span>Densidade</span><input id="mDensity" value="7850" title="kg/m³, usada só para peças sem Unit weight"><span class="muted">kg/m³</span></div>
-        <div id="mList"></div>
-        <div class="row2"><button id="mClear">Limpar medições</button></div>
+        <div class="ph"><svg><use href="#i-ruler"/></svg>Medir <button class="x" data-close="measurePanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <nav class="seg" id="mModes">
+            <button data-m="dist" class="on">Distância</button><button data-m="angle">Ângulo</button><button data-m="coord">Ponto</button><button data-m="radius">Raio / Ø</button><button data-m="min">Folga</button>
+          </nav>
+          <p class="hint" id="mHint"></p>
+          <label><input type="checkbox" id="mSnap" checked> Ajustar a vértices e arestas</label>
+          <div class="row2"><button id="mPair" title="Folga (distância mínima) entre os 2 itens selecionados">Folga entre as 2 selecionadas</button></div>
+          <div class="row2"><button id="mBox">Dimensões da seleção</button><button id="mWeight">Peso da seleção</button></div>
+          <div class="row2"><span>Densidade</span><input id="mDensity" value="7850" title="kg/m³, usada só para peças sem Unit weight"><span class="muted">kg/m³</span></div>
+          <div id="mList"></div>
+          <div class="row2"><button id="mClear">Limpar medições</button></div>
+        </div>
       </div>
       <div id="analysisPanel" class="panel" hidden>
-        <div class="ph">Análise <button class="x" data-close="analysisPanel" title="Fechar">✕</button></div>
-        <h4>Comparar com outra versão</h4>
-        <p class="hint">Escolha o arquivo .pvs da outra versão. As peças são casadas pelo part_objectid (ou pelo caminho na árvore) e comparadas pela posição e pelo tamanho.</p>
-        <div class="row2"><button id="cmpPick">Escolher o .pvs…</button><span>Tolerância</span><input id="cmpTol" value="2" class="short"><span class="muted">mm</span></div>
-        <input id="cmpFile" type="file" accept=".pvs" hidden>
-        <div id="cmpResult"></div>
-        <h4>Interferências</h4>
-        <div class="row2"><select id="intScope"><option value="vis">Seleção × peças visíveis</option><option value="sel">Entre as peças da seleção</option></select></div>
-        <div class="row2"><span>Contato até</span><input id="intTol" value="0.5" class="short"><span class="muted">mm</span></div>
-        <div class="row2"><button id="intRun" class="primary">Verificar</button><button id="intStop">Parar</button></div>
-        <div id="intStatus" class="hint"></div>
-        <div id="intList"></div>
+        <div class="ph"><svg><use href="#i-layers"/></svg>Análise <button class="x" data-close="analysisPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <h4>Comparar com outra versão</h4>
+          <p class="hint">Escolha o arquivo .pvs da outra versão. As peças são casadas pelo part_objectid (ou pelo caminho na árvore) e comparadas pela posição e pelo tamanho.</p>
+          <div class="row2"><button id="cmpPick">Escolher o .pvs…</button><span>Tolerância</span><input id="cmpTol" value="2" class="short"><span class="muted">mm</span></div>
+          <input id="cmpFile" type="file" accept=".pvs" hidden>
+          <div id="cmpResult"></div>
+          <h4>Interferências</h4>
+          <div class="row2"><select id="intScope"><option value="vis">Seleção × peças visíveis</option><option value="sel">Entre as peças da seleção</option></select></div>
+          <div class="row2"><span>Contato até</span><input id="intTol" value="0.5" class="short"><span class="muted">mm</span></div>
+          <div class="row2"><button id="intRun" class="primary">Verificar</button><button id="intStop">Parar</button></div>
+          <div id="intStatus" class="hint"></div>
+          <div id="intList"></div>
+        </div>
       </div>
       <div id="cutPanel" class="panel" hidden>
-        <div class="ph">Corte <button class="x" data-close="cutPanel" title="Fechar">✕</button></div>
-        <div class="cutRow" data-axis="0"><label><input type="checkbox"> X</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
-        <div class="cutRow" data-axis="1"><label><input type="checkbox"> Y</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
-        <div class="cutRow" data-axis="2"><label><input type="checkbox"> Z</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
-        <p class="hint">Cada eixo tem dois limites (mínimo e máximo). Um eixo ligado é um plano de corte; os três formam uma caixa.</p>
-        <label><input type="checkbox" id="cutInvert"> Inverter (remove o que está dentro)</label>
-        <label><input type="checkbox" id="cutCap" checked> Tampa nas peças cortadas</label>
-        <label><input type="checkbox" id="cutShow" checked> Mostrar a caixa</label>
-        <div class="row2"><button id="cutSel" title="Caixa em volta da seleção">Caixa da seleção</button><button id="cutReset">Limpar corte</button></div>
+        <div class="ph"><svg><use href="#i-cut"/></svg>Corte <button class="x" data-close="cutPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="cutRow" data-axis="0"><label><input type="checkbox"> X</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+          <div class="cutRow" data-axis="1"><label><input type="checkbox"> Y</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+          <div class="cutRow" data-axis="2"><label><input type="checkbox"> Z</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
+          <p class="hint">Cada eixo tem dois limites (mínimo e máximo). Um eixo ligado é um plano de corte; os três formam uma caixa.</p>
+          <label><input type="checkbox" id="cutInvert"> Inverter (remove o que está dentro)</label>
+          <label><input type="checkbox" id="cutCap" checked> Tampa nas peças cortadas</label>
+          <label><input type="checkbox" id="cutShow" checked> Mostrar a caixa</label>
+          <div class="row2"><button id="cutSel" title="Caixa em volta da seleção">Caixa da seleção</button><button id="cutReset">Limpar corte</button></div>
+        </div>
       </div>
       <div id="explodePanel" class="panel" hidden>
-        <div class="ph">Vista explodida <button class="x" data-close="explodePanel" title="Fechar">✕</button></div>
-        <div class="row2"><span>Separar por</span><select id="exLevel">
-          <option value="1">Seção (nível 1)</option>
-          <option value="2">Subsistema (nível 2)</option>
-          <option value="3">Nível 3</option>
-          <option value="0">Peça</option>
-        </select></div>
-        <div class="row2"><span>Distância</span><input type="range" id="exAmount" min="0" max="300" value="0"></div>
-        <label><input type="checkbox" id="exSel"> Só a seleção</label>
-        <div class="row2"><button id="exReset">Recolher</button></div>
+        <div class="ph"><svg><use href="#i-explode"/></svg>Vista explodida <button class="x" data-close="explodePanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="row2"><span>Separar por</span><select id="exLevel">
+            <option value="1">Seção (nível 1)</option>
+            <option value="2">Subsistema (nível 2)</option>
+            <option value="3">Nível 3</option>
+            <option value="0">Peça</option>
+          </select></div>
+          <div class="row2"><span>Distância</span><input type="range" id="exAmount" min="0" max="300" value="0"></div>
+          <label><input type="checkbox" id="exSel"> Só a seleção</label>
+          <div class="row2"><button id="exReset">Recolher</button></div>
+        </div>
       </div>
     </div>
     <div id="walkHint" hidden>
@@ -265,14 +344,16 @@
       Shift corre · roda do mouse muda a velocidade (<span id="walkSpeed"></span>) · Esc sai
     </div>
     <div id="open" hidden>
-      <h2>Abrir modelo</h2>
-      <p>Escolha a pasta do modelo Creo View, a que contém o arquivo <code>.pvs</code> e os arquivos <code>.ol</code>.
-        Também aceita uma pasta convertida por <code>tools/build.py</code>, que abre mais rápido.</p>
-      <p class="muted">Os arquivos são lidos no seu navegador e não são enviados para nenhum servidor.
-        No Chrome e no Edge o navegador só pede permissão para <em>ver</em> a pasta. Em outros navegadores aparece
-        um aviso de “upload”, mas os arquivos também não saem do seu computador.</p>
+      <div class="openHead"><svg class="logo"><use href="#i-logo"/></svg><div><h2>Abrir modelo</h2><p class="muted">Creo View (.pvs + .ol) ou pasta convertida</p></div></div>
+      <div id="dropZone">
+        <svg><use href="#i-open"/></svg>
+        <div>Arraste a pasta do modelo para cá</div>
+        <div class="muted">ou</div>
+        <button class="btn" id="openBtn">Escolher a pasta…</button>
+      </div>
       <label class="openOpt"><input type="checkbox" id="openRegions"> Escolher as seções antes de carregar (abre mais rápido e usa menos memória)</label>
-      <button class="btn" id="openBtn">Abrir pasta do modelo…</button>
+      <p class="muted small">Os arquivos são lidos no seu computador e não são enviados para nenhum servidor. No Chrome e no Edge o
+        navegador só pede permissão para <em>ver</em> a pasta. Também aceita uma pasta convertida por <code>tools/build.py</code>, que abre mais rápido.</p>
       <input id="folder" type="file" webkitdirectory directory multiple hidden>
       <p id="openErr"></p>
     </div>
@@ -303,9 +384,10 @@
   <footer id="status">
     <div id="bar"><div></div></div>
     <span id="load">Carregando…</span>
-    <span id="stats"></span>
     <span class="spacer"></span>
+    <span id="stats"></span>
     <span id="selInfo"></span>
+    <button id="gpuChip" class="chip" title="Placa de vídeo em uso · clique para ver o desempenho" hidden><svg><use href="#i-gpu"/></svg><span></span></button>
   </footer>
 </div>
 <script type="module" src="viewer.js"></script>

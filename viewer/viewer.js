@@ -10,6 +10,7 @@ import { chooseRegions, initRegions } from "./ui/regions.js";
 import { initMeasure } from "./ui/measure.js";
 import { initViews } from "./ui/views.js";
 import { initAnalysis } from "./ui/analysis.js";
+import { initLayout } from "./ui/layout.js";
 import { initTree } from "./ui/tree.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
@@ -645,7 +646,7 @@ async function pickModel() {
       access: { base: new URL(url.slice(0, url.lastIndexOf("/") + 1), location.href).href } };
   }
   if (window.desktop) {
-    const r = await window.desktop.initialFolder();
+    const r = params.has("abrir") ? null : await window.desktop.initialFolder();
     if (r) return fromDesktop(r);
   } else if (!params.has("abrir")) {
     try { await httpConverted.json("chunks.json"); return { kind: "converted", src: httpConverted }; } catch { /* none on server */ }
@@ -678,6 +679,25 @@ async function pickModel() {
       } else {
         $("#folder").click();
       }
+    };
+    // drag a folder onto the card (Chrome / Edge give a directory handle)
+    const zone = $("#dropZone");
+    zone.ondragover = (e) => { e.preventDefault(); zone.classList.add("over"); };
+    zone.ondragleave = () => zone.classList.remove("over");
+    zone.ondrop = async (e) => {
+      e.preventDefault();
+      zone.classList.remove("over");
+      $("#openErr").textContent = "";
+      const item = e.dataTransfer.items && e.dataTransfer.items[0];
+      try {
+        if (window.desktop) throw new Error("Use o botão “Escolher a pasta…”.");
+        const h = item && item.getAsFileSystemHandle ? await item.getAsFileSystemHandle() : null;
+        if (!h || h.kind !== "directory") throw new Error("Solte uma pasta (a que contém o .pvs e os .ol). Neste navegador, use o botão.");
+        status("Procurando o modelo na pasta…");
+        const m = await fromDirectory(h);
+        card.hidden = true;
+        resolve(m);
+      } catch (err) { fail(err); }
     };
     $("#folder").onchange = async () => {
       try {
@@ -1705,6 +1725,7 @@ initSets(app);
 initColors(app);
 initTable(app);
 initDisplay(app);
+initLayout(app);
 initRegions(app);
 initMeasure(app);
 initViews(app);
