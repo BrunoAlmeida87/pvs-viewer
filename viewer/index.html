@@ -409,6 +409,14 @@
     <button id="gpuChip" class="chip" title="Placa de vídeo em uso · clique para ver o desempenho" hidden><svg><use href="#i-gpu"/></svg><span></span></button>
   </footer>
 </div>
-<script type="module" src="viewer.js"></script>
+<script type="module">
+// right after a site update the browser may still hold old copies of some modules (GitHub Pages
+// caches for 10 minutes): say so instead of staying on "Carregando…"
+import("./viewer.js").catch((err) => {
+  console.error(err);
+  document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
+    ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";
+});
+</script>
 </body>
 </html>
