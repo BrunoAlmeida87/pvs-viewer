@@ -28,6 +28,17 @@ em **Abrir pasta do modelo…**. Para servir uma pasta original:
 `python viewer/serve.py --model "X:\...\Maquete SBR"` e abrir `http://localhost:8080/?pvs=model/SBR.pvs`.
 `?abrir` força o seletor de pasta.
 
+No aplicativo desktop, a tela **Abrir modelo** também oferece **Converter modelo para abertura rápida…**.
+Escolha a pasta original (`.pvs` + `.ol`) e depois a pasta onde salvar. O aplicativo cria uma nova pasta
+`NOME-convertido` no destino, sem alterar os arquivos originais. Abra essa pasta no aplicativo para usar o
+modelo convertido. A conversão acelera a abertura, mas mantém os mesmos triângulos: em placas com pouca
+memória de vídeo, escolha as seções antes de carregar para reduzir o uso de GPU.
+
+A aba **Minha estrutura** permite criar grupos próprios, adicionar as peças selecionadas na árvore original,
+mover grupos para dentro de outros grupos e salvar ou importar a organização em JSON. A organização também
+fica guardada localmente para o mesmo modelo. Nessa aba, **Exportar seleção em OBJ** grava as malhas das peças
+selecionadas em coordenadas do modelo (metros). O OBJ contém triângulos, sem superfícies CAD editáveis.
+
 Os modelos (`viewer/data/`) não vão para o repositório (`.gitignore`). Three.js e fflate ficam em
 `viewer/vendor/`, então o visualizador funciona sem internet depois de aberto.
 
