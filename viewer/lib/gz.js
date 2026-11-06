@@ -1,5 +1,5 @@
 // gzip helpers shared by the page and the workers.
-import { inflateSync } from "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js";
+import { inflateSync } from "../vendor/fflate.js"; // fflate 0.8.2 (MIT)
 
 const MAX_MEMBER = 1 << 30;
 

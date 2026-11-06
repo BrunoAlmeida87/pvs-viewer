@@ -9,6 +9,7 @@ export function initDisplay(app) {
   // ------------------------------------------------------------ display menu
   const saved = store.get(KEY, {});
   const d0 = { ...app.display, ...saved, ssao: !!saved.ssao };
+  if (!["auto", "fast", "high"].includes(d0.quality)) d0.quality = "auto";
   const sync = () => {
     const d = app.display;
     $("#dStyle").value = String(d.style);
@@ -18,6 +19,8 @@ export function initDisplay(app) {
     $("#dLight").value = d.light;
     $("#dBright").value = d.bright;
     $("#dCube").checked = d.cube;
+    $("#dQuality").value = d.quality;
+    $("#dPerf").checked = d.perf;
   };
   app.on("display", () => {
     sync();
@@ -32,15 +35,18 @@ export function initDisplay(app) {
   $("#dLight").onchange = (e) => app.setDisplay({ light: e.target.value });
   $("#dBright").oninput = (e) => app.setDisplay({ bright: +e.target.value });
   $("#dCube").onchange = (e) => app.setDisplay({ cube: e.target.checked });
+  $("#dQuality").onchange = (e) => app.setDisplay({ quality: e.target.value });
+  $("#dPerf").onchange = (e) => { app.setDisplay({ perf: e.target.checked }); if (!e.target.checked) app.hidePerf(); };
+  app.togglePerf = () => { app.setDisplay({ perf: !app.display.perf }); if (!app.display.perf) app.hidePerf(); };
   app.setDisplay(d0);
   app.styleName = () => STYLES[app.display.style];
 
   // ------------------------------------------------------------ floating panels
-  const panels = { cutPanel: $("#cutBtn"), explodePanel: $("#explodeBtn") };
+  const panels = { cutPanel: $("#cutBtn"), explodePanel: $("#explodeBtn"), measurePanel: $("#measureBtn"), analysisPanel: $("#analysisBtn") };
   const toggle = (id, on) => {
     const p = $("#" + id);
     p.hidden = on === undefined ? !p.hidden : !on;
-    panels[id].classList.toggle("on", !p.hidden);
+    if (panels[id]) panels[id].classList.toggle("on", !p.hidden);
   };
   $("#cutBtn").onclick = () => toggle("cutPanel");
   $("#explodeBtn").onclick = () => toggle("explodePanel");

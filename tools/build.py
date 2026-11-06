@@ -26,6 +26,7 @@ from pvs import PVS
 
 MAX_VERTS = 65535
 WELD = 1e-4  # metres: positions closer than this are merged within a part
+SMALL_FRACTION = 0.004  # parts smaller than this fraction of the model diagonal go to "small" chunks
 
 
 def _match_positions(P, N, q, pts):
@@ -178,24 +179,37 @@ def split_part(P, N, I, E):
         yield P[verts], N[verts], T, Ep
 
 
-class ChunkWriter:
+class Output:
+    """Chunk files and the global item list shared by the chunk writers."""
+
     def __init__(self, out_dir):
         self.dir = os.path.join(out_dir, "c")
         os.makedirs(self.dir, exist_ok=True)
         self.chunks = []
         self.items = []  # (part, rgba)
+
+
+class ChunkWriter:
+    """Packs parts into chunks. Small parts get their own writer (and chunks), so the viewer can
+    skip them when they are only a few pixels big; `ps` is the largest part size in a chunk."""
+
+    def __init__(self, out, small):
+        self.out = out
+        self.small = small
         self._reset()
 
     def _reset(self):
         self.pos, self.nrm, self.idx, self.edges, self.loc = [], [], [], [], []
+        self.items = []
         self.nv = 0
-        self.item_start = len(self.items)
+        self.ps = 0.0
 
-    def add(self, part, rgba, P, N, I, E):
+    def add(self, part, rgba, P, N, I, E, size):
+        self.ps = max(self.ps, size)
         for p, n, i, e in split_part(P, N, I, E):
             if self.nv + len(p) > MAX_VERTS:
                 self.flush()
-            local = len(self.items) - self.item_start
+            local = len(self.items)
             self.items.append((part, rgba))
             self.pos.append(p)
             self.nrm.append(n)
@@ -220,18 +234,20 @@ class ChunkWriter:
         V = np.empty((len(P), 4), dtype=np.uint16)
         V[:, :3] = Q
         V[:, 3] = L
-        n = len(self.chunks)
-        name = "%05d.bin" % n
-        with open(os.path.join(self.dir, name), "wb") as f:
+        out = self.out
+        name = "%05d.bin" % len(out.chunks)
+        with open(os.path.join(out.dir, name), "wb") as f:
             f.write(V.tobytes())
             f.write(Nn.tobytes())
             f.write(I.tobytes())
             f.write(E.tobytes())
-        self.chunks.append({
+        out.chunks.append({
             "f": name, "min": [round(float(x), 5) for x in lo], "max": [round(float(x), 5) for x in hi],
-            "io": self.item_start, "ic": len(self.items) - self.item_start,
+            "io": len(out.items), "ic": len(self.items),
             "nv": int(len(P)), "ni": int(len(I)), "ne": int(len(E)),
+            "ps": round(float(self.ps), 4), "small": self.small,
         })
+        out.items.extend(self.items)
         self._reset()
 
 
@@ -247,7 +263,7 @@ def main():
     print("structure: %d components, %.1fs" % (len(comps), time.time() - t0), flush=True)
 
     # DFS: tree nodes + parts in order
-    names, parents, part_of, ends, shapes, node_comp = [], [], [], [], [], []
+    names, parents, part_of, ends, shapes, node_comp, part_comp = [], [], [], [], [], [], []
     stack = [(root, -1, False)]
     while stack:
         ci, parent, done = stack.pop()
@@ -263,6 +279,7 @@ def main():
         if c["shape"]:
             part_of.append(len(shapes))
             shapes.append(c["shape"])
+            part_comp.append(ci)
         else:
             part_of.append(-1)
         stack.append((ci, node, True))
@@ -296,7 +313,9 @@ def main():
         json.dump(tree, f, ensure_ascii=False, separators=(",", ":"))
     print("tree: %d nodes, %d parts" % (len(names), len(shapes)), flush=True)
 
-    writer = ChunkWriter(out_dir)
+    out = Output(out_dir)
+    # three size classes: large, medium (< 5 x small) and small parts
+    big, medium, little = ChunkWriter(out, False), ChunkWriter(out, False), ChunkWriter(out, True)
     pbox = np.zeros((len(shapes), 6), dtype=np.float32)
     pbox[:, :3] = np.inf
     pbox[:, 3:] = -np.inf
@@ -304,19 +323,35 @@ def main():
     limit = int(os.environ.get("BUILD_LIMIT", "0"))
     if limit:
         paths = paths[:limit]
+    # size limit for "small" parts: the same rule as the browser loader (viewer.js)
+    lo_all = np.array([np.inf] * 3)
+    hi_all = -lo_all
+    for c in comps:
+        if c["shape"] and c.get("bbox"):
+            b = np.array(c["bbox"], dtype=np.float64)
+            lo_all = np.minimum(lo_all, b[:3])
+            hi_all = np.maximum(hi_all, b[3:])
+    small = float(np.linalg.norm(hi_all - lo_all)) * SMALL_FRACTION if np.isfinite(lo_all).all() else 0.0
     tris = 0
     t1 = time.time()
     with Pool(workers) as pool:
         for k, groups in enumerate(pool.imap(part_geometry, paths, chunksize=16)):
             for rgba, P, N, I, E in groups:
-                writer.add(k, rgba, P, N, I, E)
                 tris += len(I)
                 pbox[k, :3] = np.minimum(pbox[k, :3], P.min(0))
                 pbox[k, 3:] = np.maximum(pbox[k, 3:], P.max(0))
+            if groups:
+                size = float(np.linalg.norm(pbox[k, 3:] - pbox[k, :3]))
+                writer = little if size < small else medium if size < small * 5 else big
+                for rgba, P, N, I, E in groups:
+                    writer.add(k, rgba, P, N, I, E, size)
             if k % 2000 == 0:
                 el = time.time() - t1
-                print("  %d/%d parts, %.1fM tris, %d chunks, %.0fs" % (k, len(paths), tris / 1e6, len(writer.chunks), el), flush=True)
-    writer.flush()
+                print("  %d/%d parts, %.1fM tris, %d chunks, %.0fs" % (k, len(paths), tris / 1e6, len(out.chunks), el), flush=True)
+    big.flush()
+    medium.flush()
+    little.flush()
+    writer = out
 
     items = np.zeros(len(writer.items), dtype=[("p", "<u4"), ("c", "u1", 4)])
     for i, (p, c) in enumerate(writer.items):
@@ -326,6 +361,14 @@ def main():
     pbox[~np.isfinite(pbox)] = 0
     with open(os.path.join(out_dir, "parts.bin"), "wb") as f:
         f.write(pbox.tobytes())
+    # bounding boxes as stored in the PVS (the viewer's version comparison uses them)
+    vbox = np.zeros((len(shapes), 6), dtype=np.float32)
+    for p, ci in enumerate(part_comp):
+        b = comps[ci].get("bbox")
+        if b:
+            vbox[p] = b
+    with open(os.path.join(out_dir, "pvsbox.bin"), "wb") as f:
+        f.write(vbox.tobytes())
     lo = np.min([c["min"] for c in writer.chunks], axis=0).tolist()
     hi = np.max([c["max"] for c in writer.chunks], axis=0).tolist()
     meta = {"format": 2, "source": os.path.basename(pvs_path), "parts": len(shapes), "items": len(writer.items),

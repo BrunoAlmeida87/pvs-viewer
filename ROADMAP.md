@@ -34,20 +34,29 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Caixa de corte (section box), inclusive em volta da seleção
 - [x] Corte com tampa (capping) hachurada
 
-## Fase 3 — medição, vistas e anotações
-- [ ] [M] Distância ponto a ponto, coordenadas, ângulo
-- [ ] [F] Dimensões / caixa da seleção
-- [ ] [D] Diâmetro e raio exatos (superfícies analíticas dos `.ol`)
-- [ ] [M] Distância mínima / folga entre peças
-- [ ] [M] Peso por seção/material (Unit weight × Length)
-- [ ] [F] Vistas salvas (câmera, visibilidade, cores, cortes)
-- [ ] [F] Compartilhar vista por link/arquivo
-- [ ] [F] Captura de tela PNG em alta resolução
-- [ ] [M] Anotações 3D (notas, setas)
-- [ ] [D] Ler anotações do Creo (`ann*.ast`)
+## Fase 3 — medição, vistas e anotações ✅
+- [x] Distância ponto a ponto (com ΔX/ΔY/ΔZ), coordenadas, ângulo; ajuste a vértices e arestas
+- [x] Dimensões / caixa da seleção
+- [x] Diâmetro e raio pelas arestas circulares do CAD (ajuste de círculo nos pontos da aresta)
+- [x] Distância mínima / folga entre peças (ou entre 2 itens selecionados)
+- [x] Peso da seleção: Unit weight (massa da peça em kg) + volume da malha × densidade para as peças sem ele
+  (o modelo não tem a propriedade Length)
+- [x] Vistas salvas (câmera, visibilidade, cores, estilo, cortes, explosão, seleção, notas, medições)
+- [x] Compartilhar vista por link ou arquivo
+- [x] Captura de tela PNG em alta resolução (com medições e notas)
+- [x] Notas 3D presas a pontos do modelo
+- [x] Figuras do Creo View (`ann*.ast`, formato “EMK V7.0”): visibilidade, cor e transparência por componente
 
-## Fase 4 — plataforma e desempenho
+## Fase 4 — plataforma e desempenho ✅
 - [x] Abrir `.pvs` + `.ol` direto no navegador, sem conversão em Python
-- [ ] [M] Carregamento por região e LOD
-- [ ] [M] Comparação entre duas versões do modelo
-- [ ] [D] Detecção de interferência / colisão
+- [x] Carregamento por região (seções / subsistemas) e “Carregar…” para o resto
+- [x] LOD: peças pequenas e médias em blocos próprios, que deixam de ser desenhados quando ficam pequenos na tela
+- [x] Comparação entre duas versões do modelo (por part_objectid e caixa delimitadora)
+- [x] Detecção de interferência e contato (seleção × visíveis ou dentro da seleção)
+- [x] Painel de desempenho (placa de vídeo usada, quadros/s, triângulos, memória) e qualidade em movimento
+- [x] Versão desktop (Electron) com placa de vídeo dedicada, sem CDN, executável portátil
+
+Limitações conhecidas: a interferência é calculada na malha facetada, então peças encostadas com o mesmo
+diâmetro (tubo dentro de abraçadeira) podem aparecer como interferência; raio e folga na pasta convertida têm
+precisão de ~0,05 mm (posições quantizadas), exatos ao abrir a pasta original; a câmera das figuras do Creo
+ainda não é lida (a vista é enquadrada nos componentes visíveis).

@@ -98,6 +98,8 @@ export function initColors(app) {
     app.emit("rule", spec);
   };
 
+  app.showLegend = (title, entries) => showLegend(title, entries);
+
   function trim(x) { return Math.abs(x) >= 100 ? x.toFixed(0) : +x.toPrecision(3) + ""; }
 
   function showLegend(title, entries) {

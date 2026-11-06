@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  "three": "./vendor/three.module.js",
+  "three/addons/": "./vendor/addons/"
 } }
 </script>
 </head>
@@ -56,6 +56,12 @@
           </select></div>
           <div class="menuRow"><span>Brilho</span><input type="range" id="dBright" min="60" max="160" value="100"></div>
           <hr>
+          <div class="menuRow"><span>Qualidade</span><select id="dQuality" title="Quanto detalhe desenhar, principalmente enquanto a câmera se move">
+            <option value="auto">Automática (recomendada)</option>
+            <option value="fast">Rápida (máquinas lentas)</option>
+            <option value="high">Alta (tudo, sempre)</option>
+          </select></div>
+          <label class="menuRow"><input type="checkbox" id="dPerf"> Mostrar desempenho (P)</label>
           <label class="menuRow"><input type="checkbox" id="dCube" checked> Cubo de vistas</label>
           <p class="hint">Arraste para girar em torno do ponto clicado. Clique numa face, aresta ou canto do cubo para mudar a vista.</p>
         </div>
@@ -63,6 +69,9 @@
       <button id="cutBtn" title="Planos e caixa de corte (C)">Corte</button>
       <button id="explodeBtn" title="Vista explodida">Explodir</button>
       <button id="walkBtn" title="Modo caminhada: WASD move, arraste olha, Esc sai">Caminhar</button>
+      <button id="measureBtn" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)">Medir</button>
+      <button id="analysisBtn" title="Comparar versões e verificar interferências">Análise</button>
+      <button id="loadMoreBtn" title="Carregar outras partes do modelo" hidden>Carregar…</button>
     </div>
     <div class="group">
       <div class="menu">
@@ -102,7 +111,7 @@
     <nav class="tabs">
       <button data-tab="treeTab" class="on">Árvore</button>
       <button data-tab="searchTab">Busca</button>
-      <button data-tab="setsTab">Conjuntos</button>
+      <button data-tab="setsTab">Vistas</button>
     </nav>
     <section id="treeTab" class="tab on"><div id="tree"></div></section>
     <section id="searchTab" class="tab">
@@ -152,6 +161,23 @@
       <div id="results"></div>
     </section>
     <section id="setsTab" class="tab">
+      <h3>Vistas salvas</h3>
+      <div class="row2"><input id="viewName" placeholder="Nome da vista"><button id="viewSave" title="Câmera, visibilidade, cores, estilo, corte, explosão, seleção, notas e medições">Salvar vista</button></div>
+      <div id="viewList"></div>
+      <h3>Compartilhar</h3>
+      <div class="row2"><button id="viewLink" title="Copia um link com a vista atual">Copiar link</button><button id="viewExport">Exportar arquivo</button><button id="viewImport">Importar</button></div>
+      <input id="viewFile" type="file" accept=".json" hidden>
+      <h3>Imagem</h3>
+      <div class="row2"><select id="shotScale"><option value="1">Tamanho da tela</option><option value="2" selected>2× (alta resolução)</option><option value="4">4× (impressão)</option></select><button id="shotBtn">Salvar PNG</button></div>
+      <h3>Notas 3D</h3>
+      <div class="row2"><button id="noteNew" title="Clique depois no ponto do modelo">Nova nota</button><label><input type="checkbox" id="noteShow" checked> Mostrar</label></div>
+      <div id="noteEditor" hidden>
+        <textarea id="noteText" rows="2" placeholder="Texto da nota"></textarea>
+        <div class="row2"><button id="noteOk" class="primary">Salvar nota</button><button id="noteCancel">Cancelar</button></div>
+      </div>
+      <div id="noteList"></div>
+      <h3>Figuras do Creo View</h3>
+      <div id="figList"></div>
       <h3>Conjuntos de seleção</h3>
       <div class="row2"><input id="setName" placeholder="Nome do conjunto"><button id="setSave">Salvar seleção</button></div>
       <div id="setList"></div>
@@ -166,8 +192,50 @@
   <main id="view">
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
+    <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="pivot" hidden></div>
+    <div id="perf" hidden></div>
+    <div id="regionDlg" class="modal" hidden>
+      <div class="modalBox">
+        <h2 id="regionTitle">Escolha o que carregar</h2>
+        <p class="muted">Marque as seções (nível 1) ou abra uma delas para escolher os subsistemas (nível 2).</p>
+        <div id="regionList"></div>
+        <div class="row2">
+          <button id="regionOk" class="primary">Carregar marcadas</button>
+          <button id="regionSel" title="Carrega as peças selecionadas na árvore">Carregar a seleção</button>
+          <button id="regionAll">Tudo</button>
+          <button id="regionCancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
     <div id="floaters">
+      <div id="measurePanel" class="panel" hidden>
+        <div class="ph">Medir <button class="x" data-close="measurePanel" title="Fechar">✕</button></div>
+        <nav class="seg" id="mModes">
+          <button data-m="dist" class="on">Distância</button><button data-m="angle">Ângulo</button><button data-m="coord">Ponto</button><button data-m="radius">Raio / Ø</button><button data-m="min">Folga</button>
+        </nav>
+        <p class="hint" id="mHint"></p>
+        <label><input type="checkbox" id="mSnap" checked> Ajustar a vértices e arestas</label>
+        <div class="row2"><button id="mPair" title="Folga (distância mínima) entre os 2 itens selecionados">Folga entre as 2 selecionadas</button></div>
+        <div class="row2"><button id="mBox">Dimensões da seleção</button><button id="mWeight">Peso da seleção</button></div>
+        <div class="row2"><span>Densidade</span><input id="mDensity" value="7850" title="kg/m³, usada só para peças sem Unit weight"><span class="muted">kg/m³</span></div>
+        <div id="mList"></div>
+        <div class="row2"><button id="mClear">Limpar medições</button></div>
+      </div>
+      <div id="analysisPanel" class="panel" hidden>
+        <div class="ph">Análise <button class="x" data-close="analysisPanel" title="Fechar">✕</button></div>
+        <h4>Comparar com outra versão</h4>
+        <p class="hint">Escolha o arquivo .pvs da outra versão. As peças são casadas pelo part_objectid (ou pelo caminho na árvore) e comparadas pela posição e pelo tamanho.</p>
+        <div class="row2"><button id="cmpPick">Escolher o .pvs…</button><span>Tolerância</span><input id="cmpTol" value="2" class="short"><span class="muted">mm</span></div>
+        <input id="cmpFile" type="file" accept=".pvs" hidden>
+        <div id="cmpResult"></div>
+        <h4>Interferências</h4>
+        <div class="row2"><select id="intScope"><option value="vis">Seleção × peças visíveis</option><option value="sel">Entre as peças da seleção</option></select></div>
+        <div class="row2"><span>Contato até</span><input id="intTol" value="0.5" class="short"><span class="muted">mm</span></div>
+        <div class="row2"><button id="intRun" class="primary">Verificar</button><button id="intStop">Parar</button></div>
+        <div id="intStatus" class="hint"></div>
+        <div id="intList"></div>
+      </div>
       <div id="cutPanel" class="panel" hidden>
         <div class="ph">Corte <button class="x" data-close="cutPanel" title="Fechar">✕</button></div>
         <div class="cutRow" data-axis="0"><label><input type="checkbox"> X</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
@@ -203,6 +271,7 @@
       <p class="muted">Os arquivos são lidos no seu navegador e não são enviados para nenhum servidor.
         No Chrome e no Edge o navegador só pede permissão para <em>ver</em> a pasta. Em outros navegadores aparece
         um aviso de “upload”, mas os arquivos também não saem do seu computador.</p>
+      <label class="openOpt"><input type="checkbox" id="openRegions"> Escolher as seções antes de carregar (abre mais rápido e usa menos memória)</label>
       <button class="btn" id="openBtn">Abrir pasta do modelo…</button>
       <input id="folder" type="file" webkitdirectory directory multiple hidden>
       <p id="openErr"></p>

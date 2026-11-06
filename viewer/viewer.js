@@ -5,6 +5,11 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { parsePVS, buildTree as buildPVSTree } from "./lib/pvs.js";
 import { SSAO } from "./lib/post.js";
 import { ViewCube } from "./lib/viewcube.js";
+import { loadOL, weld } from "./lib/ol.js";
+import { chooseRegions, initRegions } from "./ui/regions.js";
+import { initMeasure } from "./ui/measure.js";
+import { initViews } from "./ui/views.js";
+import { initAnalysis } from "./ui/analysis.js";
 import { initTree } from "./ui/tree.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
@@ -26,7 +31,10 @@ export const app = {
   selNodes: new Set(), focus: -1, ghost: false, lastResults: [],
   access: null, // how to read model files (thumbnails): {dir} | {files} | {base}
   // display: style 0 shaded, 1 shaded + edges, 2 hidden line, 3 edges only, 4 x-ray
-  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true },
+  // quality: "high" draws everything, "auto" skips sub-pixel parts (more while moving),
+  // "fast" also drops edges/SSAO and resolution while moving
+  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: "auto", perf: false },
+  tool: null, // when set, clicks in the 3D view go to tool(pickInfo, event) instead of selecting
   clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true },
   explode: { amount: 0, level: 1, selOnly: false },
 };
@@ -56,11 +64,12 @@ function makeControls(cam) {
   c.zoomToCursor = true;
   c.screenSpacePanning = true;
   c.enableRotate = false; // rotation is done here, around the point under the cursor
-  c.addEventListener("change", requestRender);
+  c.addEventListener("change", () => { lastMove = performance.now(); requestRender(); });
   c.addEventListener("start", () => { userMoved = true; tween = null; });
   return c;
 }
 let userMoved = false;
+let lastMove = 0; // last camera movement (level of detail is lower while moving)
 
 let needRender = true;
 function requestRender() { needRender = true; }
@@ -69,6 +78,8 @@ app.requestRender = requestRender;
 function resize() {
   const w = view.clientWidth, h = view.clientHeight;
   renderer.setSize(w, h, false);
+  const svg = document.querySelector("#overlay");
+  if (svg) { svg.setAttribute("width", w); svg.setAttribute("height", h); svg.setAttribute("viewBox", `0 0 ${w} ${h}`); }
   persp.aspect = w / Math.max(1, h);
   persp.updateProjectionMatrix();
   updateOrtho();
@@ -301,18 +312,42 @@ function writeItems(a, b) {
   }
 }
 
-// Which meshes take part in the frame, from the item states and the display style.
+// Which meshes take part in the frame, from the item states and the display style. The result
+// is stored in c.want; applyLod() then drops chunks whose parts are too small on screen.
 function updateVisibility() {
   const st = app.display.style;
   for (const c of chunks) {
-    let any = false;
-    for (let i = c.io; i < c.io + c.ic && !any; i++) {
+    let any = false, shown = false;
+    for (let i = c.io; i < c.io + c.ic && !(any && shown); i++) {
       const a = itemTexData[i * 4 + 3] & 127;
+      if (a > 0) shown = true;
       if (a > 0 && a < 127) any = true;
     }
-    c.mesh.visible = st !== 3;
-    c.meshT.visible = st !== 3 && (any || st === 4);
-    if (c.edges) c.edges.visible = st >= 1 && st <= 3;
+    c.want = { m: shown && st !== 3, t: shown && st !== 3 && (any || st === 4), e: shown && st >= 1 && st <= 3 };
+  }
+  applyLod(0);
+}
+
+// Level of detail: hide chunks whose largest part would cover fewer than `minPx` pixels.
+const _box = new THREE.Box3();
+let drawnTris = 0, drawnChunks = 0;
+function applyLod(minPx, noEdges = false) {
+  const H = view.clientHeight;
+  const f = H / (2 * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)));
+  const orthoH = (ortho.top - ortho.bottom) / ortho.zoom;
+  const cull = minPx > 0 && !partOffset && !walk.on;
+  drawnTris = 0; drawnChunks = 0;
+  for (const c of chunks) {
+    const w = c.want || { m: true, t: false, e: false };
+    let hide = false;
+    if (cull && c.ps) {
+      const px = camera === persp ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(camera.position)) : c.ps * H / orthoH;
+      hide = px < minPx;
+    }
+    c.mesh.visible = w.m && !hide;
+    c.meshT.visible = w.t && !hide;
+    if (c.edges) c.edges.visible = w.e && !hide && !noEdges;
+    if (c.mesh.visible || c.meshT.visible) { drawnTris += c.ni / 3; drawnChunks++; }
   }
 }
 
@@ -568,10 +603,11 @@ app.clipFromBox = function (box) {
 // Local folders are read by the browser and are never uploaded.
 function ok(r, name) { if (!r.ok) throw new Error(name + ": HTTP " + r.status); return r; }
 
-const httpConverted = {
-  json: (n) => fetch(DATA + n).then((r) => ok(r, n).json()),
-  buf: (n) => fetch(DATA + n).then((r) => ok(r, n).arrayBuffer()),
-};
+const httpSrc = (base) => ({
+  json: (n) => fetch(base + n).then((r) => ok(r, n).json()),
+  buf: (n) => fetch(base + n).then((r) => ok(r, n).arrayBuffer()),
+});
+const httpConverted = httpSrc(DATA);
 
 function filesConverted(all, prefix) {
   const get = (n) => { const f = all.get(prefix + n); if (!f) throw new Error("arquivo ausente: " + n); return f; };
@@ -608,7 +644,10 @@ async function pickModel() {
     return { kind: "raw", name: decodeURIComponent(url.split("/").pop()), pvs: buf,
       access: { base: new URL(url.slice(0, url.lastIndexOf("/") + 1), location.href).href } };
   }
-  if (!params.has("abrir")) {
+  if (window.desktop) {
+    const r = await window.desktop.initialFolder();
+    if (r) return fromDesktop(r);
+  } else if (!params.has("abrir")) {
     try { await httpConverted.json("chunks.json"); return { kind: "converted", src: httpConverted }; } catch { /* none on server */ }
   }
   status("Nenhum modelo carregado");
@@ -618,6 +657,16 @@ async function pickModel() {
     const fail = (e) => { if (e && e.name !== "AbortError") $("#openErr").textContent = e.message || String(e); };
     $("#openBtn").onclick = async () => {
       $("#openErr").textContent = "";
+      if (window.desktop) { // desktop app (Electron): the folder is served as model://local/
+        try {
+          const r = await window.desktop.pickFolder();
+          if (!r) return;
+          const m = await fromDesktop(r);
+          card.hidden = true;
+          resolve(m);
+        } catch (e) { fail(e); }
+        return;
+      }
       if (window.showDirectoryPicker) {
         try {
           const dir = await window.showDirectoryPicker({ id: "pvs-model", mode: "read" });
@@ -641,6 +690,13 @@ async function pickModel() {
 }
 
 const NO_MODEL = "A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.";
+
+async function fromDesktop(r) {
+  if (r.converted) return { kind: "converted", src: httpSrc(r.base) };
+  if (!r.pvs) throw new Error(NO_MODEL);
+  const buf = await fetch(r.base + encodeURIComponent(r.pvs)).then((x) => ok(x, r.pvs).arrayBuffer());
+  return { kind: "raw", name: r.pvs, pvs: buf, access: { base: r.base, list: r.files } };
+}
 
 async function fromDirectory(dir) {
   try { await dir.getFileHandle("chunks.json"); return { kind: "converted", src: dirConverted(dir) }; } catch { /* not converted */ }
@@ -687,6 +743,7 @@ function setModel(name, t, boxes, lo, hi) {
   app.partOpacity = new Uint8Array(nParts).fill(255);
   app.partRule = null;
   app.partNode = new Int32Array(nParts).fill(-1);
+  app.partLoaded = new Uint8Array(nParts);
   t.part.forEach((p, n) => { if (p >= 0) app.partNode[p] = n; });
   const depth = new Int32Array(app.nNodes);
   for (let n = 1; n < app.nNodes; n++) depth[n] = depth[t.parent[n]] + 1;
@@ -705,11 +762,22 @@ async function main() {
   animate();
   const m = await pickModel();
   status("Carregando estrutura…");
-  if (m.kind === "converted") await loadConverted(m.src);
-  else { app.access = m.access; await loadRaw(m); }
+  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes");
+  if (m.kind === "converted") await loadConverted(m.src, ask);
+  else { app.access = m.access; await loadRaw(m, ask); }
 }
 
-async function loadConverted(src) {
+// Where the geometry comes from, kept for loading more regions and for reading part geometry.
+let source = null;
+const isLoaded = (p) => app.partLoaded && app.partLoaded[p] === 1;
+
+// Parts to load first: all, or the regions chosen in a dialog.
+async function firstParts(ask) {
+  if (!ask) return null;
+  return chooseRegions(app); // Uint8Array flags per part, or null for everything
+}
+
+async function loadConverted(src, ask) {
   const [meta, t, itemsBuf, partsBuf] = await Promise.all([
     src.json("chunks.json"), src.json("tree.json"), src.buf("items.bin"), src.buf("parts.bin"),
   ]);
@@ -721,13 +789,26 @@ async function loadConverted(src) {
     for (let k = 0; k < 4; k++) colors[i * 4 + k] = dv.getUint8(i * 8 + 4 + k);
   }
   addItems(parts, colors);
-  const v2 = (meta.format || 1) >= 2;
-  const list = meta.chunks;
+  source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
+  try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
+  await loadParts(await firstParts(ask));
+  app.emit("loaded");
+}
+
+async function loadConvertedParts(want) {
+  const { src, meta, v2 } = source;
+  const list = [];
+  meta.chunks.forEach((c, k) => {
+    if (source.loaded[k]) return;
+    if (want) { let any = false; for (let i = c.io; i < c.io + c.ic && !any; i++) any = want[itemPart[i]] === 1; if (!any) return; }
+    list.push(k);
+  });
   let next = 0, done = 0;
   const bar = $("#bar > div");
   async function fetcher() {
     while (next < list.length) {
-      const c = list[next++];
+      const k = list[next++], c = meta.chunks[k];
+      source.loaded[k] = 1;
       const buf = await src.buf("c/" + c.f);
       if (v2) {
         const o1 = c.nv * 8, o2 = o1 + c.nv * 4, o3 = o2 + c.ni * 2;
@@ -736,17 +817,19 @@ async function loadConverted(src) {
       } else {
         addChunk(c, new Uint16Array(buf, 0, c.nv * 4), null, new Uint16Array(buf, c.nv * 8, c.ni), null, c.io, c.ic);
       }
+      for (let i = c.io; i < c.io + c.ic; i++) app.partLoaded[itemPart[i]] = 1;
       done++;
       bar.style.width = (100 * done / list.length).toFixed(1) + "%";
       status(done < list.length ? `Carregando geometria ${done}/${list.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
   await Promise.all(Array.from({ length: 6 }, fetcher));
-  app.emit("loaded");
+  // parts that were asked for count as loaded even without geometry (missing .ol files)
+  if (!want) app.partLoaded.fill(1);
+  else for (let p = 0; p < app.nParts; p++) if (want[p]) app.partLoaded[p] = 1;
 }
 
-async function loadRaw(m) {
-  const t0 = performance.now();
+async function loadRaw(m, ask) {
   const pvs = parsePVS(m.pvs);
   const t = buildPVSTree(pvs.components);
   const boxes = new Float32Array(t.shapes.length * 6);
@@ -756,32 +839,40 @@ async function loadRaw(m) {
     boxes.set(b, i * 6);
     for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], b[a]); hi[a] = Math.max(hi[a], b[a + 3]); }
   });
+  app.pvsBoxes = boxes.slice(); // as stored in the PVS (the comparison tool uses them)
   setModel(m.name, t, boxes, lo, hi);
   if (pvs.transformed) console.warn("O modelo tem instâncias com transformação; esta versão ainda não as aplica.");
+  const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  source = { kind: "raw", m, t, small: isFinite(diag) ? diag * 0.004 : 0 }; // same rule as tools/build.py
+  await loadParts(await firstParts(ask));
+  app.emit("loaded");
+}
 
-  const total = t.shapes.length;
-  const TASK = 150;
+async function loadRawParts(want) {
+  const { m, t } = source;
+  const t0 = performance.now();
+  const todo = [];
+  for (let p = 0; p < t.shapes.length; p++) if (!isLoaded(p) && (!want || want[p] === 1)) todo.push(p);
+  const TASK = 150, total = todo.length;
   const tasks = [];
-  for (let s = 0; s < total; s += TASK) tasks.push(s);
+  for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
   const nWorkers = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
   let missing = 0, next = 0, doneParts = 0;
   const files = m.access.files;
   const runWorker = () => new Promise((resolve, reject) => {
     const w = new Worker(new URL("./lib/olworker.js", import.meta.url), { type: "module" });
-    w.postMessage({ type: "init", dir: m.access.dir, base: m.access.base });
+    w.postMessage({ type: "init", dir: m.access.dir, base: m.access.base, small: source.small });
+    let cur = null;
     const send = () => {
       if (next >= tasks.length) { w.terminate(); resolve(); return; }
-      const s = tasks[next++];
-      const parts = [];
-      for (let p = s; p < Math.min(total, s + TASK); p++) {
-        const name = t.shapes[p];
-        parts.push({ part: p, name, file: files ? files.get(name) || null : undefined });
-      }
-      w.postMessage({ type: "task", id: s, parts });
+      cur = tasks[next++];
+      const parts = cur.map((p) => ({ part: p, name: t.shapes[p], file: files ? files.get(t.shapes[p]) || null : undefined }));
+      w.postMessage({ type: "task", id: next, parts });
     };
     const progress = () => {
-      doneParts = Math.min(total, doneParts + TASK);
+      for (const p of cur) app.partLoaded[p] = 1;
+      doneParts = Math.min(total, doneParts + cur.length);
       bar.style.width = (100 * doneParts / total).toFixed(1) + "%";
       const secs = ((performance.now() - t0) / 1000).toFixed(0);
       status(`Lendo peças ${doneParts.toLocaleString("pt-BR")}/${total.toLocaleString("pt-BR")} · ${secs}s`);
@@ -793,7 +884,7 @@ async function loadRaw(m) {
         addChunk(d, d.verts, d.nrm, d.idx, d.ne ? d.edges : null, io, d.items.length);
       } else if (d.type === "error") {
         console.error("worker:", d.message);
-        missing += TASK;
+        missing += cur.length;
         progress();
         send();
       } else if (d.type === "done") {
@@ -807,15 +898,40 @@ async function loadRaw(m) {
     w.onerror = (e) => { w.terminate(); reject(new Error(e.message || "erro no worker")); };
     send();
   });
-  await Promise.all(Array.from({ length: nWorkers }, runWorker));
+  await Promise.all(Array.from({ length: Math.min(nWorkers, Math.max(1, tasks.length)) }, runWorker));
   const secs = ((performance.now() - t0) / 1000).toFixed(0);
-  status(`Modelo carregado em ${secs}s` + (missing ? ` · ${missing} arquivo(s) .ol ausente(s) ou ilegível(is)` : ""));
-  const all = partsBox(Array.from({ length: app.nParts }, (_, p) => p));
-  if (!all.isEmpty()) { modelMin = all.min.toArray(); modelMax = all.max.toArray(); }
+  status(`${total.toLocaleString("pt-BR")} peças carregadas em ${secs}s` + (missing ? ` · ${missing} arquivo(s) .ol ausente(s) ou ilegível(is)` : ""));
+  const all = partsBox(todo);
+  if (!all.isEmpty()) {
+    const b = new THREE.Box3(new THREE.Vector3(...modelMin), new THREE.Vector3(...modelMax));
+    if (!want) b.copy(all); else b.union(all);
+    modelMin = b.min.toArray(); modelMax = b.max.toArray();
+  }
+}
+
+// Load geometry for parts (Uint8Array flags, or null = everything not loaded yet).
+let loading = false;
+async function loadParts(want) {
+  if (loading) return;
+  loading = true;
+  try {
+    if (source.kind === "converted") await loadConvertedParts(want);
+    else await loadRawParts(want);
+  } finally { loading = false; }
+  const n = app.partLoaded.reduce((s, v) => s + v, 0);
+  $("#loadMoreBtn").hidden = n >= app.nParts;
+  if (n < app.nParts) status(`${n.toLocaleString("pt-BR")} de ${app.nParts.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
   if (!userMoved) fitAll(false);
   app.setClip({});
-  app.emit("loaded");
+  app.emit("geometry");
+  requestRender();
 }
+// parts: Uint8Array flags, an array of part numbers, or null for everything
+app.loadParts = (parts) => {
+  if (parts && !(parts instanceof Uint8Array)) { const f = new Uint8Array(app.nParts); for (const p of parts) f[p] = 1; parts = f; }
+  return loadParts(parts);
+};
+app.isLoaded = isLoaded;
 
 function disposeArray() { this.array = null; }
 let loadedTris = 0, loadedEdges = 0;
@@ -855,7 +971,7 @@ function addChunk(c, verts, nrm, idx, edges, io, ic) {
   const min = new THREE.Vector3(...c.min), max = new THREE.Vector3(...c.max);
   g.boundingBox = new THREE.Box3(min, max);
   g.boundingSphere = g.boundingBox.getBoundingSphere(new THREE.Sphere());
-  const chunk = { io, ic, q, geo: g, min, max, edgeIdx: edges, edges: null };
+  const chunk = { io, ic, q, geo: g, min, max, edgeIdx: edges, edges: null, ps: c.ps || 0, ni: c.ni, ne: edges ? edges.length : 0, nv: c.nv };
   const make = (pass) => {
     const mat = chunkMaterial(VERT, FRAG, chunk, { pass: { value: pass } });
     mat.transparent = pass === 1;
@@ -875,9 +991,13 @@ function addChunk(c, verts, nrm, idx, edges, io, ic) {
   if (st >= 1 && st <= 3) makeEdges(chunk);
   let any = false;
   for (let i = io; i < io + ic && !any; i++) { const a = itemTexData[i * 4 + 3] & 127; any = a > 0 && a < 127; }
-  chunk.mesh.visible = st !== 3;
-  chunk.meshT.visible = st !== 3 && (any || st === 4);
+  chunk.want = { m: st !== 3, t: st !== 3 && (any || st === 4), e: st >= 1 && st <= 3 };
+  chunk.mesh.visible = chunk.want.m;
+  chunk.meshT.visible = chunk.want.t;
+  if (chunk.edges) chunk.edges.visible = chunk.want.e;
+  gpuBytes += c.nv * (nrm ? 12 : 8) + c.ni * 2;
 }
+let gpuBytes = 0;
 
 // CAD edges are sent to the GPU only when an edge style is used for the first time.
 function makeEdges(c) {
@@ -897,6 +1017,7 @@ function makeEdges(c) {
   lines.frustumCulled = !partOffset;
   lines.visible = app.display.style >= 1 && app.display.style <= 3;
   scene.add(lines);
+  gpuBytes += c.edgeIdx.length * 2;
   c.edges = lines;
   c.edgeIdx = null;
 }
@@ -982,6 +1103,7 @@ function stepTween(now) {
   camera.position.copy(controls.target).addScaledVector(d, tween.dist);
   camera.lookAt(controls.target);
   needRender = true;
+  lastMove = now;
   if (t >= 1) tween = null;
 }
 
@@ -1073,6 +1195,201 @@ function pickPoint(x, y) {
   return p0.addScaledVector(fwd, z - camera.near);
 }
 
+// ---------------------------------------------------------------- services for the UI tools
+// What is under the cursor: {node, part, point: [x,y,z] | null}.
+app.pick = function (x, y) {
+  const node = pickNode(x, y);
+  const pt = node >= 0 ? pickPoint(x, y) : null;
+  let point = pt ? pt.toArray() : null;
+  if (point && partOffset && node >= 0) { // exploded: back to the part's own position
+    const p = app.tree.part[node];
+    if (p >= 0) for (let a = 0; a < 3; a++) point[a] -= partOffset[p * 3 + a];
+  }
+  return { node, part: node >= 0 ? app.tree.part[node] : -1, point, x, y };
+};
+// Screen position (CSS pixels in the view) of a world point; null when behind the camera.
+const _pv = new THREE.Vector3();
+app.project = function (p, part = -1) {
+  _pv.set(p[0], p[1], p[2]);
+  if (partOffset && part >= 0) _pv.x += partOffset[part * 3], _pv.y += partOffset[part * 3 + 1], _pv.z += partOffset[part * 3 + 2];
+  _pv.project(camera);
+  if (_pv.z > 1 || _pv.z < -1) return null;
+  return [(_pv.x + 1) / 2 * view.clientWidth, (1 - _pv.y) / 2 * view.clientHeight];
+};
+// World size of one screen pixel at a point.
+app.worldPerPixel = function (p) {
+  if (camera === ortho) return (ortho.top - ortho.bottom) / ortho.zoom / view.clientHeight;
+  const d = camera.position.distanceTo(_pv.set(p[0], p[1], p[2]));
+  return 2 * d * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)) / view.clientHeight;
+};
+app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray(), target: controls.target.toArray(), half: orthoHalf, zoom: ortho.zoom });
+app.setCamera = function (c) {
+  if (!c) return;
+  if (walk.on) setWalk(false);
+  tween = null;
+  if ((camera === ortho) !== !!c.ortho) setOrtho(!!c.ortho);
+  camera.position.fromArray(c.pos);
+  controls.target.fromArray(c.target);
+  if (c.ortho) { orthoHalf = c.half || orthoHalf; ortho.zoom = c.zoom || 1; updateOrtho(); }
+  camera.lookAt(controls.target);
+  controls.update();
+  userMoved = true;
+  requestRender();
+};
+app.frameBox = (b) => frame(b);
+app.partBoxes = () => partBox;
+app.modelBox = () => modelBox();
+app.scene = scene;
+
+// Geometry of one part in world coordinates {pos, idx, edges}, read again from the source
+// (chunk files of a converted folder, or the part's .ol file). Cached.
+const geomCache = new Map(), chunkBufCache = new Map();
+app.partGeometry = async function (p) {
+  if (geomCache.has(p)) { const g = geomCache.get(p); geomCache.delete(p); geomCache.set(p, g); return g; }
+  let g = null;
+  try {
+    if (source && source.kind === "converted" && source.v2) g = await geomFromChunks(p);
+    else if (app.access) g = await geomFromOL(p);
+  } catch (e) { console.warn("geometria da peça", p, e); }
+  geomCache.set(p, g);
+  while (geomCache.size > 400) geomCache.delete(geomCache.keys().next().value);
+  return g;
+};
+async function geomFromOL(p) {
+  const f = await app.readModelFile(app.tree.shapes[p]);
+  if (!f) return null;
+  const ol = loadOL(new Uint8Array(await f.arrayBuffer()));
+  let main = null, mainN = -1;
+  for (const g of ol.groups) { let n = 0; for (const t of g.tris) n += t.length; if (n > mainN) { mainN = n; main = g; } }
+  const P = [], I = [], E = [];
+  let nv = 0;
+  for (const g of ol.groups) {
+    const w = weld(g.pos, g.nrm, g.tris, g === main ? ol.edges : null);
+    if (!w) continue;
+    P.push(w.pos);
+    for (const i of w.idx) I.push(i + nv);
+    if (w.edges) for (const i of w.edges) E.push(i + nv);
+    nv += w.pos.length / 3;
+  }
+  const pos = new Float32Array(nv * 3);
+  let o = 0;
+  for (const a of P) { pos.set(a, o); o += a.length; }
+  return { pos, idx: Uint32Array.from(I), edges: Uint32Array.from(E) };
+}
+async function chunkBuffer(c) {
+  if (chunkBufCache.has(c.f)) return chunkBufCache.get(c.f);
+  const buf = await source.src.buf("c/" + c.f);
+  chunkBufCache.set(c.f, buf);
+  while (chunkBufCache.size > 6) chunkBufCache.delete(chunkBufCache.keys().next().value);
+  return buf;
+}
+async function geomFromChunks(p) {
+  const list = source.meta.chunks;
+  const P = [], I = [], E = [];
+  let nv = 0;
+  for (let i = 0; i < nItems; i++) {
+    if (itemPart[i] !== p) continue;
+    let lo = 0, hi = list.length - 1; // chunk with io <= i < io + ic
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (list[mid].io <= i) lo = mid; else hi = mid - 1; }
+    const c = list[lo];
+    const buf = await chunkBuffer(c);
+    const verts = new Uint16Array(buf, 0, c.nv * 4), local = i - c.io;
+    const o2 = c.nv * 12, idx = new Uint16Array(buf, o2, c.ni), edg = c.ne ? new Uint16Array(buf, o2 + c.ni * 2, c.ne) : null;
+    const map = new Int32Array(c.nv).fill(-1);
+    const ext = [0, 1, 2].map((a) => Math.max(c.max[a] - c.min[a], 1e-6));
+    for (let v = 0; v < c.nv; v++) {
+      if (verts[v * 4 + 3] !== local) continue;
+      map[v] = nv++;
+      P.push(c.min[0] + verts[v * 4] / 65535 * ext[0], c.min[1] + verts[v * 4 + 1] / 65535 * ext[1], c.min[2] + verts[v * 4 + 2] / 65535 * ext[2]);
+    }
+    for (let k = 0; k < c.ni; k += 3) {
+      const a = map[idx[k]], b = map[idx[k + 1]], d = map[idx[k + 2]];
+      if (a >= 0 && b >= 0 && d >= 0) I.push(a, b, d);
+    }
+    if (edg) for (let k = 0; k < c.ne; k += 2) {
+      const a = map[edg[k]], b = map[edg[k + 1]];
+      if (a >= 0 && b >= 0) E.push(a, b);
+    }
+  }
+  if (!I.length) return null;
+  return { pos: Float32Array.from(P), idx: Uint32Array.from(I), edges: Uint32Array.from(E) };
+}
+app.canReadGeometry = () => !!(source && ((source.kind === "converted" && source.v2) || app.access));
+
+// Names of files in the original model folder that match a pattern (for ann*.ast).
+app.listModelFiles = async function (re) {
+  const a = app.access, out = [];
+  if (!a) return out;
+  if (a.files) { for (const k of a.files.keys()) if (re.test(k)) out.push(k); }
+  else if (a.dir) { for await (const [k, h] of a.dir.entries()) if (h.kind === "file" && re.test(k)) out.push(k); }
+  else if (a.list) { for (const k of a.list) if (re.test(k)) out.push(k); }
+  else if (a.base) { // plain web server: probe ann0000.ast, ann0001.ast, ...
+    for (let i = 0; i < 50; i++) {
+      const k = "ann" + String(i).padStart(4, "0") + ".ast";
+      const r = await fetch(a.base + k, { method: "HEAD" }).catch(() => null);
+      if (!r || !r.ok) break;
+      out.push(k);
+    }
+  }
+  return out.sort();
+};
+
+// PNG of the current view at `scale` times the screen size, with the background and the
+// measurement / note overlay. Returns a Blob.
+app.screenshot = async function (scale = 2) {
+  const gl = renderer.getContext();
+  const maxSize = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), gl.getParameter(gl.MAX_TEXTURE_SIZE), 8192);
+  const W = view.clientWidth, H = view.clientHeight;
+  const s = Math.min(scale, maxSize / W, maxSize / H);
+  const w = Math.round(W * s), h = Math.round(H * s);
+  const rt = new THREE.WebGLRenderTarget(w, h, { samples: s <= 2 ? 4 : 0 });
+  const boxVis = clipBox.visible;
+  clipBox.visible = false;
+  applyLod(0);
+  renderer.setRenderTarget(rt);
+  renderer.clear();
+  renderer.render(scene, camera);
+  const px = new Uint8Array(w * h * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
+  renderer.setRenderTarget(null);
+  rt.dispose();
+  clipBox.visible = boxVis;
+  requestRender();
+  const img = new ImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    const src = (h - 1 - y) * w * 4, dst = y * w * 4;
+    for (let x = 0; x < w * 4; x += 4) {
+      const a = px[src + x + 3];
+      const k = a ? 255 / a : 0; // the target holds premultiplied colour
+      img.data[dst + x] = Math.min(255, px[src + x] * k);
+      img.data[dst + x + 1] = Math.min(255, px[src + x + 1] * k);
+      img.data[dst + x + 2] = Math.min(255, px[src + x + 2] * k);
+      img.data[dst + x + 3] = a;
+    }
+  }
+  const layer = new OffscreenCanvas(w, h);
+  layer.getContext("2d").putImageData(img, 0, 0);
+  const out = new OffscreenCanvas(w, h), g = out.getContext("2d");
+  const bg = { grad: ["#f1f3f6", "#c7ced8"], white: ["#ffffff", "#ffffff"], dark: ["#434b59", "#1a1e25"], black: ["#000000", "#000000"] }[app.display.bg] || ["#fff", "#fff"];
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, bg[0]); grad.addColorStop(1, bg[1]);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  g.drawImage(layer, 0, 0);
+  const svg = document.querySelector("#overlay");
+  if (svg && svg.childElementCount) {
+    const xml = new XMLSerializer().serializeToString(svg);
+    const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
+    try {
+      const im = new Image();
+      im.src = url;
+      await im.decode();
+      g.drawImage(im, 0, 0, w, h);
+    } finally { URL.revokeObjectURL(url); }
+  }
+  return out.convertToBlob({ type: "image/png" });
+};
+
 // ---------------------------------------------------------------- mouse
 let down = null, box = null, rot = null;
 const boxEl = $("#boxSel"), pivotEl = $("#pivot");
@@ -1124,6 +1441,7 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
   if (!down || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
+  if (app.tool) { app.tool(app.pick(e.clientX, e.clientY), e); return; }
   const node = pickNode(e.clientX, e.clientY);
   if (e.altKey && app.focus >= 0) { app.select([app.tree.parent[app.focus]], "replace"); return; }
   if (node < 0) { if (!(e.ctrlKey || e.metaKey)) app.clearSelection(); return; }
@@ -1152,6 +1470,7 @@ function dragRotate(e) {
   }
   const dx = e.clientX - rot.x, dy = e.clientY - rot.y;
   rot.x = e.clientX; rot.y = e.clientY;
+  lastMove = performance.now();
   const k = (2 * Math.PI) / Math.max(200, view.clientHeight);
   if (walk.on) {
     walk.yaw -= dx * k * 0.5;
@@ -1226,6 +1545,7 @@ function stepWalk(now) {
   camera.position.addScaledVector(v.normalize(), walk.speed * (K.has("shift") ? 4 : 1) * dt);
   walkLook();
   needRender = true;
+  lastMove = now;
 }
 renderer.domElement.addEventListener("wheel", (e) => {
   if (!walk.on) return;
@@ -1283,18 +1603,36 @@ window.addEventListener("keydown", (e) => {
   else if (k === "e") app.toggleStyle(1);
   else if (k === "x") app.toggleStyle(4);
   else if (k === "c") $("#cutBtn").click();
+  else if (k === "m") $("#measureBtn").click();
+  else if (k === "p") app.togglePerf();
   else if (k === "escape") app.clearSelection();
 });
 
 // ---------------------------------------------------------------- loop
 const SKY = new THREE.Vector3(0.35, -0.45, 1).normalize();
+// Quality presets: minimum on-screen size (pixels) of the largest part of a chunk, at rest and
+// while moving, and what is dropped while moving.
+const QUALITY = {
+  high: { idle: 0, move: 0, edges: true, ssao: true, ratio: 1 },
+  auto: { idle: 0.75, move: 5, edges: true, ssao: false, ratio: 1 },
+  fast: { idle: 1, move: 8, edges: false, ssao: false, ratio: 0.6 },
+};
+let wasMoving = false, ratioScale = 1;
+const frameTimes = [];
 function animate(now = performance.now()) {
   requestAnimationFrame(animate);
   stepTween(now);
   stepWalk(now);
   if (!walk.on && !tween && controls.update()) needRender = true;
+  const moving = now - lastMove < 150;
+  if (wasMoving && !moving) needRender = true; // refine once the camera stops
+  wasMoving = moving;
   if (!needRender) return;
   needRender = false;
+  const Q = QUALITY[app.display.quality] || QUALITY.auto;
+  const ratio = moving ? Q.ratio : 1;
+  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * ratio); resize(); }
+  applyLod(moving ? Q.move : Q.idle, moving && !Q.edges);
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {
     if (walk.on) { persp.near = 0.02; persp.far = size * 3; }
@@ -1309,7 +1647,8 @@ function animate(now = performance.now()) {
   }
   camera.updateMatrixWorld();
   shared.skyDir.value.copy(SKY).transformDirection(camera.matrixWorldInverse);
-  if (app.display.ssao && app.display.style !== 3) {
+  const t0 = performance.now();
+  if (app.display.ssao && app.display.style !== 3 && (!moving || Q.ssao)) {
     if (!ssao) ssao = new SSAO(renderer);
     const d = walk.on ? 3 : camera === persp ? camera.position.distanceTo(controls.target) : orthoHalf / ortho.zoom * 2;
     ssao.render(scene, camera, Math.max(0.03, Math.min(size * 0.02, d * 0.03)));
@@ -1317,7 +1656,46 @@ function animate(now = performance.now()) {
     renderer.render(scene, camera);
   }
   cube.render(renderer, camera, view.clientWidth, view.clientHeight);
+  app.emit("frame");
+  frameTimes.push(now);
+  while (frameTimes.length && now - frameTimes[0] > 1000) frameTimes.shift();
+  if (app.display.perf) showPerf(now, performance.now() - t0, moving);
 }
+
+// ---------------------------------------------------------------- performance panel
+const gpuName = (() => {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension("WEBGL_debug_renderer_info");
+  return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "desconhecida";
+})();
+app.gpu = gpuName;
+app.gpuIntegrated = /intel|uhd|iris|microsoft basic|swiftshader|llvmpipe|software/i.test(gpuName) && !/nvidia|radeon|amd|geforce|rtx|gtx|quadro|arc/i.test(gpuName);
+let perfShown = 0;
+function showPerf(now, cpuMs, moving) {
+  if (now - perfShown < 250) return;
+  perfShown = now;
+  const fps = frameTimes.length > 1 ? (frameTimes.length - 1) * 1000 / (frameTimes[frameTimes.length - 1] - frameTimes[0]) : 0;
+  const el = $("#perf");
+  el.hidden = false;
+  const total = chunks.reduce((s, c) => s + c.ni / 3, 0);
+  el.innerHTML = "";
+  const line = (k, v, cls) => { const d = document.createElement("div"); if (cls) d.className = cls; d.innerHTML = `<span>${k}</span><b>${v}</b>`; el.append(d); };
+  line("Placa de vídeo", gpuName.replace(/^ANGLE \(|\)$/g, "").replace(/ Direct3D.*$/, ""), app.gpuIntegrated ? "warn" : "");
+  line("Quadros/s", moving || fps > 0 ? fps.toFixed(0) : "parado");
+  line("Envio do quadro (CPU)", cpuMs.toFixed(1) + " ms");
+  line("Triângulos desenhados", `${(drawnTris / 1e6).toFixed(1)} de ${(total / 1e6).toFixed(1)} M`);
+  line("Blocos desenhados", `${drawnChunks} de ${chunks.length}`);
+  line("Memória de vídeo (aprox.)", (gpuBytes / 1048576).toFixed(0) + " MB");
+  if (performance.memory) line("Memória JS", (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + " MB");
+  line("Qualidade", { high: "alta", auto: "automática", fast: "rápida" }[app.display.quality] + (moving ? " · em movimento" : ""));
+  if (app.gpuIntegrated) {
+    const w = document.createElement("p");
+    w.className = "warn";
+    w.textContent = "O navegador está usando a placa integrada. No Windows: Configurações › Sistema › Tela › Elementos gráficos › escolha o navegador › Alto desempenho, e reabra o navegador.";
+    el.append(w);
+  }
+}
+app.hidePerf = () => { $("#perf").hidden = true; };
 
 // ---------------------------------------------------------------- start
 initTree(app);
@@ -1327,6 +1705,10 @@ initSets(app);
 initColors(app);
 initTable(app);
 initDisplay(app);
+initRegions(app);
+initMeasure(app);
+initViews(app);
+initAnalysis(app);
 app.on("selection", () => {
   const s = app.selNodes.size;
   $("#selInfo").textContent = s ? `${s.toLocaleString("pt-BR")} selecionado(s) · ${app.selectedParts().length.toLocaleString("pt-BR")} peça(s)` : "";

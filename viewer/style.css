@@ -102,6 +102,43 @@ button.active { border-color: var(--accent); color: var(--accent); }
 #walkHint { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 6; background: rgba(29,35,48,.85); color: #fff;
   padding: 6px 12px; border-radius: 6px; font-size: 12px; width: max-content; max-width: calc(100% - 24px); text-align: center; pointer-events: none; }
 #walkHint[hidden] { display: none; }
+
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; overflow: visible; }
+#perf { position: absolute; left: 8px; bottom: 8px; z-index: 6; width: 300px; background: rgba(29,35,48,.88); color: #e9ecef;
+  border-radius: 6px; padding: 6px 10px; font-size: 11.5px; pointer-events: none; }
+#perf[hidden] { display: none; }
+#perf div { display: flex; gap: 8px; }
+#perf div span { color: #adb5bd; flex: none; width: 140px; }
+#perf div b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#perf .warn b, #perf p.warn { color: #ffc078; }
+#perf p { margin: 4px 0 0; }
+#view.bomOpen #perf { bottom: calc(42% + 8px); }
+.panel h4 { margin: 8px 0 2px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.panel input.short, .row2 > input.short { width: 52px; flex: none; }
+.seg { display: flex; flex-wrap: wrap; gap: 2px; margin: 2px 0 4px; }
+.seg button { padding: 3px 7px; font-size: 12px; }
+#mList, #intList { max-height: 220px; overflow: auto; margin-top: 4px; }
+.mItem { display: flex; align-items: flex-start; gap: 4px; padding: 4px 0; border-top: 1px solid var(--hover); }
+.mItem > div { flex: 1; min-width: 0; word-break: break-word; }
+.mItem button { padding: 0 6px; }
+.warn { color: var(--danger); }
+.intRow { padding: 4px 2px; border-top: 1px solid var(--hover); cursor: pointer; font-size: 11.5px; }
+.intRow:hover { background: var(--hover); }
+.intRow div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.cmpAdded { max-height: 160px; overflow: auto; font-size: 11.5px; margin-top: 4px; }
+.cmpAdded div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#noteText { width: 100%; font: inherit; border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; resize: vertical; }
+.openOpt { display: block; margin: 0 0 10px; font-size: 12px; }
+
+.modal { position: absolute; inset: 0; z-index: 20; background: rgba(20,24,32,.35); display: flex; align-items: center; justify-content: center; }
+.modal[hidden] { display: none; }
+.modalBox { width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); display: flex; flex-direction: column;
+  background: var(--panel); border-radius: 8px; padding: 16px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.2); }
+.modalBox h2 { margin: 0 0 4px; font-size: 16px; }
+#regionList { flex: 1; overflow: auto; margin: 8px 0; border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; min-height: 120px; }
+#regionList details, #regionList .row1 { padding: 2px 0; }
+#regionList summary { cursor: pointer; }
+#regionList .sub label { display: block; padding-left: 28px; }
 #view canvas { display: block; width: 100%; height: 100%; outline: none; position: relative; z-index: 0; }
 #boxSel { position: absolute; border: 1px dashed var(--accent); background: rgba(232, 89, 12, .08); pointer-events: none; z-index: 5; }
 #legend { position: absolute; top: 8px; right: 8px; max-height: calc(100% - 16px); overflow: auto; z-index: 6; min-width: 180px; max-width: 320px;
