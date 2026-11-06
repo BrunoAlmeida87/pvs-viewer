@@ -26,6 +26,7 @@ import { convertModel } from "./lib/convert.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
+const mobile = document.documentElement.classList.contains("mobile");
 
 // ---------------------------------------------------------------- app / events
 const listeners = {};
@@ -38,7 +39,7 @@ export const app = {
   // display: style 0 shaded, 1 shaded + edges, 2 hidden line, 3 edges only, 4 x-ray
   // quality: "high" draws everything, "auto" skips sub-pixel parts (more while moving),
   // "fast" also drops edges/SSAO and resolution while moving
-  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: "auto", perf: false },
+  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: mobile ? "fast" : "auto", perf: false },
   tool: null, // when set, clicks in the 3D view go to tool(pickInfo, event) instead of selecting
   clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true },
   explode: { amount: 0, level: 1, selOnly: false },
@@ -47,7 +48,7 @@ export const app = {
 // ---------------------------------------------------------------- renderer
 const view = $("#view");
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
 renderer.setClearColor(0x000000, 0); // the background is the CSS of #view
 view.prepend(renderer.domElement);
 
@@ -890,7 +891,7 @@ async function main() {
   animate();
   const m = await pickModel();
   status("Carregando estrutura…");
-  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes");
+  const ask = $("#openRegions")?.checked || mobile || new URLSearchParams(location.search).has("regioes");
   if (m.kind === "converted") await loadConverted(m.src, ask);
   else { app.access = m.access; await loadRaw(m, ask); }
 }
@@ -902,7 +903,9 @@ const isLoaded = (p) => app.partLoaded && app.partLoaded[p] === 1;
 // Parts to load first: all, or the regions chosen in a dialog.
 async function firstParts(ask) {
   if (!ask) return null;
-  return chooseRegions(app); // Uint8Array flags per part, or null for everything
+  const selected = await chooseRegions(app);
+  // On a phone, closing the section dialog must not load the entire model.
+  return mobile && selected === undefined ? new Uint8Array(app.nParts) : selected;
 }
 
 async function loadConverted(src, ask) {
@@ -953,7 +956,7 @@ async function loadConvertedParts(want) {
       status(done < list.length ? `Carregando geometria ${done}/${list.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
-  await Promise.all(Array.from({ length: 6 }, fetcher));
+  await Promise.all(Array.from({ length: mobile ? 2 : 6 }, fetcher));
   // parts that were asked for count as loaded even without geometry (missing .ol files)
   if (!want) app.partLoaded.fill(1);
   else for (let p = 0; p < app.nParts; p++) if (want[p]) app.partLoaded[p] = 1;
@@ -986,7 +989,7 @@ async function loadRawParts(want) {
   const TASK = 150, total = todo.length;
   const tasks = [];
   for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
-  const nWorkers = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1));
+  const nWorkers = Math.max(1, Math.min(mobile ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
   let missing = 0, next = 0, doneParts = 0;
   const files = m.access.files;
@@ -1525,6 +1528,7 @@ app.screenshot = async function (scale = 2) {
 
 // ---------------------------------------------------------------- mouse
 let down = null, box = null, rot = null;
+const touches = new Set();
 const boxEl = $("#boxSel"), pivotEl = $("#pivot");
 // Capture phase, before OrbitControls: view cube clicks and Shift+drag rectangle selection.
 view.addEventListener("pointerdown", (e) => {
@@ -1548,10 +1552,11 @@ view.addEventListener("pointerdown", (e) => {
 }, true);
 window.addEventListener("pointermove", (e) => {
   if (box) updateBox(e);
-  if (rot) dragRotate(e);
+  if (rot && rot.id === e.pointerId && touches.size < 2) dragRotate(e);
 });
 window.addEventListener("pointerup", (e) => {
-  if (rot) { rot = null; pivotEl.hidden = true; }
+  if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
+  if (e.pointerType === "touch") touches.delete(e.pointerId);
   if (!box) return;
   const b = box;
   box = null;
@@ -1569,11 +1574,13 @@ function updateBox(e) {
 }
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
-  down = { x: e.clientX, y: e.clientY };
-  if (e.button === 0) rot = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, pivot: null, started: false };
+  if (e.pointerType === "touch") touches.add(e.pointerId);
+  if (touches.size > 1) { down = null; rot = null; pivotEl.hidden = true; return; }
+  down = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  if (e.button === 0) rot = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, pivot: null, started: false };
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!down || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
+  if (!down || down.id !== e.pointerId || touches.size > 1 || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > (e.pointerType === "touch" ? 9 : 4) || e.button !== 0) return;
   if (app.tool) { app.tool(app.pick(e.clientX, e.clientY), e); return; }
   const node = pickNode(e.clientX, e.clientY);
   if (e.altKey && app.focus >= 0) { app.select([app.tree.parent[app.focus]], "replace"); return; }
@@ -1584,6 +1591,11 @@ renderer.domElement.addEventListener("dblclick", (e) => {
   if (walk.on) return;
   const node = pickNode(e.clientX, e.clientY);
   if (node >= 0) app.frameNodes([node]);
+});
+window.addEventListener("pointercancel", (e) => {
+  touches.delete(e.pointerId);
+  if (down?.id === e.pointerId) down = null;
+  if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
 });
 
 // Left drag: orbit around the point under the cursor (or look around while walking).
@@ -1692,8 +1704,26 @@ window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 // ---------------------------------------------------------------- toolbar & keys
 $("#fit").onclick = () => fitAll();
 $("#zoomSel").onclick = () => { if (app.selNodes.size) app.frameNodes([...app.selNodes]); };
+$("#mobileFit").onclick = () => $("#fit").click();
+$("#mobileZoomSel").onclick = () => $("#zoomSel").click();
+$("#mobileTree").onclick = () => $("#app").classList.toggle("mobileSide");
+$("#mobileMore").onclick = () => $("#loadMoreBtn").click();
+app.on("geometry", () => { $("#mobileMore").disabled = $("#loadMoreBtn").hidden; });
+$("#mobileViews").onclick = () => { $("#mobileViewChoices").hidden = !$("#mobileViewChoices").hidden; };
+$("#mobileOrtho").onclick = () => { $("#ortho").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileSaved").onclick = () => {
+  $("#app").classList.add("mobileSide");
+  document.querySelector('[data-tab="setsTab"]').click();
+  $("#mobileViewChoices").hidden = true;
+};
+$("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
 document.querySelectorAll("[data-view]").forEach((b) => {
-  b.onclick = () => frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());
+  b.onclick = () => {
+    frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());
+    $("#mobileViewChoices").hidden = true;
+  };
 });
 $("#isolate").onclick = () => { if (app.selNodes.size) app.isolate([...app.selNodes]); };
 $("#hideSel").onclick = () => { if (app.selNodes.size) app.setVisible([...app.selNodes], false); };
@@ -1766,7 +1796,7 @@ function animate(now = performance.now()) {
   needRender = false;
   const Q = QUALITY[app.display.quality] || QUALITY.auto;
   const ratio = moving ? Q.ratio : 1;
-  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * ratio); resize(); }
+  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2) * ratio); resize(); }
   applyLod(moving ? Q.move : Q.idle, moving && !Q.edges);
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {

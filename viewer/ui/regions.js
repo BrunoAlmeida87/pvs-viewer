@@ -53,7 +53,7 @@ export function chooseRegions(app, more = false) {
     }));
     $("#regionSel").onclick = () => close(flags((f) => { for (const n of app.selNodes) f.fill(1, t.p0[n], t.p1[n]); }));
     $("#regionAll").onclick = () => close(null);
-    $("#regionCancel").onclick = () => close(more ? undefined : null);
+    $("#regionCancel").onclick = () => close(more ? undefined : document.documentElement.classList.contains("mobile") ? new Uint8Array(app.nParts) : null);
   });
 }
 

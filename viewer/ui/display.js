@@ -2,7 +2,7 @@
 // exploded view panel. Display settings are remembered in this browser.
 import { $, store } from "./util.js";
 
-const KEY = "pvs-viewer:display";
+const KEY = document.documentElement.classList.contains("mobile") ? "pvs-viewer:display-mobile" : "pvs-viewer:display";
 const STYLES = ["Sombreado", "Sombreado + arestas", "Linhas ocultas", "Só arestas", "Raio-X"];
 
 export function initDisplay(app) {

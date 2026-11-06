@@ -6,6 +6,26 @@ Abre modelos Creo View (`.pvs` + `.ol`) no navegador, sem o productview.exe.
 
 ## Uso
 
+### Primeira versão para celular (Android)
+
+A branch `codex/android-viewer` adapta o visualizador web para telas de toque. Para testar a branch no
+Galaxy S25, abra o visualizador servido a partir dela no Chrome e escolha uma **pasta convertida** por
+`tools/build.py`, copiada inteira para o armazenamento do
+celular (incluindo `chunks.json`, `tree.json`, `items.bin`, `parts.bin` e a subpasta `c/`). O navegador lê os
+arquivos localmente. Se o seletor de pasta do navegador não funcionar, use outro navegador Chromium atualizado;
+o acesso a pastas no Android ainda precisa ser validado no aparelho.
+
+Na abertura, escolha uma ou mais seções para limitar a memória. O botão **Carregar** acrescenta seções depois.
+Um dedo gira e toca para selecionar; dois dedos aproximam, afastam e deslocam. A barra inferior oferece
+enquadramento, acesso à árvore e vistas isométrica, frontal, lateral e superior. Em **Vistas**, há projeção
+ortográfica, vistas salvas, isolamento da seleção e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por
+padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem instalação offline.
+
+Para conferir a interface localmente, execute `python viewer/serve.py --host 0.0.0.0 --no-browser` na pasta `source` e abra no celular o
+endereço IP do computador com a porta `8080` (por exemplo, `http://192.168.1.10:8080/`). Para usar o seletor
+de pasta avançado (`showDirectoryPicker`), sirva por HTTPS; no endereço HTTP da rede local o navegador pode
+oferecer apenas o seletor alternativo de arquivos.
+
 ### Direto no navegador (sem instalar nada)
 
 Abra o link acima, clique em **Abrir pasta do modelo…** e escolha a pasta que contém o `.pvs` e os `.ol`

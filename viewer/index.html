@@ -2,10 +2,11 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Visualizador PVS</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<script>try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}</script>
+<script>try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}
+if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.search).has("mobile")) document.documentElement.classList.add("mobile");</script>
 <link rel="stylesheet" href="style.css">
 <script type="importmap">
 { "imports": {
@@ -274,6 +275,20 @@
   </aside>
 
   <main id="view">
+    <nav id="mobileBar" aria-label="Controles de visualização">
+      <button id="mobileTree" title="Árvore e vistas salvas">☰ <span>Peças</span></button>
+      <button id="mobileFit" title="Enquadrar modelo">▣ <span>Enquadrar</span></button>
+      <button id="mobileZoomSel" title="Enquadrar seleção">⌕ <span>Seleção</span></button>
+      <button id="mobileViews" title="Abrir vistas">◈ <span>Vistas</span></button>
+      <button id="mobileMore" title="Carregar mais seções" disabled>＋ <span>Carregar</span></button>
+    </nav>
+    <div id="mobileViewChoices" hidden>
+      <button data-view="iso">Isométrica</button><button data-view="front">Frente</button>
+      <button data-view="side">Lado</button><button data-view="top">Topo</button>
+      <button id="mobileOrtho">Ortográfica</button><button id="mobileSaved">Vistas salvas</button>
+      <button id="mobileIsolate">Isolar seleção</button><button id="mobileShowAll">Mostrar tudo</button>
+      <button id="mobileEdges">Arestas</button>
+    </div>
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
     <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -389,13 +404,13 @@
       <div class="openHead"><svg class="logo"><use href="#i-logo"/></svg><div><h2>Abrir modelo</h2><p class="muted">Creo View (.pvs + .ol) ou pasta convertida</p></div></div>
       <div id="dropZone">
         <svg><use href="#i-open"/></svg>
-        <div>Arraste a pasta do modelo para cá</div>
+        <div>Abra a pasta do modelo</div>
         <div class="muted">ou</div>
         <button class="btn" id="openBtn">Escolher a pasta…</button>
         <button class="btn" id="convertBtn" hidden>Converter modelo para abertura rápida…</button>
       </div>
       <label class="openOpt"><input type="checkbox" id="openRegions"> Escolher as seções antes de carregar (abre mais rápido e usa menos memória)</label>
-      <p class="muted small">Os arquivos são lidos no seu computador e não são enviados para nenhum servidor. No Chrome e no Edge o
+      <p class="muted small">Os arquivos são lidos no seu dispositivo e não são enviados para nenhum servidor. No Chrome e no Edge o
         navegador só pede permissão para <em>ver</em> a pasta. Também aceita uma pasta convertida por <code>tools/build.py</code>, que abre mais rápido.</p>
       <input id="folder" type="file" webkitdirectory directory multiple hidden>
       <p id="openErr"></p>
