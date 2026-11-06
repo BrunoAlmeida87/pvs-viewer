@@ -14,6 +14,7 @@ import { initLayout } from "./ui/layout.js";
 import { initNeighbor } from "./ui/neighbor.js";
 import { initLayers } from "./ui/layers.js";
 import { initTree } from "./ui/tree.js";
+import { initStructure } from "./ui/structure.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
 import { initSets } from "./ui/sets.js";
@@ -21,6 +22,7 @@ import { initColors } from "./ui/colors.js";
 import { initTable } from "./ui/table.js";
 import { initDisplay } from "./ui/display.js";
 import { $, status } from "./ui/util.js";
+import { convertModel } from "./lib/convert.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -749,6 +751,19 @@ async function pickModel() {
   card.hidden = false;
   return new Promise((resolve) => {
     const fail = (e) => { if (e && e.name !== "AbortError") $("#openErr").textContent = e.message || String(e); };
+    if (window.desktop) {
+      $("#convertBtn").hidden = false;
+      $("#convertBtn").onclick = async () => {
+        const button = $("#convertBtn");
+        button.disabled = true;
+        $("#openErr").textContent = "";
+        try {
+          const result = await convertModel(window.desktop, status);
+          if (result) status(`Modelo convertido em ${result}. Abra essa pasta para visualizar.`);
+        } catch (e) { fail(e); }
+        finally { button.disabled = false; }
+      };
+    }
     $("#openBtn").onclick = async () => {
       $("#openErr").textContent = "";
       if (window.desktop) { // desktop app (Electron): the folder is served as model://local/
@@ -1819,6 +1834,7 @@ app.hidePerf = () => { $("#perf").hidden = true; };
 
 // ---------------------------------------------------------------- start
 initTree(app);
+initStructure(app);
 initSearch(app);
 initInfo(app);
 initSets(app);

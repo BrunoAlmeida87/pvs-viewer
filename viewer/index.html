@@ -180,10 +180,21 @@
   <aside id="side">
     <nav class="tabs">
       <button data-tab="treeTab" class="on"><svg><use href="#i-tree"/></svg>Árvore</button>
+      <button data-tab="structureTab"><svg><use href="#i-stack"/></svg>Minha estrutura</button>
       <button data-tab="searchTab"><svg><use href="#i-search"/></svg>Busca</button>
       <button data-tab="setsTab"><svg><use href="#i-bookmark"/></svg>Vistas</button>
     </nav>
     <section id="treeTab" class="tab on"><div id="tree"></div></section>
+    <section id="structureTab" class="tab">
+      <div class="searchBox">
+        <p class="muted small">Selecione peças na árvore original e adicione a um grupo. A estrutura original permanece disponível.</p>
+        <div class="row2"><input id="groupName" placeholder="Nome do grupo"><button id="groupNew">Criar grupo</button></div>
+        <div class="row2"><button id="groupExport">Exportar estrutura</button><button id="groupImport">Importar estrutura</button></div>
+        <button id="objExport">Exportar seleção em OBJ</button>
+        <input id="groupFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <div id="groupList"></div>
+    </section>
     <section id="searchTab" class="tab">
       <div class="searchBox">
         <input id="q" placeholder="Buscar… (texto, ou /regex/)" autocomplete="off">
@@ -381,6 +392,7 @@
         <div>Arraste a pasta do modelo para cá</div>
         <div class="muted">ou</div>
         <button class="btn" id="openBtn">Escolher a pasta…</button>
+        <button class="btn" id="convertBtn" hidden>Converter modelo para abertura rápida…</button>
       </div>
       <label class="openOpt"><input type="checkbox" id="openRegions"> Escolher as seções antes de carregar (abre mais rápido e usa menos memória)</label>
       <p class="muted small">Os arquivos são lidos no seu computador e não são enviados para nenhum servidor. No Chrome e no Edge o
