@@ -5,13 +5,14 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { parsePVS, buildTree as buildPVSTree } from "./lib/pvs.js";
 import { SSAO } from "./lib/post.js";
 import { ViewCube } from "./lib/viewcube.js";
-import { loadOL, weld } from "./lib/ol.js";
+import { loadOL, weld, edgeOwners } from "./lib/ol.js";
 import { chooseRegions, initRegions } from "./ui/regions.js";
 import { initMeasure } from "./ui/measure.js";
 import { initViews } from "./ui/views.js";
 import { initAnalysis } from "./ui/analysis.js";
 import { initLayout } from "./ui/layout.js";
 import { initNeighbor } from "./ui/neighbor.js";
+import { initLayers } from "./ui/layers.js";
 import { initTree } from "./ui/tree.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
@@ -270,12 +271,45 @@ let nItems = 0, itemPart = null, itemColor = null, itemTexData, itemTex, offTexD
 let partFirstItem;
 const chunks = []; // {io, ic, mesh, meshT, edgeIdx, edges, geo, q, min, max}
 
+// ---------------------------------------------------------------- layers
+// Creo layers of each draw item (from the .ol faces). Hidden layers are not drawn.
+let itemLayer = null;
+app.layers = [];            // layer names, by id ("" = no layer)
+const layerId = new Map();  // name -> id
+let layerHidden = new Uint8Array(16);
+app.hiddenLayers = new Set(["99"]); // layer 99: the space an equipment may take (door swing…)
+function layerOf(name) {
+  let id = layerId.get(name);
+  if (id === undefined) {
+    id = app.layers.length;
+    app.layers.push(name);
+    layerId.set(name, id);
+    if (id >= layerHidden.length) { const h = new Uint8Array(layerHidden.length * 2); h.set(layerHidden); layerHidden = h; }
+    layerHidden[id] = app.hiddenLayers.has(name) ? 1 : 0;
+    layersChanged = true;
+  }
+  return id;
+}
+let layersChanged = false;
+app.layerIdOfItem = (i) => itemLayer[i];
+app.itemCount = () => nItems;
+app.itemPart = (i) => itemPart[i];
+app.setLayersHidden = function (names) {
+  app.hiddenLayers = new Set(names);
+  app.layers.forEach((n, id) => { layerHidden[id] = app.hiddenLayers.has(n) ? 1 : 0; });
+  geomCache.clear();
+  if (app.geom) app.geom.forget();
+  app.refresh();
+  app.emit("layers");
+};
+app.isLayerHidden = (name) => app.hiddenLayers.has(name);
+
 function allocItems(cap) {
   const rows = Math.max(1, Math.ceil(cap / TEX_W));
   const n = rows * TEX_W;
-  const np = new Uint32Array(n), nc = new Uint8Array(n * 4);
-  if (itemPart) { np.set(itemPart.subarray(0, nItems)); nc.set(itemColor.subarray(0, nItems * 4)); }
-  itemPart = np; itemColor = nc;
+  const np = new Uint32Array(n), nc = new Uint8Array(n * 4), nl = new Uint16Array(n);
+  if (itemPart) { np.set(itemPart.subarray(0, nItems)); nc.set(itemColor.subarray(0, nItems * 4)); nl.set(itemLayer.subarray(0, nItems)); }
+  itemPart = np; itemColor = nc; itemLayer = nl;
   itemTexData = new Uint8Array(n * 4);
   if (itemTex) itemTex.dispose();
   itemTex = new THREE.DataTexture(itemTexData, TEX_W, rows, THREE.RGBAFormat, THREE.UnsignedByteType);
@@ -291,12 +325,18 @@ function allocItems(cap) {
   if (partOffset) writeOffsets();
 }
 
-function addItems(parts, colors) {
+// layers: per item, layer names (array) or ids into `names` (Uint16Array, converted folders)
+function addItems(parts, colors, layers, names) {
   const off = nItems, n = parts.length;
   const grow = off + n > itemPart.length;
   if (grow) allocItems(Math.ceil((off + n) * 1.25));
   itemPart.set(parts, off);
   itemColor.set(colors, off * 4);
+  for (let i = 0; i < n; i++) {
+    const l = layers ? layers[i] : "";
+    itemLayer[off + i] = layerOf(names ? (l === 65535 ? "" : names[l] ?? "") : l ?? "");
+  }
+  if (layersChanged) { layersChanged = false; queueMicrotask(() => app.emit("layers")); }
   for (let i = 0; i < n; i++) if (partFirstItem[parts[i]] < 0) partFirstItem[parts[i]] = off + i;
   nItems += n;
   if (grow) app.refresh();
@@ -315,7 +355,7 @@ function writeItems(a, b) {
     const c = partColor[p] >= 0 ? partColor[p] : rule && rule[p] >= 0 ? rule[p] : -1;
     if (c >= 0) { itemTexData[o] = c >> 16; itemTexData[o + 1] = (c >> 8) & 255; itemTexData[o + 2] = c & 255; }
     else { itemTexData[o] = itemColor[o]; itemTexData[o + 1] = itemColor[o + 1]; itemTexData[o + 2] = itemColor[o + 2]; }
-    let op = partVisible[p] ? partOpacity[p] : 0;
+    let op = partVisible[p] && !layerHidden[itemLayer[i]] ? partOpacity[p] : 0;
     const sel = partSel[p];
     if (ghost && !sel && op > GHOST_OP) op = GHOST_OP;
     let op7 = Math.round(op / 255 * 127);
@@ -861,7 +901,9 @@ async function loadConverted(src, ask) {
     parts[i] = dv.getUint32(i * 8, true);
     for (let k = 0; k < 4; k++) colors[i * 4 + k] = dv.getUint8(i * 8 + 4 + k);
   }
-  addItems(parts, colors);
+  let layers = null; // u16 per item into meta.layers (folders converted before layers had none)
+  if (meta.layers) { try { layers = new Uint16Array(await src.buf("layers.bin")); } catch { layers = null; } }
+  addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
   await loadParts(await firstParts(ask));
@@ -953,7 +995,7 @@ async function loadRawParts(want) {
     w.onmessage = (e) => {
       const d = e.data;
       if (d.type === "chunk") {
-        const io = addItems(d.items, d.colors);
+        const io = addItems(d.items, d.colors, d.layers);
         addChunk(d, d.verts, d.nrm, d.idx, d.ne ? d.edges : null, io, d.items.length);
       } else if (d.type === "error") {
         console.error("worker:", d.message);
@@ -1335,12 +1377,12 @@ async function geomFromOL(p) {
   const f = await app.readModelFile(app.tree.shapes[p]);
   if (!f) return null;
   const ol = loadOL(new Uint8Array(await f.arrayBuffer()));
-  let main = null, mainN = -1;
-  for (const g of ol.groups) { let n = 0; for (const t of g.tris) n += t.length; if (n > mainN) { mainN = n; main = g; } }
+  const owner = edgeOwners(ol.groups);
   const P = [], I = [], E = [];
   let nv = 0;
   for (const g of ol.groups) {
-    const w = weld(g.pos, g.nrm, g.tris, g === main ? ol.edges : null);
+    if (app.hiddenLayers.has(g.layer)) continue; // measuring ignores hidden layers
+    const w = weld(g.pos, g.nrm, g.tris, owner.get(g.layer) === g ? ol.edges[g.layer] || null : null);
     if (!w) continue;
     P.push(w.pos);
     for (const i of w.idx) I.push(i + nv);
@@ -1364,7 +1406,7 @@ async function geomFromChunks(p) {
   const P = [], I = [], E = [];
   let nv = 0;
   for (let i = 0; i < nItems; i++) {
-    if (itemPart[i] !== p) continue;
+    if (itemPart[i] !== p || layerHidden[itemLayer[i]]) continue;
     let lo = 0, hi = list.length - 1; // chunk with io <= i < io + ic
     while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (list[mid].io <= i) lo = mid; else hi = mid - 1; }
     const c = list[lo];
@@ -1681,6 +1723,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "c") $("#cutBtn").click();
   else if (k === "m") $("#measureBtn").click();
   else if (k === "n") $("#nbBtn").click();
+  else if (k === "k") $("#layerBtn").click();
   else if (k === "p") app.togglePerf();
   else if (k === "escape") app.clearSelection();
 });
@@ -1783,6 +1826,7 @@ initColors(app);
 initTable(app);
 initDisplay(app);
 initNeighbor(app);
+initLayers(app);
 initLayout(app);
 initRegions(app);
 initMeasure(app);

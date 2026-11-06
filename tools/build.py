@@ -102,7 +102,7 @@ def _attach_edges(P, N, q, edges):
 
 
 def part_geometry(path):
-    """Worker: load one OL file, return list of (rgba, positions f32 (n,3), normals i8 (n,4),
+    """Worker: load one OL file, return list of (rgba, layer, positions f32 (n,3), normals i8 (n,4),
     indices (m,3), edges (k,2) or None)."""
     if not os.path.exists(path):
         return []
@@ -112,17 +112,22 @@ def part_geometry(path):
         sys.stderr.write("WARN %s: %s\n" % (os.path.basename(path), exc))
         return []
     groups = list(mesh.groups.items())
-    big = max(range(len(groups)), key=lambda g: sum(len(i) for i in groups[g][1][2])) if groups else -1
+    # each layer's edges go with that layer's largest colour group
+    owner = {}
+    for gi, ((color, layer), (ps, ns, ixs)) in enumerate(groups):
+        n = sum(len(i) for i in ixs)
+        if layer not in owner or n > owner[layer][1]:
+            owner[layer] = (gi, n)
     out = []
-    for gi, (color, (ps, ns, ixs)) in enumerate(groups):
+    for gi, ((color, layer), (ps, ns, ixs)) in enumerate(groups):
         P, N, q, I = _weld_group(ps, ns, ixs)
         if len(I) == 0:
             continue
         E = None
-        if gi == big and mesh.edges is not None:
-            P, N, E = _attach_edges(P, N, q, mesh.edges)
+        if owner[layer][0] == gi and mesh.edges and layer in mesh.edges:
+            P, N, E = _attach_edges(P, N, q, mesh.edges[layer])
         rgba = tuple(int(max(0, min(255, round(c * 255)))) for c in color)
-        out.append((rgba, P, N, I.astype(np.uint32), E))
+        out.append((rgba, layer, P, N, I.astype(np.uint32), E))
     return out
 
 
@@ -204,13 +209,13 @@ class ChunkWriter:
         self.nv = 0
         self.ps = 0.0
 
-    def add(self, part, rgba, P, N, I, E, size):
+    def add(self, part, rgba, layer, P, N, I, E, size):
         self.ps = max(self.ps, size)
         for p, n, i, e in split_part(P, N, I, E):
             if self.nv + len(p) > MAX_VERTS:
                 self.flush()
             local = len(self.items)
-            self.items.append((part, rgba))
+            self.items.append((part, rgba, layer))
             self.pos.append(p)
             self.nrm.append(n)
             self.loc.append(np.full(len(p), local, dtype=np.uint16))
@@ -336,15 +341,15 @@ def main():
     t1 = time.time()
     with Pool(workers) as pool:
         for k, groups in enumerate(pool.imap(part_geometry, paths, chunksize=16)):
-            for rgba, P, N, I, E in groups:
+            for rgba, layer, P, N, I, E in groups:
                 tris += len(I)
                 pbox[k, :3] = np.minimum(pbox[k, :3], P.min(0))
                 pbox[k, 3:] = np.maximum(pbox[k, 3:], P.max(0))
             if groups:
                 size = float(np.linalg.norm(pbox[k, 3:] - pbox[k, :3]))
                 writer = little if size < small else medium if size < small * 5 else big
-                for rgba, P, N, I, E in groups:
-                    writer.add(k, rgba, P, N, I, E, size)
+                for rgba, layer, P, N, I, E in groups:
+                    writer.add(k, rgba, layer, P, N, I, E, size)
             if k % 2000 == 0:
                 el = time.time() - t1
                 print("  %d/%d parts, %.1fM tris, %d chunks, %.0fs" % (k, len(paths), tris / 1e6, len(out.chunks), el), flush=True)
@@ -354,10 +359,19 @@ def main():
     writer = out
 
     items = np.zeros(len(writer.items), dtype=[("p", "<u4"), ("c", "u1", 4)])
-    for i, (p, c) in enumerate(writer.items):
+    layer_names, layer_ix = [], {}
+    item_layer = np.zeros(len(writer.items), dtype="<u2")
+    for i, (p, c, layer) in enumerate(writer.items):
         items[i] = (p, c)
+        if layer not in layer_ix:
+            layer_ix[layer] = len(layer_names)
+            layer_names.append(layer)
+        item_layer[i] = layer_ix[layer]
     with open(os.path.join(out_dir, "items.bin"), "wb") as f:
         f.write(items.tobytes())
+    # Creo layer of each item (index into chunks.json "layers")
+    with open(os.path.join(out_dir, "layers.bin"), "wb") as f:
+        f.write(item_layer.tobytes())
     pbox[~np.isfinite(pbox)] = 0
     with open(os.path.join(out_dir, "parts.bin"), "wb") as f:
         f.write(pbox.tobytes())
@@ -372,7 +386,7 @@ def main():
     lo = np.min([c["min"] for c in writer.chunks], axis=0).tolist()
     hi = np.max([c["max"] for c in writer.chunks], axis=0).tolist()
     meta = {"format": 2, "source": os.path.basename(pvs_path), "parts": len(shapes), "items": len(writer.items),
-            "tris": tris, "min": lo, "max": hi, "chunks": writer.chunks}
+            "tris": tris, "min": lo, "max": hi, "layers": layer_names, "chunks": writer.chunks}
     with open(os.path.join(out_dir, "chunks.json"), "w") as f:
         json.dump(meta, f, separators=(",", ":"))
     print("done: %d chunks, %.1fM tris, %.0fs" % (len(writer.chunks), tris / 1e6, time.time() - t0))

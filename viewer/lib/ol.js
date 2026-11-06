@@ -94,21 +94,41 @@ function planar(n) {
   return true;
 }
 
+// Length-prefixed string (u32 length including the terminating zero).
+function str(b, dv, o) {
+  const n = dv.getUint32(o, true);
+  let e = o + 4 + n;
+  while (e > o + 4 && b[e - 1] === 0) e--;
+  return [new TextDecoder("latin1").decode(b.subarray(o + 4, e)), o + 4 + n];
+}
+
+// Returns {groups: [{rgba, layer, pos[], nrm[], tris[]}], edges: {layer: {pos, segs}}}.
+// Layers: section 0 tag 3 = {str "Layer", u32 n, n × str name}; each face (0x0D) has a 0x0A child
+// {i32 0, i32 count, count × i32 index into those names}. Layer 99 is usually the space an
+// equipment may take (a door swing, for example).
 export function loadOL(u8) {
   const secs = sections(u8);
-  const mats = [];
+  const mats = [], layerNames = [];
   if (secs[0]) {
-    const { root, dv } = records(secs[0]);
+    const b = secs[0], { root, dv } = records(b);
     walk(root, (r) => {
       if (r.tag === 5 && r.n >= 52) {
         let a = r.n >= 56 ? dv.getFloat32(r.o + 52, true) : 1;
         if (!(a >= 0 && a <= 1)) a = 1;
         mats.push([dv.getFloat32(r.o + 12, true), dv.getFloat32(r.o + 16, true), dv.getFloat32(r.o + 20, true), a]);
+      } else if (r.tag === 3 && r.n >= 8) {
+        try {
+          let [, o] = str(b, dv, r.o);
+          const n = dv.getUint32(o, true);
+          o += 4;
+          for (let i = 0; i < n && o < r.o + r.n; i++) { const [name, o2] = str(b, dv, o); layerNames.push(name); o = o2; }
+        } catch { /* malformed layer record */ }
       }
     });
   }
   const groups = new Map();
-  if (!secs[1]) return { groups: [], edges: null };
+  if (!secs[1]) return { groups: [], edges: {} };
+  const defaultLayer = layerNames.length === 1 ? layerNames[0] : "";
   {
     const { root, dv } = records(secs[1]);
     const col = (mi) => {
@@ -118,6 +138,13 @@ export function loadOL(u8) {
     walk(root, (face) => {
       if (face.tag !== 0x0d) return;
       const faceMat = dv.getInt32(face.o, true);
+      let layer = defaultLayer;
+      for (const k of face.kids) {
+        if (k.tag === 0x0a && k.n >= 12 && dv.getInt32(k.o + 4, true) > 0) {
+          const li = dv.getInt32(k.o + 8, true);
+          if (li >= 0 && li < layerNames.length) layer = layerNames[li];
+        }
+      }
       for (const vp of face.kids) {
         if (vp.tag !== 0x16) continue;
         const pool = readPool(dv, vp, true);
@@ -144,9 +171,9 @@ export function loadOL(u8) {
             orient(tris, pool.pos, pool.nrm);
             if (pool.nrm && planar(pool.nrm)) pool.nrm = null; // flat shading is exact here
             const rgba = col(mi);
-            const key = rgba.join(",");
+            const key = rgba.join(",") + "|" + layer;
             let g = groups.get(key);
-            if (!g) { g = { rgba, pos: [], nrm: [], tris: [] }; groups.set(key, g); }
+            if (!g) { g = { rgba, layer, pos: [], nrm: [], tris: [] }; groups.set(key, g); }
             g.pos.push(pool.pos);
             g.nrm.push(pool.nrm);
             g.tris.push(tris);
@@ -155,35 +182,69 @@ export function loadOL(u8) {
       }
     });
   }
-  // Section 2: edges. 0x12 edge > 0x16 points > 0x17 > 0x18 > 0x1C polyline | 0x1D line pairs
-  let edges = null;
+  // Section 2: edges. 0x12 edge > 0x16 points > 0x17 > 0x18 > 0x1C polyline | 0x1D line pairs.
+  // Edges carry no layer: with several layers, an edge takes the layer of the face vertex at its
+  // first point (or the layer with the most triangles).
+  const layersUsed = new Map();
+  for (const g of groups.values()) { let n = 0; for (const t of g.tris) n += t.length; layersUsed.set(g.layer, (layersUsed.get(g.layer) || 0) + n); }
+  let mainLayer = defaultLayer, best = -1;
+  for (const [l, n] of layersUsed) if (n > best) { best = n; mainLayer = l; }
+  let where = null;
+  if (layersUsed.size > 1) {
+    where = new Map();
+    for (const g of groups.values()) for (const p of g.pos) for (let i = 0; i < p.length; i += 3) {
+      const k = Math.round(p[i] / WELD) + "," + Math.round(p[i + 1] / WELD) + "," + Math.round(p[i + 2] / WELD);
+      if (!where.has(k)) where.set(k, g.layer);
+    }
+  }
+  const byLayer = new Map();
   if (secs[2]) {
     const { root, dv } = records(secs[2]);
-    const pts = [], segs = [];
-    let np = 0;
     walk(root, (vp) => {
       if (vp.tag !== 0x16) return;
       const pool = readPool(dv, vp, false);
       if (!pool) return;
       const cnt = pool.pos.length / 3;
-      let used = false;
+      const segs = [];
       walk(vp, (prim) => {
         if (prim.tag !== 0x1c && prim.tag !== 0x1d) return;
         const ix = indices(dv, prim);
-        if (prim.tag === 0x1c) { for (let k = 0; k + 1 < ix.length; k++) if (ix[k] < cnt && ix[k + 1] < cnt) segs.push(np + ix[k], np + ix[k + 1]); }
-        else for (let k = 0; k + 1 < ix.length; k += 2) if (ix[k] < cnt && ix[k + 1] < cnt) segs.push(np + ix[k], np + ix[k + 1]);
-        used = true;
+        if (prim.tag === 0x1c) { for (let k = 0; k + 1 < ix.length; k++) if (ix[k] < cnt && ix[k + 1] < cnt) segs.push(ix[k], ix[k + 1]); }
+        else for (let k = 0; k + 1 < ix.length; k += 2) if (ix[k] < cnt && ix[k + 1] < cnt) segs.push(ix[k], ix[k + 1]);
       });
-      if (used) { pts.push(pool.pos); np += cnt; }
+      if (!segs.length) return;
+      let layer = mainLayer;
+      if (where) {
+        const P = pool.pos;
+        const k = Math.round(P[0] / WELD) + "," + Math.round(P[1] / WELD) + "," + Math.round(P[2] / WELD);
+        if (where.has(k)) layer = where.get(k);
+      }
+      let e = byLayer.get(layer);
+      if (!e) byLayer.set(layer, (e = { pts: [], segs: [], np: 0 }));
+      for (const s of segs) e.segs.push(s + e.np);
+      e.pts.push(pool.pos);
+      e.np += cnt;
     });
-    if (segs.length) {
-      const P = new Float32Array(np * 3);
-      let o = 0;
-      for (const p of pts) { P.set(p, o); o += p.length; }
-      edges = { pos: P, segs: Uint32Array.from(segs) };
-    }
+  }
+  const edges = {};
+  for (const [layer, e] of byLayer) {
+    const P = new Float32Array(e.np * 3);
+    let o = 0;
+    for (const p of e.pts) { P.set(p, o); o += p.length; }
+    edges[layer] = { pos: P, segs: Uint32Array.from(e.segs) };
   }
   return { groups: [...groups.values()], edges };
+}
+
+// For each layer, the colour group that gets that layer's edges (the one with most triangles).
+export function edgeOwners(groups) {
+  const owner = new Map(), size = new Map();
+  for (const g of groups) {
+    let n = 0;
+    for (const t of g.tris) n += t.length;
+    if (n > (size.get(g.layer) ?? -1)) { size.set(g.layer, n); owner.set(g.layer, g); }
+  }
+  return owner;
 }
 
 // ------------------------------------------------------------------ welding

@@ -88,6 +88,10 @@ convertida pelo `build.py`, que abre em segundos.
   oclusão ambiente (SSAO); fundo e iluminação configuráveis (ficam salvos no navegador).
 - **Corte**: planos X/Y/Z com dois limites cada, caixa de corte (inclusive em volta da seleção), inverter,
   tampa hachurada nas peças cortadas.
+- **Camadas** (tecla K): as camadas do Creo, lidas dos `.ol`, com quantas peças cada uma tem; ligar/desligar,
+  selecionar as peças de uma camada. A **camada 99** (espaço que um equipamento pode ocupar, como o giro de uma
+  porta) começa desligada; a escolha fica salva por modelo e entra nas vistas salvas. Medição, folga e
+  interferência ignoram as camadas desligadas.
 - **Vizinhança** (tecla N): mostra só as peças selecionadas e o que está em volta, numa esfera ou num cubo
   (medidas iguais ou por eixo) de tamanho ajustável, com centro na seleção ou num ponto clicado; peças inteiras
   (conferidas pela geometria real) ou recortadas exatamente na forma; vizinhas semitransparentes; “Sair” volta à
@@ -110,12 +114,12 @@ placa de vídeo em uso na barra de status e lista de atalhos no botão do teclad
 Mouse: esquerdo gira em torno do ponto sob o cursor, direito/meio desloca, roda dá zoom no cursor. Clique seleciona,
 duplo clique enquadra a peça. Cubo de vistas: clique numa face, aresta ou canto.
 Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista ·
-E arestas · X raio-X · C corte · N vizinhança · M medir · P desempenho · Esc limpar seleção.
+E arestas · X raio-X · C corte · N vizinhança · K camadas · M medir · P desempenho · Esc limpar seleção.
 Caminhada (botão **Caminhar**): W/S frente e trás, A/D lados, Q/E desce e sobe, arraste para olhar, Shift corre,
 roda muda a velocidade, Esc sai.
 
-Uma pasta convertida por uma versão anterior do `build.py` ainda abre, mas sem arestas e sem sombreado suave;
-rode o `build.py` de novo para ter os dois.
+Uma pasta convertida por uma versão anterior do `build.py` ainda abre, mas sem o que veio depois (arestas,
+sombreado suave, LOD, camadas); rode o `build.py` de novo para ter tudo.
 
 Funcionalidades planejadas: [ROADMAP.md](ROADMAP.md).
 
@@ -124,7 +128,7 @@ Funcionalidades planejadas: [ROADMAP.md](ROADMAP.md).
 | Arquivo | Formato | Leitores |
 |---|---|---|
 | `.pvs` | `PV-PVS0301C` + membros gzip; tags de 16 bits (id 9 bits, tamanho, flags, filhos), varints LEB128, tabela de símbolos. Tag 0x20 componente, 0x21 instância (posição em double + matriz 3×3), 0x23 arquivo `.ol` + bbox, 0x26 miniatura; tag 3 propriedades (0x2a por componente, 0x2b nome + valor) | `tools/pvs.py`, `viewer/lib/pvs.js` |
-| `.ol` | `DIV-OL07BL`, índice de seções gzip; registros `u32 tag / i32 tamanho`. Seção 0 materiais, seção 1 malhas (face 0x0D → vértices 0x16 com normais → malha 0x18 → strips 0x1A / triângulos 0x1B / fans 0x19), seção 2 arestas (aresta 0x12 → pontos 0x16 → polilinha 0x1C / pares 0x1D) | `tools/ol.py`, `viewer/lib/ol.js` |
+| `.ol` | `DIV-OL07BL`, índice de seções gzip; registros `u32 tag / i32 tamanho`. Seção 0 materiais, seção 1 malhas (face 0x0D → vértices 0x16 com normais → malha 0x18 → strips 0x1A / triângulos 0x1B / fans 0x19), seção 2 arestas (aresta 0x12 → pontos 0x16 → polilinha 0x1C / pares 0x1D). Camadas: na seção 0, tag 0x03 = {texto “Layer”, u32 n, n nomes}; cada face tem um filho 0x0A {0, u32 n, índices nesses nomes}. As arestas não têm camada: recebem a da face cujo vértice coincide com o seu primeiro ponto | `tools/ol.py`, `viewer/lib/ol.js` |
 | `ann*.ast` | `!/EMK V7.0  !/`, nome da figura, lista de caminhos `/@@PV-AUTO-ID@@NNN/...` (NNN = número do filho na montagem), depois um membro gzip com a câmera e um registro por componente: `0x96` caminho, marcadores até `0xCA` (`0x9A` visível, `0x97` cor 3×f32, `0xAF` opacidade). Componentes fora da lista ficam ocultos | `viewer/lib/ast.js` |
 
 O formato foi obtido por engenharia reversa de `libpvsparser_vs16.dll` e `libolparser_vs16.dll` (Creo View Express).

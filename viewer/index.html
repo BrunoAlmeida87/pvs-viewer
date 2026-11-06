@@ -45,6 +45,7 @@
     <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/></symbol>
     <symbol id="i-keys" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24"><rect x="7.5" y="3.5" width="13" height="10" rx="1.5"/><path d="M5 7v8.5A1.5 1.5 0 0 0 6.5 17H16"/><path d="M2.5 10.5v8a2 2 0 0 0 2 2H13"/></symbol>
     <symbol id="i-gpu" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -138,6 +139,7 @@
       <button id="isolate" class="tb" title="Mostrar só a seleção (I)"><svg><use href="#i-focus"/></svg><span>Isolar</span></button>
       <button id="hideSel" class="tb" title="Ocultar a seleção (H)"><svg><use href="#i-eyeoff"/></svg><span>Ocultar</span></button>
       <button id="showAll" class="tb" title="Mostrar tudo (A)"><svg><use href="#i-eye"/></svg><span>Mostrar</span></button>
+      <button id="layerBtn" class="tb" title="Camadas do Creo (a 99 mostra o espaço que um equipamento pode ocupar) (K)"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
     </div>
 
     <div class="tg" aria-label="Cores">
@@ -164,7 +166,7 @@
           <div><kbd>F</kbd> enquadrar tudo</div><div><kbd>Z</kbd> enquadrar seleção</div>
           <div><kbd>I</kbd> isolar</div><div><kbd>H</kbd> ocultar</div><div><kbd>A</kbd> mostrar tudo</div>
           <div><kbd>G</kbd> fantasma</div><div><kbd>E</kbd> arestas</div><div><kbd>X</kbd> raio-X</div>
-          <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>M</kbd> medir</div>
+          <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>K</kbd> camadas</div><div><kbd>M</kbd> medir</div>
           <div><kbd>L</kbd> lista de peças</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
           <hr>
           <div>Arrastar: gira em torno do ponto · botão direito ou do meio: desloca · roda: zoom</div>
@@ -280,6 +282,16 @@
       </div>
     </div>
     <div id="floaters">
+      <div id="layerPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-stack"/></svg>Camadas <button class="x" data-close="layerPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <p class="hint">Camadas do Creo, lidas dos arquivos .ol. A camada 99 mostra o espaço que um equipamento pode ocupar (porta que abre, por exemplo) e começa desligada.</p>
+          <div class="row2"><input id="layerFilter" placeholder="Filtrar camadas…"></div>
+          <div class="row2"><button id="layerAll">Mostrar todas</button><button id="layerNone">Ocultar todas</button><button id="layerDefault" title="Todas, menos a 99">Padrão</button></div>
+          <div id="layerInfo" class="hint"></div>
+          <div id="layerList"></div>
+        </div>
+      </div>
       <div id="nbPanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-sphere"/></svg>Vizinhança <button class="x" data-close="nbPanel" title="Fechar (a vizinhança continua ativa até Sair)">✕</button></div>
         <div class="pb">

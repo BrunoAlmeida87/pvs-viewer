@@ -4,11 +4,11 @@
 // Messages in:  {type:"init", dir?: FileSystemDirectoryHandle, base?: string}
 //               {type:"task", id, parts:[{part, name, file?: File}]}
 // Messages out: {type:"chunk", min, max, nv, ni, ne, verts: Uint16Array, nrm: Int8Array, idx: Uint16Array,
-//                edges: Uint16Array, items: Uint32Array, colors: Uint8Array}
+//                edges: Uint16Array, items: Uint32Array, colors: Uint8Array, layers: string[] (per item)}
 //               {type:"done", id, tris, missing, boxParts, boxes}
 // Vertices are welded by position + normal (smooth shading keeps creases). The CAD edges of
 // section 2 are stored as index pairs into the same vertices.
-import { loadOL, weld } from "./ol.js";
+import { loadOL, weld, edgeOwners } from "./ol.js";
 
 const MAX_VERTS = 65535;
 let dir = null, base = null;
@@ -39,13 +39,12 @@ async function runTask(m) {
     let ol;
     try { ol = loadOL(new Uint8Array(buf)); } catch { missing++; continue; }
     const groups = ol.groups;
-    // the part's edges go with its largest colour group
-    let main = null, mainN = -1;
-    for (const g of groups) { let n = 0; for (const t of g.tris) n += t.length; if (n > mainN) { mainN = n; main = g; } }
+    // each layer's edges go with that layer's largest colour group
+    const owner = edgeOwners(groups);
     const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
     const welded = [];
     for (const g of groups) {
-      const w = weld(g.pos, g.nrm, g.tris, g === main ? ol.edges : null);
+      const w = weld(g.pos, g.nrm, g.tris, owner.get(g.layer) === g ? ol.edges[g.layer] || null : null);
       if (!w) continue;
       welded.push([g, w]);
       tris += w.idx.length / 3;
@@ -59,7 +58,7 @@ async function runTask(m) {
     boxParts.push(part); boxes.push(...b);
     const size = Math.hypot(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
     const writer = size < small ? little : size < small * 5 ? medium : big;
-    for (const [g, w] of welded) writer.add(part, g.rgba, w.pos, w.nrm, w.idx, w.edges, size);
+    for (const [g, w] of welded) writer.add(part, g.rgba, g.layer, w.pos, w.nrm, w.idx, w.edges, size);
   }
   big.flush();
   medium.flush();
@@ -82,9 +81,9 @@ async function readFile(name, file) {
 // ------------------------------------------------------------------ chunk packing
 class ChunkWriter {
   constructor(isSmall) { this.small = isSmall; this.reset(); }
-  reset() { this.parts = []; this.items = []; this.colors = []; this.nv = 0; this.ni = 0; this.ne = 0; this.ps = 0; }
+  reset() { this.parts = []; this.items = []; this.colors = []; this.layers = []; this.nv = 0; this.ni = 0; this.ne = 0; this.ps = 0; }
 
-  add(part, rgba, P, N, I, E, size) {
+  add(part, rgba, layer, P, N, I, E, size) {
     this.ps = Math.max(this.ps, size || 0);
     for (const [p, n, i, e] of split(P, N, I, E)) {
       const nv = p.length / 3;
@@ -92,6 +91,7 @@ class ChunkWriter {
       const local = this.items.length;
       this.items.push(part);
       this.colors.push(...rgba);
+      this.layers.push(layer);
       this.parts.push({ p, n, i, e, local, base: this.nv });
       this.nv += nv;
       this.ni += i.length;
@@ -119,7 +119,7 @@ class ChunkWriter {
       if (e) for (let k = 0; k < e.length; k++) edges[r++] = e[k] + base;
     }
     const items = Uint32Array.from(this.items), colors = Uint8Array.from(this.colors);
-    self.postMessage({ type: "chunk", min: lo, max: hi, nv: this.nv, ni: this.ni, ne: this.ne, ps: this.ps, small: this.small, verts, nrm, idx, edges, items, colors },
+    self.postMessage({ type: "chunk", min: lo, max: hi, nv: this.nv, ni: this.ni, ne: this.ne, ps: this.ps, small: this.small, verts, nrm, idx, edges, items, colors, layers: this.layers },
       [verts.buffer, nrm.buffer, idx.buffer, edges.buffer, items.buffer, colors.buffer]);
     this.reset();
   }

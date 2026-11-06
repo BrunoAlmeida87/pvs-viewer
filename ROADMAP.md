@@ -58,6 +58,7 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 
 ## Depois da Fase 4 ✅
 - [x] Vizinhança: só a seleção e o que está em volta, numa esfera ou cubo ajustável (peças inteiras ou recorte)
+- [x] Camadas do Creo (lidas dos `.ol`), com a camada 99 (volumes de movimento) desligada por padrão
 - [x] Novo layout: barra com ícones, tema claro/escuro, barra lateral recolhível, painéis arrastáveis
 - [x] GitHub Actions gerando o executável (artefato a cada push, Release a cada tag `v*`), ícone do aplicativo
 

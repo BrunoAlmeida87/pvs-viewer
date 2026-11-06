@@ -51,6 +51,7 @@ export function initViews(app) {
     const base = app.nbSaved ? app.nbSaved() : null;
     return {
       nb: app.nbState ? app.nbState() : null,
+      layers: [...app.hiddenLayers],
       v: 1, model: app.title, camera: app.getCamera(),
       display: { ...app.display, perf: undefined },
       clip: JSON.parse(JSON.stringify(app.clip)), explode: { ...app.explode },
@@ -62,6 +63,7 @@ export function initViews(app) {
   function apply(s) {
     if (!s || !app.tree) return;
     if (app.nbApply) app.nbApply(null);
+    if (Array.isArray(s.layers)) app.setLayersHidden(s.layers);
     app.partColor.fill(-1); app.partOpacity.fill(255); app.partVisible.fill(1);
     for (const [a, n, v] of s.color || []) app.partColor.fill(v, a, a + n);
     for (const [a, n, v] of s.opacity || []) app.partOpacity.fill(v, a, a + n);
