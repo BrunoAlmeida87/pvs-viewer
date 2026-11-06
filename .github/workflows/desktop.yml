@@ -1,0 +1,69 @@
+# Builds the Windows desktop app (Electron, portable .exe).
+#  - every push to main that changes the viewer or the desktop app, and "Run workflow" in the
+#    Actions tab: the .exe is attached to the run as an artifact (VisualizadorPVS-windows);
+#  - pushing a tag v* (e.g. v1.2.0): also creates a Release with the .exe, version = tag.
+# No model data is in the repository, so none goes into the executable.
+name: Executável desktop (Windows)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["viewer/**", "desktop/**", ".github/workflows/desktop.yml"]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Versão a partir da tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
+      - name: Gerar o executável
+        # signAndEditExecutable embeds the icon and version info (needs symlink rights, which the runner has)
+        shell: bash
+        run: |
+          npm run copy
+          npx electron-builder --win portable --publish never --config.win.signAndEditExecutable=true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Anexar o executável à execução
+        uses: actions/upload-artifact@v4
+        with:
+          name: VisualizadorPVS-windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Criar o Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.exe \
+            --title "Visualizador PVS $GITHUB_REF_NAME" \
+            --notes "Executável portátil para Windows (não precisa instalar). Abra e escolha a pasta do modelo (.pvs + .ol), ou arraste a pasta sobre o .exe."

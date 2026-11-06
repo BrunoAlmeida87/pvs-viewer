@@ -41,6 +41,14 @@ na URL): só as seções escolhidas são lidas, e o botão **Carregar…** traz 
 notebooks com placa integrada, tem mais memória disponível, abre a pasta do modelo sem pedidos de permissão e
 funciona offline. Arrastar a pasta do modelo sobre o `.exe` (ou passá-la na linha de comando) abre direto.
 
+**Pelo GitHub (automático):** o workflow [`desktop.yml`](.github/workflows/desktop.yml) gera o executável no
+GitHub Actions a cada push no `main` que muda o visualizador, e quando você clica em **Run workflow** na aba
+Actions. O `.exe` fica anexado à execução como artefato “VisualizadorPVS-windows”. Ao criar uma tag `v*`
+(por exemplo `git tag v1.2.0 && git push origin v1.2.0`), ele também cria um **Release** com o `.exe`, na versão
+da tag.
+
+**Na sua máquina:**
+
 ```
 cd desktop
 npm install
@@ -48,7 +56,9 @@ npm run dist
 ```
 
 O executável sai em `desktop/dist/`. `npm start` roda sem empacotar. Se o npm bloquear o script de instalação do
-Electron, rode `npm install-scripts approve electron` e depois `node node_modules/electron/install.js`.
+Electron, rode `npm install-scripts approve electron` e depois `node node_modules/electron/install.js`. O ícone
+(`desktop/build/`) é gerado por `python desktop/scripts/make-icon.py`; o build local não grava o ícone no `.exe`
+(isso exige o modo de desenvolvedor do Windows), o do GitHub grava.
 
 ## Desempenho
 
@@ -78,6 +88,10 @@ convertida pelo `build.py`, que abre em segundos.
   oclusão ambiente (SSAO); fundo e iluminação configuráveis (ficam salvos no navegador).
 - **Corte**: planos X/Y/Z com dois limites cada, caixa de corte (inclusive em volta da seleção), inverter,
   tampa hachurada nas peças cortadas.
+- **Vizinhança** (tecla N): mostra só as peças selecionadas e o que está em volta, numa esfera ou num cubo
+  (medidas iguais ou por eixo) de tamanho ajustável, com centro na seleção ou num ponto clicado; peças inteiras
+  (conferidas pela geometria real) ou recortadas exatamente na forma; vizinhas semitransparentes; “Sair” volta à
+  visibilidade de antes.
 - **Vista explodida** por seção, subsistema, nível 3 ou peça.
 - **Navegação**: gira em torno do ponto clicado, cubo de vistas, modo caminhada (primeira pessoa).
 - **Medir**: distância (com ΔX/ΔY/ΔZ), ângulo, coordenadas de um ponto, raio e diâmetro de arestas circulares,
@@ -89,10 +103,14 @@ convertida pelo `build.py`, que abre em segundos.
 - **Análise**: comparação com outra versão do `.pvs` (alteradas, removidas, novas) e verificação de interferências e
   contatos entre a seleção e as peças visíveis.
 
+Interface: barra única com ícones (rótulos somem em telas estreitas), tema claro/escuro (botão da lua), barra
+lateral recolhível, painéis flutuantes arrastáveis (um por vez; duplo clique no título volta à posição inicial),
+placa de vídeo em uso na barra de status e lista de atalhos no botão do teclado.
+
 Mouse: esquerdo gira em torno do ponto sob o cursor, direito/meio desloca, roda dá zoom no cursor. Clique seleciona,
 duplo clique enquadra a peça. Cubo de vistas: clique numa face, aresta ou canto.
 Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista ·
-E arestas · X raio-X · C corte · M medir · P desempenho · Esc limpar seleção.
+E arestas · X raio-X · C corte · N vizinhança · M medir · P desempenho · Esc limpar seleção.
 Caminhada (botão **Caminhar**): W/S frente e trás, A/D lados, Q/E desce e sobe, arraste para olhar, Shift corre,
 roda muda a velocidade, Esc sai.
 

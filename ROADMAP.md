@@ -56,6 +56,11 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Painel de desempenho (placa de vídeo usada, quadros/s, triângulos, memória) e qualidade em movimento
 - [x] Versão desktop (Electron) com placa de vídeo dedicada, sem CDN, executável portátil
 
+## Depois da Fase 4 ✅
+- [x] Vizinhança: só a seleção e o que está em volta, numa esfera ou cubo ajustável (peças inteiras ou recorte)
+- [x] Novo layout: barra com ícones, tema claro/escuro, barra lateral recolhível, painéis arrastáveis
+- [x] GitHub Actions gerando o executável (artefato a cada push, Release a cada tag `v*`), ícone do aplicativo
+
 Limitações conhecidas: a interferência é calculada na malha facetada, então peças encostadas com o mesmo
 diâmetro (tubo dentro de abraçadeira) podem aparecer como interferência; raio e folga na pasta convertida têm
 precisão de ~0,05 mm (posições quantizadas), exatos ao abrir a pasta original; a câmera das figuras do Creo

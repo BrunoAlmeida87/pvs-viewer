@@ -65,7 +65,8 @@ app.whenReady().then(() => {
   });
 
   win = new BrowserWindow({
-    width: 1500, height: 950, title: "Visualizador PVS", autoHideMenuBar: true, backgroundColor: "#f4f5f7",
+    width: 1500, height: 950, title: "Visualizador PVS", autoHideMenuBar: true, backgroundColor: "#eef1f5",
+    icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true },
   });
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
