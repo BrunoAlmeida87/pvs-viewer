@@ -42,7 +42,7 @@ export function initDisplay(app) {
   app.styleName = () => STYLES[app.display.style];
 
   // ------------------------------------------------------------ floating panels
-  const panels = { cutPanel: $("#cutBtn"), explodePanel: $("#explodeBtn"), measurePanel: $("#measureBtn"), analysisPanel: $("#analysisBtn"), nbPanel: $("#nbBtn"), layerPanel: $("#layerBtn") };
+  const panels = { cutPanel: $("#cutBtn"), explodePanel: $("#explodeBtn"), measurePanel: $("#measureBtn"), analysisPanel: $("#analysisBtn"), nbPanel: $("#nbBtn"), layerPanel: $("#layerBtn"), bgPanel: $("#bgBtn") };
   const toggle = (id, on) => {
     const p = $("#" + id);
     p.hidden = on === undefined ? !p.hidden : !on;

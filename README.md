@@ -92,6 +92,13 @@ convertida pelo `build.py`, que abre em segundos.
   selecionar as peças de uma camada. A **camada 99** (espaço que um equipamento pode ocupar, como o giro de uma
   porta) começa desligada; a escolha fica salva por modelo e entra nas vistas salvas. Medição, folga e
   interferência ignoram as camadas desligadas.
+- **Bigramas** (tecla B): o bigrama são as duas letras do código do equipamento que dizem a que sistema
+  (diagrama) ele pertence (`LPR-DT20003` → `DT`). O PVS não guarda isso como campo, só dentro do código
+  (`part_objectid` / nome); o visualizador extrai ao carregar e grava como a propriedade **Bigrama**, que
+  aparece em Propriedades, Busca, "Mesmo valor de", Cores por propriedade e Lista de peças. O painel lista
+  cada bigrama com a quantidade de peças e permite mostrar/ocultar, isolar (**Só**) ou selecionar. A peça
+  herda o bigrama do conjunto acima quando não tem código próprio; códigos com três letras
+  (`LPR-GBA04C`) seguem outro padrão e ficam sem bigrama.
 - **Vizinhança** (tecla N): mostra só as peças selecionadas e o que está em volta, numa esfera ou num cubo
   (medidas iguais ou por eixo) de tamanho ajustável, com centro na seleção ou num ponto clicado; peças inteiras
   (conferidas pela geometria real) ou recortadas exatamente na forma; vizinhas semitransparentes; “Sair” volta à
