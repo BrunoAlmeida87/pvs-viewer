@@ -23,6 +23,7 @@ import { initTable } from "./ui/table.js";
 import { initDisplay } from "./ui/display.js";
 import { $, status } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
+import { exportMobileZip } from "./lib/browser-mobile-export.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -1730,10 +1731,12 @@ $("#mobileSaved").onclick = () => {
 $("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
+$("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
 const exportButton = $("#exportMobileBtn");
 function updateExportButton() {
-  exportButton.hidden = !window.desktop || source?.kind !== "converted";
+  exportButton.hidden = source?.kind !== "converted";
   exportButton.disabled = !app.selNodes.size;
+  $("#mobileExport").hidden = exportButton.hidden || exportButton.disabled;
 }
 app.on("loaded", updateExportButton);
 app.on("selection", updateExportButton);
@@ -1741,8 +1744,20 @@ exportButton.onclick = async () => {
   exportButton.disabled = true;
   try {
     status("Exportando peças para o celular…");
-    const result = await window.desktop.mobileExport(app.selectedParts());
-    status(result ? `Modelo para celular salvo em ${result}` : "Exportação cancelada");
+    if (window.desktop) {
+      const result = await window.desktop.mobileExport(app.selectedParts());
+      status(result ? `Modelo para celular salvo em ${result}` : "Exportação cancelada");
+    } else {
+      const blob = await exportMobileZip(source.src, source.meta, app.selectedParts(), status);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = (app.title.replace(/\.pvs$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "modelo") + "-celular.zip";
+      document.body.append(link);
+      link.click();
+      setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 60000);
+      status("Pacote para celular pronto para baixar. Extraia o ZIP antes de abrir no telefone.");
+    }
   } catch (error) { status("Erro na exportação: " + error.message); console.error(error); }
   finally { updateExportButton(); }
 };

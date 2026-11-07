@@ -19,6 +19,9 @@ async function exportMobile(source, target, selectedParts) {
   let tris = 0;
   const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
   for (const c of meta.chunks) {
+    let relevant = false;
+    for (let i = c.io; i < c.io + c.ic && !relevant; i++) relevant = selected.has(items.readUInt32LE(i * 8));
+    if (!relevant) continue;
     const src = await fs.readFile(path.join(source, "c", c.f));
     const expected = c.nv * 12 + (c.ni + c.ne) * 2;
     if (src.length !== expected) throw new Error(`Bloco inválido: ${c.f}`);

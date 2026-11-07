@@ -21,6 +21,11 @@ enquadramento, acesso à árvore e vistas isométrica, frontal, lateral e superi
 ortográfica, vistas salvas, isolamento da seleção e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por
 padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem instalação offline.
 
+No visualizador web com uma pasta convertida aberta, selecione peças ou seções na árvore e clique em
+**Exportar celular** (no celular, está no menu **Vistas**). O navegador baixa um ZIP com a geometria escolhida.
+Extraia o ZIP antes de abrir sua pasta no telefone. Para modelos grandes, exporte seções menores: o navegador
+precisa manter o ZIP em memória até terminar o download.
+
 Para conferir a interface localmente, execute `python viewer/serve.py --host 0.0.0.0 --no-browser` na pasta `source` e abra no celular o
 endereço IP do computador com a porta `8080` (por exemplo, `http://192.168.1.10:8080/`). Para usar o seletor
 de pasta avançado (`showDirectoryPicker`), sirva por HTTPS; no endereço HTTP da rede local o navegador pode

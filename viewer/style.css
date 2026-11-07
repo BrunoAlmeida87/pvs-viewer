@@ -317,6 +317,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile #bar1 #openModelBtn { display: flex; min-width: 44px; min-height: 44px; }
 .mobile #bar1 #openModelBtn span { display: none; }
 .mobile #bar1 #loadMoreBtn { display: none; }
+.mobile #bar1 #exportMobileBtn { display: none; }
 .mobile #status { gap: 6px; }
 .mobile #status #bar { width: 52px; }
 .mobile #status #stats, .mobile #status #selInfo, .mobile #status #gpuChip { display: none; }
