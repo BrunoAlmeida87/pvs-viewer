@@ -21,6 +21,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
   <defs>
     <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 12l8-4.6M12 12v9.2M12 12L4 7.4"/></symbol>
     <symbol id="i-open" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5z"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3v11m-4-4 4 4 4-4M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
     <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/></symbol>
     <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.8-4.8M10.5 7.5v6M7.5 10.5h6"/></symbol>
@@ -59,7 +60,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     <div class="tg" aria-label="Modelo">
       <button id="openModelBtn" class="tb" title="Abrir outro modelo"><svg><use href="#i-open"/></svg><span>Abrir</span></button>
       <button id="loadMoreBtn" class="tb" title="Carregar outras partes do modelo" hidden><svg><use href="#i-more"/></svg><span>Carregar</span></button>
-      <button id="exportMobileBtn" class="tb" title="Exportar as peças selecionadas da pasta convertida para o celular" hidden disabled><svg><use href="#i-open"/></svg><span>Exportar celular</span></button>
+      <button id="exportMobileBtn" class="tb" title="Exportar o modelo 3D" hidden disabled><svg><use href="#i-export"/></svg><span>Exportar modelo</span></button>
     </div>
 
     <div class="tg" aria-label="Vista">
@@ -191,7 +192,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <div class="searchBox">
         <p class="muted small">Selecione peças na árvore original e adicione a um grupo. A estrutura original permanece disponível.</p>
         <div class="row2"><input id="groupName" placeholder="Nome do grupo"><button id="groupNew">Criar grupo</button></div>
-        <div class="row2"><button id="groupExport">Exportar estrutura</button><button id="groupImport">Importar estrutura</button></div>
+        <div class="row2"><button id="groupExport" title="Salva somente os grupos criados nesta aba, em JSON">Exportar grupos (JSON)</button><button id="groupImport">Importar estrutura</button></div>
         <button id="objExport">Exportar seleção em OBJ</button>
         <input id="groupFile" type="file" accept=".json,application/json" hidden>
       </div>
@@ -289,7 +290,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button id="mobileOrtho">Ortográfica</button><button id="mobileSaved">Vistas salvas</button>
       <button id="mobileIsolate">Isolar seleção</button><button id="mobileShowAll">Mostrar tudo</button>
       <button id="mobileEdges">Arestas</button>
-      <button id="mobileExport" hidden>Exportar seleção</button>
+      <button id="mobileExport" hidden>Exportar modelo</button>
     </div>
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>

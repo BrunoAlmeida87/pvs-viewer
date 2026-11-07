@@ -107,7 +107,7 @@ app.whenReady().then(() => {
     });
     if (parentChoice.canceled) return null;
     const parent = path.resolve(parentChoice.filePaths[0]);
-    const target = path.join(parent, path.basename(source) + "-celular");
+    const target = path.join(parent, path.basename(source) + "-modelo");
     if (fss.existsSync(target)) throw new Error("A pasta de destino já existe. Escolha outro local ou renomeie a pasta existente.");
     const temporary = await fs.mkdtemp(path.join(parent, ".pvs-mobile-"));
     try {

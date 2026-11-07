@@ -35,6 +35,12 @@ test("exports only selected converted geometry while preserving item ids", async
     assert.equal(out.length, 3 * 12 + (3 + 2) * 2);
     assert.equal(out.readUInt16LE(6), 1); // original local item id remains valid
     assert.deepEqual([0, 1, 2], [out.readUInt16LE(36), out.readUInt16LE(38), out.readUInt16LE(40)]);
+    const full = path.join(root, "full");
+    await exportMobile(source, full, [0, 1]);
+    const fullMeta = JSON.parse(await fs.readFile(path.join(full, "chunks.json"), "utf8"));
+    assert.deepEqual(fullMeta.includedParts, [0, 1]);
+    assert.equal(fullMeta.tris, 2);
+    assert.equal(fullMeta.chunks[0].nv, 6);
   } finally {
     if (path.dirname(path.resolve(root)) === path.resolve(os.tmpdir())) await fs.rm(root, { recursive: true, force: true });
   }

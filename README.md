@@ -8,8 +8,8 @@ Abre modelos Creo View (`.pvs` + `.ol`) no navegador, sem o productview.exe.
 
 ### Primeira versão para celular (Android)
 
-A branch `codex/android-viewer` adapta o visualizador web para telas de toque. Para testar a branch no
-Galaxy S25, abra o visualizador servido a partir dela no Chrome e escolha uma **pasta convertida** por
+A versão web também se adapta a telas de toque. No Galaxy S25, abra o site no Chrome e escolha uma
+**pasta convertida** por
 `tools/build.py`, copiada inteira para o armazenamento do
 celular (incluindo `chunks.json`, `tree.json`, `items.bin`, `parts.bin` e a subpasta `c/`). O navegador lê os
 arquivos localmente. Se o seletor de pasta do navegador não funcionar, use outro navegador Chromium atualizado;
@@ -21,10 +21,14 @@ enquadramento, acesso à árvore e vistas isométrica, frontal, lateral e superi
 ortográfica, vistas salvas, isolamento da seleção e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por
 padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem instalação offline.
 
-No visualizador web com uma pasta convertida aberta, selecione peças ou seções na árvore e clique em
-**Exportar celular** (no celular, está no menu **Vistas**). O navegador baixa um ZIP com a geometria escolhida.
-Extraia o ZIP antes de abrir sua pasta no telefone. Para modelos grandes, exporte seções menores: o navegador
-precisa manter o ZIP em memória até terminar o download.
+Para exportar um modelo 3D no computador, clique com o botão direito na **árvore original**: no nó principal
+para exportar tudo, ou em uma seção/peça para exportar só esse trecho. Escolha **Exportar modelo 3D…**. O
+comando também está na barra superior como **Exportar modelo**; sem seleção, ele exporta tudo. Funciona com
+pastas convertidas e com o modelo original (`.pvs` + `.ol`): no segundo caso, converte as peças escolhidas
+durante a exportação. O resultado web é um ZIP; extraia-o para abrir a pasta no visualizador do PC ou celular.
+No celular, o comando fica no menu **Vistas**. Não é preciso criar um grupo. Em navegadores com seletor de
+salvamento compatível, o ZIP é gravado diretamente no disco; em outros, é baixado pelo navegador e pode exigir
+memória livre para modelos grandes.
 
 Para conferir a interface localmente, execute `python viewer/serve.py --host 0.0.0.0 --no-browser` na pasta `source` e abra no celular o
 endereço IP do computador com a porta `8080` (por exemplo, `http://192.168.1.10:8080/`). Para usar o seletor
@@ -59,16 +63,16 @@ Escolha a pasta original (`.pvs` + `.ol`) e depois a pasta onde salvar. O aplica
 modelo convertido. A conversão acelera a abertura, mas mantém os mesmos triângulos: em placas com pouca
 memória de vídeo, escolha as seções antes de carregar para reduzir o uso de GPU.
 
-Com uma pasta convertida aberta no aplicativo desktop, selecione na árvore as peças ou seções desejadas e
-clique em **Exportar celular**. O aplicativo grava uma nova pasta `NOME-celular` com apenas a geometria da
-seleção, pronta para copiar para o telefone. Esta exportação reaproveita os blocos já convertidos: reduz o
-tamanho pela seleção, sem simplificar os triângulos das peças escolhidas. Não é preciso carregar toda a
+Com uma pasta convertida aberta no aplicativo desktop, **Exportar modelo** grava uma nova pasta `NOME-modelo`.
+Se o modelo original estiver aberto, a exportação gera um ZIP. A seleção reduz o tamanho, sem simplificar os
+triângulos das peças escolhidas. Não é preciso carregar toda a
 geometria na tela do desktop para exportá-la.
 
 A aba **Minha estrutura** permite criar grupos próprios, adicionar as peças selecionadas na árvore original,
 mover grupos para dentro de outros grupos e salvar ou importar a organização em JSON. A organização também
 fica guardada localmente para o mesmo modelo. Nessa aba, **Exportar seleção em OBJ** grava as malhas das peças
 selecionadas em coordenadas do modelo (metros). O OBJ contém triângulos, sem superfícies CAD editáveis.
+**Exportar grupos (JSON)** salva apenas a organização criada nessa aba, sem geometria 3D.
 
 Os modelos (`viewer/data/`) não vão para o repositório (`.gitignore`). Three.js e fflate ficam em
 `viewer/vendor/`, então o visualizador funciona sem internet depois de aberto.

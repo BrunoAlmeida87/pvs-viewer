@@ -23,4 +23,14 @@ test("web export downloads a readable ZIP containing only selected geometry", as
   assert.equal(manifest.chunks[0].nv, 3);
   assert.equal(zip["c/00000.bin"].length, 3 * 12 + (3 + 2) * 2);
   assert.equal(new DataView(zip["c/00000.bin"].buffer).getUint16(6, true), 1);
+  const fullZip = unzipSync(new Uint8Array(await (await exportMobileZip(src, meta, [0, 1])).arrayBuffer()));
+  const fullMeta = JSON.parse(new TextDecoder().decode(fullZip["chunks.json"]));
+  assert.deepEqual(fullMeta.includedParts, [0, 1]);
+  assert.equal(fullMeta.tris, 2);
+  assert.equal(fullMeta.chunks[0].nv, 6);
+  const streamed = [];
+  const noBlob = await exportMobileZip(src, meta, [0, 1], () => {}, async (bytes) => { streamed.push(bytes); });
+  assert.equal(noBlob, null);
+  const streamedZip = unzipSync(new Uint8Array(await new Blob(streamed).arrayBuffer()));
+  assert.equal(JSON.parse(new TextDecoder().decode(streamedZip["chunks.json"])).tris, 2);
 });

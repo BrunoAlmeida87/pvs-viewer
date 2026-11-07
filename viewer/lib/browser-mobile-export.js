@@ -1,24 +1,45 @@
 // Export selected geometry from a converted folder already open in the web viewer.
 import { Zip, ZipPassThrough } from "../vendor/fflate.js";
 
-export async function exportMobileZip(src, meta, selectedParts, progress = () => {}) {
+export function createModelZip(write = null) {
+  const pieces = write ? null : [];
+  let zipError = null;
+  let queue = Promise.resolve();
+  const zip = new Zip((error, bytes) => {
+    if (error) zipError = error;
+    else if (bytes?.length) {
+      if (write) queue = queue.then(() => write(bytes));
+      else pieces.push(bytes);
+    }
+  });
+  return {
+    add(name, bytes) {
+      const file = new ZipPassThrough(name);
+      zip.add(file);
+      file.push(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), true);
+      if (zipError) throw zipError;
+    },
+    async flush() {
+      await queue;
+      if (zipError) throw zipError;
+    },
+    async finish() {
+      zip.end();
+      await queue;
+      if (zipError) throw zipError;
+      return write ? null : new Blob(pieces, { type: "application/zip" });
+    },
+  };
+}
+
+export async function exportMobileZip(src, meta, selectedParts, progress = () => {}, write = null) {
   if (meta.format !== 2) throw new Error("Converta novamente o modelo antes de exportar.");
   const selected = new Set(selectedParts);
   if (!selected.size || [...selected].some((p) => !Number.isInteger(p) || p < 0 || p >= meta.parts))
     throw new Error("Selecione peças válidas para exportar.");
   const items = new DataView(await src.buf("items.bin"));
-  const pieces = [];
-  let zipError = null;
-  const zip = new Zip((error, bytes) => {
-    if (error) zipError = error;
-    else if (bytes?.length) pieces.push(bytes);
-  });
-  const add = (name, bytes) => {
-    const file = new ZipPassThrough(name);
-    zip.add(file);
-    file.push(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), true);
-    if (zipError) throw zipError;
-  };
+  const packageZip = createModelZip(write);
+  const add = packageZip.add;
   for (const name of ["tree.json", "items.bin", "parts.bin", "layers.bin", "pvsbox.bin"]) {
     let data;
     try { data = await src.buf(name); }
@@ -78,6 +99,7 @@ export async function exportMobileZip(src, meta, selectedParts, progress = () =>
     for (let k = 0; k < ni; k++) outView.setUint16(nv * 12 + k * 2, indices[k], true);
     for (let k = 0; k < ne; k++) outView.setUint16(nv * 12 + (ni + k) * 2, edges[k], true);
     add("c/" + file, output);
+    await packageZip.flush();
     chunks.push({ ...c, f: file, nv, ni, ne });
     tris += ni / 3;
     progress(`Exportando bloco ${ci + 1} de ${meta.chunks.length}…`);
@@ -85,7 +107,5 @@ export async function exportMobileZip(src, meta, selectedParts, progress = () =>
   if (!chunks.length) throw new Error("A seleção não contém geometria convertida.");
   const manifest = { ...meta, chunks, tris, min: low, max: high, includedParts: [...selected].sort((a, b) => a - b) };
   add("chunks.json", new TextEncoder().encode(JSON.stringify(manifest)));
-  zip.end();
-  if (zipError) throw zipError;
-  return new Blob(pieces, { type: "application/zip" });
+  return packageZip.finish();
 }

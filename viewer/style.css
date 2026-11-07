@@ -109,6 +109,9 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .tab { display: none; flex: 1; min-height: 0; overflow: auto; }
 .tab.on { display: flex; flex-direction: column; }
 #treeTab #tree { flex: 1; overflow: auto; padding: 4px 0 8px; user-select: none; }
+.treeContextMenu { position: fixed; z-index: 100; min-width: 205px; padding: 5px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); }
+.treeContextMenu button { display: flex; width: 100%; min-height: 36px; justify-content: flex-start; border: 0; }
 #setsTab { padding: 4px 12px 12px; }
 #setsTab h3 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
 

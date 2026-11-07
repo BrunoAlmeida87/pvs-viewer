@@ -24,6 +24,7 @@ import { initDisplay } from "./ui/display.js";
 import { $, status } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
 import { exportMobileZip } from "./lib/browser-mobile-export.js";
+import { exportRawModelZip } from "./lib/raw-model-export.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -1733,33 +1734,68 @@ $("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoic
 $("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
 $("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
 const exportButton = $("#exportMobileBtn");
+let exportingMobile = false;
 function updateExportButton() {
-  exportButton.hidden = source?.kind !== "converted";
-  exportButton.disabled = !app.selNodes.size;
-  $("#mobileExport").hidden = exportButton.hidden || exportButton.disabled;
+  exportButton.hidden = !source;
+  exportButton.disabled = exportButton.hidden || exportingMobile;
+  const selected = app.selNodes.size > 0;
+  exportButton.title = selected ? "Exportar as peças selecionadas em um modelo 3D" : "Exportar o modelo 3D completo";
+  $("#mobileExport").textContent = selected ? "Exportar seleção" : "Exportar modelo completo";
+  $("#mobileExport").hidden = exportButton.hidden;
+  $("#mobileExport").disabled = exportingMobile;
 }
 app.on("loaded", updateExportButton);
 app.on("selection", updateExportButton);
-exportButton.onclick = async () => {
-  exportButton.disabled = true;
+app.canExportModel = () => !!source;
+app.exportModelNode = (node) => {
+  const parts = [];
+  for (let p = app.tree.p0[node]; p < app.tree.p1[node]; p++) if (app.availableParts[p]) parts.push(p);
+  return exportModelParts(parts);
+};
+async function exportModelParts(parts) {
+  if (exportingMobile) return;
+  exportingMobile = true;
+  updateExportButton();
+  let writable = null;
   try {
-    status("Exportando peças para o celular…");
-    if (window.desktop) {
-      const result = await window.desktop.mobileExport(app.selectedParts());
-      status(result ? `Modelo para celular salvo em ${result}` : "Exportação cancelada");
+    status(`Exportando modelo 3D (${parts.length.toLocaleString("pt-BR")} peças)…`);
+    if (window.desktop && source.kind === "converted") {
+      const result = await window.desktop.mobileExport(parts);
+      status(result ? `Modelo 3D salvo em ${result}` : "Exportação cancelada");
     } else {
-      const blob = await exportMobileZip(source.src, source.meta, app.selectedParts(), status);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = (app.title.replace(/\.pvs$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "modelo") + "-celular.zip";
-      document.body.append(link);
-      link.click();
-      setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 60000);
-      status("Pacote para celular pronto para baixar. Extraia o ZIP antes de abrir no telefone.");
+      const filename = (app.title.replace(/\.pvs$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "modelo") + "-modelo.zip";
+      if (!window.desktop && window.showSaveFilePicker) {
+        const handle = await window.showSaveFilePicker({ suggestedName: filename,
+          types: [{ description: "Modelo 3D (ZIP)", accept: { "application/zip": [".zip"] } }] });
+        writable = await handle.createWritable();
+      }
+      const write = writable ? (bytes) => writable.write(bytes) : null;
+      const blob = source.kind === "converted"
+        ? await exportMobileZip(source.src, source.meta, parts, status, write)
+        : await exportRawModelZip(source, parts, status, write);
+      if (writable) { await writable.close(); writable = null; }
+      else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 60000);
+      }
+      status("Modelo 3D exportado. Extraia o ZIP antes de abrir a pasta no visualizador.");
     }
-  } catch (error) { status("Erro na exportação: " + error.message); console.error(error); }
-  finally { updateExportButton(); }
+  } catch (error) {
+    if (writable) { try { await writable.abort(); } catch { /* already closed */ } }
+    if (error.name === "AbortError") status("Exportação cancelada");
+    else { status("Erro na exportação: " + error.message); console.error(error); }
+  }
+  finally { exportingMobile = false; updateExportButton(); }
+}
+exportButton.onclick = () => {
+  const parts = app.selNodes.size ? app.selectedParts().filter((p) => app.availableParts[p])
+    : [...app.availableParts.keys()].filter((p) => app.availableParts[p]);
+  return exportModelParts(parts);
 };
 document.querySelectorAll("[data-view]").forEach((b) => {
   b.onclick = () => {
