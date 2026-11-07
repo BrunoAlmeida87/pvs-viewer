@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("desktop", {
   conversionWrite: (name, data) => ipcRenderer.invoke("conversion-write", name, data),
   conversionFinish: () => ipcRenderer.invoke("conversion-finish"),
   conversionCancel: () => ipcRenderer.invoke("conversion-cancel"),
+  mobileExport: (parts) => ipcRenderer.invoke("mobile-export", parts),
   objBegin: (name) => ipcRenderer.invoke("obj-begin", name),
   objWrite: (text) => ipcRenderer.invoke("obj-write", text),
   objFinish: () => ipcRenderer.invoke("obj-finish"),

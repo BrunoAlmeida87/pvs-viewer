@@ -7,6 +7,7 @@ const { app, BrowserWindow, protocol, ipcMain, dialog, shell } = require("electr
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const fss = require("node:fs");
+const { exportMobile } = require("./mobile-export");
 
 app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
@@ -96,6 +97,28 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("conversion-cancel", async () => {
     if (conversion) { await fs.rm(conversion.temporary, { recursive: true, force: true }); conversion = null; }
+  });
+  ipcMain.handle("mobile-export", async (_event, parts) => {
+    const source = modelDir;
+    if (!source || !fss.existsSync(path.join(source, "chunks.json")))
+      throw new Error("Abra uma pasta convertida antes de exportar para o celular.");
+    const parentChoice = await dialog.showOpenDialog(win, {
+      title: "Onde salvar o modelo para celular?", properties: ["openDirectory"],
+    });
+    if (parentChoice.canceled) return null;
+    const parent = path.resolve(parentChoice.filePaths[0]);
+    const target = path.join(parent, path.basename(source) + "-celular");
+    if (fss.existsSync(target)) throw new Error("A pasta de destino já existe. Escolha outro local ou renomeie a pasta existente.");
+    const temporary = await fs.mkdtemp(path.join(parent, ".pvs-mobile-"));
+    try {
+      await exportMobile(source, temporary, parts);
+      await fs.rename(temporary, target);
+      return target;
+    } catch (error) {
+      // Only remove the temporary directory we just created inside the chosen parent.
+      if (path.dirname(path.resolve(temporary)) === parent) await fs.rm(temporary, { recursive: true, force: true });
+      throw error;
+    }
   });
   ipcMain.handle("obj-begin", async (_event, suggestedName) => {
     if (objExport) throw new Error("Já existe uma exportação em andamento.");

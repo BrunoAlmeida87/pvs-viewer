@@ -8,17 +8,18 @@ export function chooseRegions(app, more = false) {
     const dlg = $("#regionDlg"), list = $("#regionList");
     list.innerHTML = "";
     const t = app.tree;
-    const loadedIn = (n) => { let k = 0; for (let p = t.p0[n]; p < t.p1[n]; p++) k += app.partLoaded[p]; return k; };
+    const availableIn = (n) => { let k = 0; for (let p = t.p0[n]; p < t.p1[n]; p++) k += app.availableParts[p]; return k; };
+    const loadedIn = (n) => { let k = 0; for (let p = t.p0[n]; p < t.p1[n]; p++) k += app.availableParts[p] && app.partLoaded[p]; return k; };
     const boxes = [];
     for (const n of app.kids(0)) {
-      const total = t.p1[n] - t.p0[n];
+      const total = availableIn(n);
       if (!total) continue;
       const done = loadedIn(n);
       const cb = el("input", { type: "checkbox", disabled: done === total, checked: done === total });
       const sub = [];
       const kids = el("div.sub");
       for (const k of app.kids(n)) {
-        const kt = t.p1[k] - t.p0[k];
+        const kt = availableIn(k);
         if (!kt) continue;
         const kd = loadedIn(k);
         const kcb = el("input", { type: "checkbox", disabled: kd === kt, checked: kd === kt });
@@ -39,6 +40,7 @@ export function chooseRegions(app, more = false) {
     const flags = (fill) => {
       const f = new Uint8Array(app.nParts);
       fill(f);
+      for (let p = 0; p < f.length; p++) f[p] &= app.availableParts[p];
       return f;
     };
     $("#regionOk").onclick = () => close(flags((f) => {
@@ -52,7 +54,7 @@ export function chooseRegions(app, more = false) {
       }
     }));
     $("#regionSel").onclick = () => close(flags((f) => { for (const n of app.selNodes) f.fill(1, t.p0[n], t.p1[n]); }));
-    $("#regionAll").onclick = () => close(null);
+    $("#regionAll").onclick = () => close(app.availableParts.every((v) => v) ? null : app.availableParts.slice());
     $("#regionCancel").onclick = () => close(more ? undefined : document.documentElement.classList.contains("mobile") ? new Uint8Array(app.nParts) : null);
   });
 }

@@ -873,6 +873,7 @@ function setModel(name, t, boxes, lo, hi) {
   app.partRule = null;
   app.partNode = new Int32Array(nParts).fill(-1);
   app.partLoaded = new Uint8Array(nParts);
+  app.availableParts = new Uint8Array(nParts).fill(1);
   t.part.forEach((p, n) => { if (p >= 0) app.partNode[p] = n; });
   const depth = new Int32Array(app.nNodes);
   for (let n = 1; n < app.nNodes; n++) depth[n] = depth[t.parent[n]] + 1;
@@ -913,6 +914,15 @@ async function loadConverted(src, ask) {
     src.json("chunks.json"), src.json("tree.json"), src.buf("items.bin"), src.buf("parts.bin"),
   ]);
   setModel(meta.source, t, new Float32Array(partsBuf), meta.min, meta.max);
+  if (Array.isArray(meta.includedParts)) {
+    app.availableParts.fill(0);
+    app.partVisible.fill(0);
+    for (const p of meta.includedParts) if (Number.isInteger(p) && p >= 0 && p < app.nParts) {
+      app.availableParts[p] = 1;
+      app.partVisible[p] = 1;
+    }
+    app.refresh();
+  }
   const n = itemsBuf.byteLength / 8, dv = new DataView(itemsBuf);
   const parts = new Uint32Array(n), colors = new Uint8Array(n * 4);
   for (let i = 0; i < n; i++) {
@@ -1051,9 +1061,10 @@ async function loadParts(want) {
     if (source.kind === "converted") await loadConvertedParts(want);
     else await loadRawParts(want);
   } finally { loading = false; }
-  const n = app.partLoaded.reduce((s, v) => s + v, 0);
-  $("#loadMoreBtn").hidden = n >= app.nParts;
-  if (n < app.nParts) status(`${n.toLocaleString("pt-BR")} de ${app.nParts.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
+  const total = app.availableParts.reduce((s, v) => s + v, 0);
+  const n = app.partLoaded.reduce((s, v, p) => s + (app.availableParts[p] ? v : 0), 0);
+  $("#loadMoreBtn").hidden = n >= total;
+  if (n < total) status(`${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
   if (!userMoved) fitAll(false);
   app.setClip({});
   app.emit("geometry");
@@ -1719,6 +1730,22 @@ $("#mobileSaved").onclick = () => {
 $("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
+const exportButton = $("#exportMobileBtn");
+function updateExportButton() {
+  exportButton.hidden = !window.desktop || source?.kind !== "converted";
+  exportButton.disabled = !app.selNodes.size;
+}
+app.on("loaded", updateExportButton);
+app.on("selection", updateExportButton);
+exportButton.onclick = async () => {
+  exportButton.disabled = true;
+  try {
+    status("Exportando peças para o celular…");
+    const result = await window.desktop.mobileExport(app.selectedParts());
+    status(result ? `Modelo para celular salvo em ${result}` : "Exportação cancelada");
+  } catch (error) { status("Erro na exportação: " + error.message); console.error(error); }
+  finally { updateExportButton(); }
+};
 document.querySelectorAll("[data-view]").forEach((b) => {
   b.onclick = () => {
     frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());

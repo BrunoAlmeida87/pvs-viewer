@@ -21,6 +21,7 @@
     "productName": "Visualizador PVS",
     "files": [
       "main.js",
+      "mobile-export.js",
       "preload.js",
       "build/icon.png",
       "app/**/*"

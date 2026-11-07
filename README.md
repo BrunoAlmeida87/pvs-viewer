@@ -54,6 +54,12 @@ Escolha a pasta original (`.pvs` + `.ol`) e depois a pasta onde salvar. O aplica
 modelo convertido. A conversão acelera a abertura, mas mantém os mesmos triângulos: em placas com pouca
 memória de vídeo, escolha as seções antes de carregar para reduzir o uso de GPU.
 
+Com uma pasta convertida aberta no aplicativo desktop, selecione na árvore as peças ou seções desejadas e
+clique em **Exportar celular**. O aplicativo grava uma nova pasta `NOME-celular` com apenas a geometria da
+seleção, pronta para copiar para o telefone. Esta exportação reaproveita os blocos já convertidos: reduz o
+tamanho pela seleção, sem simplificar os triângulos das peças escolhidas. Não é preciso carregar toda a
+geometria na tela do desktop para exportá-la.
+
 A aba **Minha estrutura** permite criar grupos próprios, adicionar as peças selecionadas na árvore original,
 mover grupos para dentro de outros grupos e salvar ou importar a organização em JSON. A organização também
 fica guardada localmente para o mesmo modelo. Nessa aba, **Exportar seleção em OBJ** grava as malhas das peças
