@@ -447,8 +447,25 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
   </footer>
 </div>
 <script type="module">
-// right after a site update the browser may still hold old copies of some modules (GitHub Pages
-// caches for 10 minutes): say so instead of staying on "Carregando…"
+// Right after a site update the browser may still hold old copies of some modules (GitHub Pages lets
+// it keep them for 10 minutes), which mixes old and new code: buttons that do nothing, no "open
+// model" box. So before starting, every module is revalidated with the server (a cheap "not
+// modified" answer when unchanged), which also refreshes the browser's copy that the imports use.
+async function refreshModules() {
+  const seen = new Set();
+  const visit = async (url) => {
+    if (seen.has(url)) return;
+    seen.add(url);
+    const r = await fetch(url, { cache: "no-cache" });
+    if (!r.ok) return;
+    const src = await r.text();
+    const next = new Set();
+    for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
+    await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
+  };
+  await visit(new URL("viewer.js", location.href).href);
+}
+try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
 import("./viewer.js").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
