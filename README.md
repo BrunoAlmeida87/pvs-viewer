@@ -16,6 +16,9 @@ arquivos localmente. Se o seletor de pasta do navegador não funcionar, use outr
 o acesso a pastas no Android ainda precisa ser validado no aparelho.
 
 Na abertura, escolha uma ou mais seções para limitar a memória. O botão **Carregar** acrescenta seções depois.
+No celular, **Prévia geral** carrega primeiro até cerca de 2,5 milhões de triângulos dos blocos maiores;
+o restante continua disponível em **Carregar**. Isso acelera a primeira visualização, mas a prévia não mostra
+todas as peças. Para ver uma área completa, escolha a seção correspondente e carregue-a depois.
 Um dedo gira e toca para selecionar; dois dedos aproximam, afastam e deslocam. A barra inferior oferece
 enquadramento, acesso à árvore e vistas isométrica, frontal, lateral e superior. Em **Vistas**, há projeção
 ortográfica, vistas salvas, isolamento da seleção e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por

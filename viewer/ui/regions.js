@@ -34,6 +34,11 @@ export function chooseRegions(app, more = false) {
       list.append(sub.length ? el("details", null, head, kids) : el("div.row1", null, ...head.childNodes));
     }
     $("#regionTitle").textContent = more ? "Carregar mais partes do modelo" : "Escolha o que carregar";
+    const mobile = document.documentElement.classList.contains("mobile");
+    $("#regionHint").textContent = mobile && !more
+      ? "Escolha seções ou toque em Prévia geral. A primeira abertura carrega até 2,5 milhões de triângulos; use Carregar para acrescentar o restante."
+      : "Marque as seções (nível 1) ou abra uma delas para escolher os subsistemas (nível 2).";
+    $("#regionAll").textContent = mobile && !more ? "Prévia geral" : "Tudo";
     $("#regionSel").disabled = !app.selNodes.size;
     dlg.hidden = false;
     const close = (v) => { dlg.hidden = true; resolve(v); };

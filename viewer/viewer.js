@@ -25,6 +25,7 @@ import { $, status } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
 import { exportMobileZip } from "./lib/browser-mobile-export.js";
 import { exportRawModelZip } from "./lib/raw-model-export.js";
+import { previewChunks, completedParts } from "./lib/mobile-preview.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -49,8 +50,8 @@ export const app = {
 
 // ---------------------------------------------------------------- renderer
 const view = $("#view");
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
+const renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2));
 renderer.setClearColor(0x000000, 0); // the background is the CSS of #view
 view.prepend(renderer.domElement);
 
@@ -936,11 +937,11 @@ async function loadConverted(src, ask) {
   addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
-  await loadParts(await firstParts(ask));
+  await loadParts(await firstParts(ask), mobile);
   app.emit("loaded");
 }
 
-async function loadConvertedParts(want) {
+async function loadConvertedParts(want, preview = false) {
   const { src, meta, v2 } = source;
   const list = [];
   meta.chunks.forEach((c, k) => {
@@ -948,12 +949,13 @@ async function loadConvertedParts(want) {
     if (want) { let any = false; for (let i = c.io; i < c.io + c.ic && !any; i++) any = want[itemPart[i]] === 1; if (!any) return; }
     list.push(k);
   });
+  const selected = preview ? previewChunks(meta.chunks, list) : list;
+  source.previewed = selected.length < list.length;
   let next = 0, done = 0;
   const bar = $("#bar > div");
   async function fetcher() {
-    while (next < list.length) {
-      const k = list[next++], c = meta.chunks[k];
-      source.loaded[k] = 1;
+    while (next < selected.length) {
+      const k = selected[next++], c = meta.chunks[k];
       const buf = await src.buf("c/" + c.f);
       if (v2) {
         const o1 = c.nv * 8, o2 = o1 + c.nv * 4, o3 = o2 + c.ni * 2;
@@ -962,16 +964,15 @@ async function loadConvertedParts(want) {
       } else {
         addChunk(c, new Uint16Array(buf, 0, c.nv * 4), null, new Uint16Array(buf, c.nv * 8, c.ni), null, c.io, c.ic);
       }
-      for (let i = c.io; i < c.io + c.ic; i++) app.partLoaded[itemPart[i]] = 1;
+      source.loaded[k] = 1;
       done++;
-      bar.style.width = (100 * done / list.length).toFixed(1) + "%";
-      status(done < list.length ? `Carregando geometria ${done}/${list.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
+      bar.style.width = (100 * done / selected.length).toFixed(1) + "%";
+      status(done < selected.length ? `Carregando geometria ${done}/${selected.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
   await Promise.all(Array.from({ length: mobile ? 2 : 6 }, fetcher));
-  // parts that were asked for count as loaded even without geometry (missing .ol files)
-  if (!want) app.partLoaded.fill(1);
-  else for (let p = 0; p < app.nParts; p++) if (want[p]) app.partLoaded[p] = 1;
+  // A part can span several chunks: count it as complete only after all its chunks load.
+  app.partLoaded.set(completedParts(meta.chunks, itemPart, source.loaded, app.nParts));
 }
 
 async function loadRaw(m, ask) {
@@ -1056,18 +1057,24 @@ async function loadRawParts(want) {
 
 // Load geometry for parts (Uint8Array flags, or null = everything not loaded yet).
 let loading = false;
-async function loadParts(want) {
+async function loadParts(want, preview = false) {
   if (loading) return;
   loading = true;
   try {
-    if (source.kind === "converted") await loadConvertedParts(want);
+    if (source.kind === "converted") await loadConvertedParts(want, preview);
     else await loadRawParts(want);
   } finally { loading = false; }
   const total = app.availableParts.reduce((s, v) => s + v, 0);
   const n = app.partLoaded.reduce((s, v, p) => s + (app.availableParts[p] ? v : 0), 0);
   $("#loadMoreBtn").hidden = n >= total;
-  if (n < total) status(`${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
-  if (!userMoved) fitAll(false);
+  if (n < total) status(`${source.previewed ? "Prévia pronta · " : ""}${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
+  if (!userMoved) {
+    if (source.kind === "converted" && source.previewed && chunks.length) {
+      const box = new THREE.Box3();
+      for (const c of chunks) { box.expandByPoint(c.min); box.expandByPoint(c.max); }
+      frame(box, new THREE.Vector3(1, -1, 0.8).normalize());
+    } else fitAll(false);
+  }
   app.setClip({});
   app.emit("geometry");
   requestRender();
@@ -1874,7 +1881,7 @@ function animate(now = performance.now()) {
   needRender = false;
   const Q = QUALITY[app.display.quality] || QUALITY.auto;
   const ratio = moving ? Q.ratio : 1;
-  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2) * ratio); resize(); }
+  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2) * ratio); resize(); }
   applyLod(moving ? Q.move : Q.idle, moving && !Q.edges);
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {
