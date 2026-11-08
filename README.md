@@ -76,8 +76,10 @@ convertida pelo `build.py`, que abre em segundos.
 ## Recursos
 
 - **Árvore** da montagem com visibilidade por nó; **propriedades** e miniatura da peça selecionada.
-- **Busca** por nome ou propriedade: contém, igual (com `*`), começa com, regex (`/.../`), números (`>`, `<`, `≥`, `≤`),
-  várias condições com E/OU; ações em todos os resultados (selecionar, isolar, ocultar, colorir, zoom, listar).
+- **Busca** de texto na estrutura (ou `/regex/`), com lista de **bigramas** pronta para escolher e opção de buscar
+  também nas propriedades. Em texto, maiúsculas, acentos, traços e espaços não contam (`LPREX` acha `LPR-EX20003`);
+  várias palavras = todas precisam aparecer. Ações em todos os resultados (selecionar, isolar, ocultar, colorir, zoom, listar).
+- **Barra lateral redimensionável**: arraste a linha entre ela e o modelo (duplo clique volta a 340 px); a largura fica salva.
 - **Seleção**: clique, Ctrl+clique (soma/remove), Shift+arrastar (área), Alt+clique (sobe um nível); inverter,
   pai/filhos/irmãos, mesma cor, mesmo valor de uma propriedade.
 - **Cores**: colorir e mudar a opacidade da seleção, modo fantasma, colorir por regra (material, espessura, seção,

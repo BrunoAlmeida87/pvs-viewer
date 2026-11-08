@@ -180,6 +180,7 @@
   </header>
 
   <aside id="side">
+    <div id="sideGrip" title="Arraste para mudar a largura · duplo clique volta ao tamanho original"></div>
     <nav class="tabs">
       <button data-tab="treeTab" class="on"><svg><use href="#i-tree"/></svg>Árvore</button>
       <button data-tab="searchTab"><svg><use href="#i-search"/></svg>Busca</button>
@@ -188,34 +189,16 @@
     <section id="treeTab" class="tab on"><div id="tree"></div></section>
     <section id="searchTab" class="tab">
       <div class="searchBox">
-        <input id="q" placeholder="Buscar… (texto, ou /regex/)" autocomplete="off">
+        <input id="q" placeholder="Buscar na estrutura… (texto, ou /regex/)" autocomplete="off">
         <div class="row2">
-          <select id="qField" title="Onde buscar"></select>
-          <select id="qOp" title="Como comparar">
-            <option value="contains">contém</option>
-            <option value="equals">igual a (aceita *)</option>
-            <option value="starts">começa com</option>
-            <option value="regex">regex</option>
-            <option value="notcontains">não contém</option>
-            <option value="gt">&gt; (número)</option>
-            <option value="lt">&lt; (número)</option>
-            <option value="ge">≥ (número)</option>
-            <option value="le">≤ (número)</option>
-            <option value="ne">≠</option>
-            <option value="exists">tem valor</option>
-            <option value="empty">sem valor</option>
-          </select>
-        </div>
-        <div id="conds"></div>
-        <div class="row2">
-          <button id="addCond" title="Adicionar outra condição">+ condição</button>
-          <select id="qJoin" title="Como combinar as condições"><option value="and">todas (E)</option><option value="or">qualquer (OU)</option></select>
-          <select id="qScope" title="Que tipo de item"><option value="parts">só peças</option><option value="all">peças e montagens</option><option value="asm">só montagens</option></select>
+          <select id="qBg" title="Só equipamentos deste bigrama (o sistema do código, como o DT de LPR-DT20003)" disabled><option value="">Todos os bigramas</option></select>
         </div>
         <div class="row2">
-          <label><input type="checkbox" id="qCase"> diferenciar maiúsculas</label>
+          <select id="qScope" title="Que tipo de item"><option value="all">peças e montagens</option><option value="parts">só peças</option><option value="asm">só montagens</option></select>
           <button id="qRun" class="primary">Buscar</button>
         </div>
+        <label class="chk"><input type="checkbox" id="qProps"> buscar também nas propriedades (material, descrição…)</label>
+        <p class="hint">Em texto, traços e espaços não contam: <b>LPREX</b> acha <b>LPR-EX20003</b>. Várias palavras: todas precisam aparecer.</p>
       </div>
       <div id="qActions" hidden>
         <div id="qCount"></div>

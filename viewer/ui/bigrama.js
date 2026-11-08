@@ -20,6 +20,8 @@ export function initBigrama(app) {
 
   function build() {
     groups = new Map();
+    app.bigramaEff = null;
+    app.bigramaList = [];
     const t = app.tree, ki = app.keyIndex(BIGRAMA_KEY);
     if (ki < 0) return;
     const eff = new Array(app.nNodes).fill(NONE);
@@ -33,6 +35,10 @@ export function initBigrama(app) {
       if (t.part[n] >= 0) { const g = get(eff[n]); g.nodes.push(n); g.parts.push(t.part[n]); }
     }
     for (const [code, g] of tmp) groups.set(code, { code, equip: g.equip, nodes: Int32Array.from(g.nodes), parts: Int32Array.from(g.parts) });
+    // shared with the Busca tab: bigrama of every node, and the list of bigramas
+    app.bigramaEff = eff;
+    app.bigramaList = [...groups.values()].map((g) => ({ code: g.code, parts: g.parts.length, equip: g.equip }))
+      .sort((a, b) => a.code.localeCompare(b.code));
   }
 
   const label = (code) => (code === NONE ? "(sem bigrama)" : code);
@@ -93,5 +99,5 @@ export function initBigrama(app) {
 
   let t = 0;
   app.on("state", () => { if (panel.hidden) return; clearTimeout(t); t = setTimeout(render, 120); });
-  app.on("model", () => { build(); $("#bgFilter").value = ""; render(); });
+  app.on("model", () => { build(); $("#bgFilter").value = ""; render(); app.emit("bigrama"); });
 }

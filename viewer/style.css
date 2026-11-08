@@ -97,7 +97,12 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .menuBody.keys > div { padding: 2px 0; white-space: normal; }
 
 /* ------------------------------------------------------------------ side bar */
-#side { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
+#side { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
+#sideGrip { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; touch-action: none; }
+#sideGrip:hover, #app.resizing #sideGrip { background: var(--accent); opacity: .5; }
+#app.resizing { cursor: col-resize; user-select: none; }
+#app.resizing #view { pointer-events: none; }
+.chk { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; cursor: pointer; }
 .tabs { display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); flex: none; }
 .tabs button { flex: 1; gap: 6px; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: none; color: var(--muted); padding: 7px 6px 8px; }
 .tabs button svg { width: 16px; height: 16px; }

@@ -22,6 +22,38 @@ export function initLayout(app) {
     appEl.classList.toggle("noSide");
     store.set("pvs-viewer:noSide", appEl.classList.contains("noSide"));
   };
+  // drag the line between the side bar and the 3D view to resize it (double click: back to 340 px)
+  const SIDE_DEFAULT = 340, SIDE_MIN = 240;
+  const sideMax = () => Math.max(SIDE_MIN, Math.min(900, window.innerWidth - 320));
+  const setSide = (w, save = true) => {
+    w = Math.round(Math.max(SIDE_MIN, Math.min(sideMax(), w)));
+    root.style.setProperty("--side-w", w + "px");
+    if (save) store.set("pvs-viewer:sideW", w);
+  };
+  const savedW = store.get("pvs-viewer:sideW", null);
+  if (typeof savedW === "number") setSide(savedW, false);
+  const grip = $("#sideGrip");
+  grip.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    appEl.classList.add("resizing");
+    const left = $("#side").getBoundingClientRect().left;
+    const move = (ev) => setSide(ev.clientX - left, false);
+    const up = (ev) => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", up);
+      grip.removeEventListener("pointercancel", up);
+      appEl.classList.remove("resizing");
+      setSide(ev.clientX - left);
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+    grip.addEventListener("pointercancel", up);
+  });
+  grip.addEventListener("dblclick", () => setSide(SIDE_DEFAULT));
+  window.addEventListener("resize", () => { const w = parseInt(getComputedStyle(root).getPropertyValue("--side-w"), 10); if (w > sideMax()) setSide(sideMax(), false); });
+
   if (store.get("pvs-viewer:infoClosed", false)) $("#infoBox").classList.add("closed");
   $("#infoHead").onclick = () => {
     $("#infoBox").classList.toggle("closed");
