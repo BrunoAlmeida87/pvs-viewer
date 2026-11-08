@@ -16,6 +16,7 @@ import { initLayers } from "./ui/layers.js";
 import { initBigrama } from "./ui/bigrama.js";
 import { addBigrama } from "./lib/bigrama.js";
 import { initTree } from "./ui/tree.js";
+import { initStructure } from "./ui/structure.js";
 import { initSearch } from "./ui/search.js";
 import { initInfo } from "./ui/info.js";
 import { initSets } from "./ui/sets.js";
@@ -23,9 +24,14 @@ import { initColors } from "./ui/colors.js";
 import { initTable } from "./ui/table.js";
 import { initDisplay } from "./ui/display.js";
 import { $, status } from "./ui/util.js";
+import { convertModel } from "./lib/convert.js";
+import { exportMobileZip } from "./lib/browser-mobile-export.js";
+import { exportRawModelZip } from "./lib/raw-model-export.js";
+import { previewChunks, completedParts } from "./lib/mobile-preview.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
+const mobile = document.documentElement.classList.contains("mobile");
 
 // ---------------------------------------------------------------- app / events
 const listeners = {};
@@ -38,7 +44,7 @@ export const app = {
   // display: style 0 shaded, 1 shaded + edges, 2 hidden line, 3 edges only, 4 x-ray
   // quality: "high" draws everything, "auto" skips sub-pixel parts (more while moving),
   // "fast" also drops edges/SSAO and resolution while moving
-  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: "auto", perf: false },
+  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: mobile ? "fast" : "auto", perf: false },
   tool: null, // when set, clicks in the 3D view go to tool(pickInfo, event) instead of selecting
   clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true },
   explode: { amount: 0, level: 1, selOnly: false },
@@ -46,8 +52,8 @@ export const app = {
 
 // ---------------------------------------------------------------- renderer
 const view = $("#view");
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2));
 renderer.setClearColor(0x000000, 0); // the background is the CSS of #view
 view.prepend(renderer.domElement);
 
@@ -751,6 +757,19 @@ async function pickModel() {
   card.hidden = false;
   return new Promise((resolve) => {
     const fail = (e) => { if (e && e.name !== "AbortError") $("#openErr").textContent = e.message || String(e); };
+    if (window.desktop) {
+      $("#convertBtn").hidden = false;
+      $("#convertBtn").onclick = async () => {
+        const button = $("#convertBtn");
+        button.disabled = true;
+        $("#openErr").textContent = "";
+        try {
+          const result = await convertModel(window.desktop, status);
+          if (result) status(`Modelo convertido em ${result}. Abra essa pasta para visualizar.`);
+        } catch (e) { fail(e); }
+        finally { button.disabled = false; }
+      };
+    }
     $("#openBtn").onclick = async () => {
       $("#openErr").textContent = "";
       if (window.desktop) { // desktop app (Electron): the folder is served as model://local/
@@ -860,6 +879,7 @@ function setModel(name, t, boxes, lo, hi) {
   app.partRule = null;
   app.partNode = new Int32Array(nParts).fill(-1);
   app.partLoaded = new Uint8Array(nParts);
+  app.availableParts = new Uint8Array(nParts).fill(1);
   t.part.forEach((p, n) => { if (p >= 0) app.partNode[p] = n; });
   const depth = new Int32Array(app.nNodes);
   for (let n = 1; n < app.nNodes; n++) depth[n] = depth[t.parent[n]] + 1;
@@ -878,7 +898,7 @@ async function main() {
   animate();
   const m = await pickModel();
   status("Carregando estrutura…");
-  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes");
+  const ask = $("#openRegions")?.checked || mobile || new URLSearchParams(location.search).has("regioes");
   if (m.kind === "converted") await loadConverted(m.src, ask);
   else { app.access = m.access; await loadRaw(m, ask); }
 }
@@ -890,7 +910,9 @@ const isLoaded = (p) => app.partLoaded && app.partLoaded[p] === 1;
 // Parts to load first: all, or the regions chosen in a dialog.
 async function firstParts(ask) {
   if (!ask) return null;
-  return chooseRegions(app); // Uint8Array flags per part, or null for everything
+  const selected = await chooseRegions(app);
+  // On a phone, closing the section dialog must not load the entire model.
+  return mobile && selected === undefined ? new Uint8Array(app.nParts) : selected;
 }
 
 async function loadConverted(src, ask) {
@@ -898,6 +920,15 @@ async function loadConverted(src, ask) {
     src.json("chunks.json"), src.json("tree.json"), src.buf("items.bin"), src.buf("parts.bin"),
   ]);
   setModel(meta.source, t, new Float32Array(partsBuf), meta.min, meta.max);
+  if (Array.isArray(meta.includedParts)) {
+    app.availableParts.fill(0);
+    app.partVisible.fill(0);
+    for (const p of meta.includedParts) if (Number.isInteger(p) && p >= 0 && p < app.nParts) {
+      app.availableParts[p] = 1;
+      app.partVisible[p] = 1;
+    }
+    app.refresh();
+  }
   const n = itemsBuf.byteLength / 8, dv = new DataView(itemsBuf);
   const parts = new Uint32Array(n), colors = new Uint8Array(n * 4);
   for (let i = 0; i < n; i++) {
@@ -909,11 +940,11 @@ async function loadConverted(src, ask) {
   addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
-  await loadParts(await firstParts(ask));
+  await loadParts(await firstParts(ask), mobile);
   app.emit("loaded");
 }
 
-async function loadConvertedParts(want) {
+async function loadConvertedParts(want, preview = false) {
   const { src, meta, v2 } = source;
   const list = [];
   meta.chunks.forEach((c, k) => {
@@ -921,12 +952,13 @@ async function loadConvertedParts(want) {
     if (want) { let any = false; for (let i = c.io; i < c.io + c.ic && !any; i++) any = want[itemPart[i]] === 1; if (!any) return; }
     list.push(k);
   });
+  const selected = preview ? previewChunks(meta.chunks, list) : list;
+  source.previewed = selected.length < list.length;
   let next = 0, done = 0;
   const bar = $("#bar > div");
   async function fetcher() {
-    while (next < list.length) {
-      const k = list[next++], c = meta.chunks[k];
-      source.loaded[k] = 1;
+    while (next < selected.length) {
+      const k = selected[next++], c = meta.chunks[k];
       const buf = await src.buf("c/" + c.f);
       if (v2) {
         const o1 = c.nv * 8, o2 = o1 + c.nv * 4, o3 = o2 + c.ni * 2;
@@ -935,16 +967,15 @@ async function loadConvertedParts(want) {
       } else {
         addChunk(c, new Uint16Array(buf, 0, c.nv * 4), null, new Uint16Array(buf, c.nv * 8, c.ni), null, c.io, c.ic);
       }
-      for (let i = c.io; i < c.io + c.ic; i++) app.partLoaded[itemPart[i]] = 1;
+      source.loaded[k] = 1;
       done++;
-      bar.style.width = (100 * done / list.length).toFixed(1) + "%";
-      status(done < list.length ? `Carregando geometria ${done}/${list.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
+      bar.style.width = (100 * done / selected.length).toFixed(1) + "%";
+      status(done < selected.length ? `Carregando geometria ${done}/${selected.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
-  await Promise.all(Array.from({ length: 6 }, fetcher));
-  // parts that were asked for count as loaded even without geometry (missing .ol files)
-  if (!want) app.partLoaded.fill(1);
-  else for (let p = 0; p < app.nParts; p++) if (want[p]) app.partLoaded[p] = 1;
+  await Promise.all(Array.from({ length: mobile ? 2 : 6 }, fetcher));
+  // A part can span several chunks: count it as complete only after all its chunks load.
+  app.partLoaded.set(completedParts(meta.chunks, itemPart, source.loaded, app.nParts));
 }
 
 async function loadRaw(m, ask) {
@@ -974,7 +1005,7 @@ async function loadRawParts(want) {
   const TASK = 150, total = todo.length;
   const tasks = [];
   for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
-  const nWorkers = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1));
+  const nWorkers = Math.max(1, Math.min(mobile ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
   let missing = 0, next = 0, doneParts = 0;
   const files = m.access.files;
@@ -1029,17 +1060,24 @@ async function loadRawParts(want) {
 
 // Load geometry for parts (Uint8Array flags, or null = everything not loaded yet).
 let loading = false;
-async function loadParts(want) {
+async function loadParts(want, preview = false) {
   if (loading) return;
   loading = true;
   try {
-    if (source.kind === "converted") await loadConvertedParts(want);
+    if (source.kind === "converted") await loadConvertedParts(want, preview);
     else await loadRawParts(want);
   } finally { loading = false; }
-  const n = app.partLoaded.reduce((s, v) => s + v, 0);
-  $("#loadMoreBtn").hidden = n >= app.nParts;
-  if (n < app.nParts) status(`${n.toLocaleString("pt-BR")} de ${app.nParts.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
-  if (!userMoved) fitAll(false);
+  const total = app.availableParts.reduce((s, v) => s + v, 0);
+  const n = app.partLoaded.reduce((s, v, p) => s + (app.availableParts[p] ? v : 0), 0);
+  $("#loadMoreBtn").hidden = n >= total;
+  if (n < total) status(`${source.previewed ? "Prévia pronta · " : ""}${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
+  if (!userMoved) {
+    if (source.kind === "converted" && source.previewed && chunks.length) {
+      const box = new THREE.Box3();
+      for (const c of chunks) { box.expandByPoint(c.min); box.expandByPoint(c.max); }
+      frame(box, new THREE.Vector3(1, -1, 0.8).normalize());
+    } else fitAll(false);
+  }
   app.setClip({});
   app.emit("geometry");
   requestRender();
@@ -1513,6 +1551,7 @@ app.screenshot = async function (scale = 2) {
 
 // ---------------------------------------------------------------- mouse
 let down = null, box = null, rot = null;
+const touches = new Set();
 const boxEl = $("#boxSel"), pivotEl = $("#pivot");
 // Capture phase, before OrbitControls: view cube clicks and Shift+drag rectangle selection.
 view.addEventListener("pointerdown", (e) => {
@@ -1536,10 +1575,11 @@ view.addEventListener("pointerdown", (e) => {
 }, true);
 window.addEventListener("pointermove", (e) => {
   if (box) updateBox(e);
-  if (rot) dragRotate(e);
+  if (rot && rot.id === e.pointerId && touches.size < 2) dragRotate(e);
 });
 window.addEventListener("pointerup", (e) => {
-  if (rot) { rot = null; pivotEl.hidden = true; }
+  if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
+  if (e.pointerType === "touch") touches.delete(e.pointerId);
   if (!box) return;
   const b = box;
   box = null;
@@ -1557,11 +1597,13 @@ function updateBox(e) {
 }
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
-  down = { x: e.clientX, y: e.clientY };
-  if (e.button === 0) rot = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, pivot: null, started: false };
+  if (e.pointerType === "touch") touches.add(e.pointerId);
+  if (touches.size > 1) { down = null; rot = null; pivotEl.hidden = true; return; }
+  down = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  if (e.button === 0) rot = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, pivot: null, started: false };
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!down || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || e.button !== 0) return;
+  if (!down || down.id !== e.pointerId || touches.size > 1 || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > (e.pointerType === "touch" ? 9 : 4) || e.button !== 0) return;
   if (app.tool) { app.tool(app.pick(e.clientX, e.clientY), e); return; }
   const node = pickNode(e.clientX, e.clientY);
   if (e.altKey && app.focus >= 0) { app.select([app.tree.parent[app.focus]], "replace"); return; }
@@ -1572,6 +1614,11 @@ renderer.domElement.addEventListener("dblclick", (e) => {
   if (walk.on) return;
   const node = pickNode(e.clientX, e.clientY);
   if (node >= 0) app.frameNodes([node]);
+});
+window.addEventListener("pointercancel", (e) => {
+  touches.delete(e.pointerId);
+  if (down?.id === e.pointerId) down = null;
+  if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
 });
 
 // Left drag: orbit around the point under the cursor (or look around while walking).
@@ -1680,8 +1727,91 @@ window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 // ---------------------------------------------------------------- toolbar & keys
 $("#fit").onclick = () => fitAll();
 $("#zoomSel").onclick = () => { if (app.selNodes.size) app.frameNodes([...app.selNodes]); };
+$("#mobileFit").onclick = () => $("#fit").click();
+$("#mobileZoomSel").onclick = () => $("#zoomSel").click();
+$("#mobileTree").onclick = () => $("#app").classList.toggle("mobileSide");
+$("#mobileMore").onclick = () => $("#loadMoreBtn").click();
+app.on("geometry", () => { $("#mobileMore").disabled = $("#loadMoreBtn").hidden; });
+$("#mobileViews").onclick = () => { $("#mobileViewChoices").hidden = !$("#mobileViewChoices").hidden; };
+$("#mobileOrtho").onclick = () => { $("#ortho").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileSaved").onclick = () => {
+  $("#app").classList.add("mobileSide");
+  document.querySelector('[data-tab="setsTab"]').click();
+  $("#mobileViewChoices").hidden = true;
+};
+$("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
+$("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
+const exportButton = $("#exportMobileBtn");
+let exportingMobile = false;
+function updateExportButton() {
+  exportButton.hidden = !source;
+  exportButton.disabled = exportButton.hidden || exportingMobile;
+  const selected = app.selNodes.size > 0;
+  exportButton.title = selected ? "Exportar as peças selecionadas em um modelo 3D" : "Exportar o modelo 3D completo";
+  $("#mobileExport").textContent = selected ? "Exportar seleção" : "Exportar modelo completo";
+  $("#mobileExport").hidden = exportButton.hidden;
+  $("#mobileExport").disabled = exportingMobile;
+}
+app.on("loaded", updateExportButton);
+app.on("selection", updateExportButton);
+app.canExportModel = () => !!source;
+app.exportModelNode = (node) => {
+  const parts = [];
+  for (let p = app.tree.p0[node]; p < app.tree.p1[node]; p++) if (app.availableParts[p]) parts.push(p);
+  return exportModelParts(parts);
+};
+async function exportModelParts(parts) {
+  if (exportingMobile) return;
+  exportingMobile = true;
+  updateExportButton();
+  let writable = null;
+  try {
+    status(`Exportando modelo 3D (${parts.length.toLocaleString("pt-BR")} peças)…`);
+    if (window.desktop && source.kind === "converted") {
+      const result = await window.desktop.mobileExport(parts);
+      status(result ? `Modelo 3D salvo em ${result}` : "Exportação cancelada");
+    } else {
+      const filename = (app.title.replace(/\.pvs$/i, "").replace(/[\\/:*?"<>|]/g, "_") || "modelo") + "-modelo.zip";
+      if (!window.desktop && window.showSaveFilePicker) {
+        const handle = await window.showSaveFilePicker({ suggestedName: filename,
+          types: [{ description: "Modelo 3D (ZIP)", accept: { "application/zip": [".zip"] } }] });
+        writable = await handle.createWritable();
+      }
+      const write = writable ? (bytes) => writable.write(bytes) : null;
+      const blob = source.kind === "converted"
+        ? await exportMobileZip(source.src, source.meta, parts, status, write)
+        : await exportRawModelZip(source, parts, status, write);
+      if (writable) { await writable.close(); writable = null; }
+      else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.append(link);
+        link.click();
+        setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 60000);
+      }
+      status("Modelo 3D exportado. Extraia o ZIP antes de abrir a pasta no visualizador.");
+    }
+  } catch (error) {
+    if (writable) { try { await writable.abort(); } catch { /* already closed */ } }
+    if (error.name === "AbortError") status("Exportação cancelada");
+    else { status("Erro na exportação: " + error.message); console.error(error); }
+  }
+  finally { exportingMobile = false; updateExportButton(); }
+}
+exportButton.onclick = () => {
+  const parts = app.selNodes.size ? app.selectedParts().filter((p) => app.availableParts[p])
+    : [...app.availableParts.keys()].filter((p) => app.availableParts[p]);
+  return exportModelParts(parts);
+};
 document.querySelectorAll("[data-view]").forEach((b) => {
-  b.onclick = () => frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());
+  b.onclick = () => {
+    frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());
+    $("#mobileViewChoices").hidden = true;
+  };
 });
 $("#isolate").onclick = () => { if (app.selNodes.size) app.isolate([...app.selNodes]); };
 $("#hideSel").onclick = () => { if (app.selNodes.size) app.setVisible([...app.selNodes], false); };
@@ -1755,7 +1885,7 @@ function animate(now = performance.now()) {
   needRender = false;
   const Q = QUALITY[app.display.quality] || QUALITY.auto;
   const ratio = moving ? Q.ratio : 1;
-  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * ratio); resize(); }
+  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2) * ratio); resize(); }
   applyLod(moving ? Q.move : Q.idle, moving && !Q.edges);
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {
@@ -1823,6 +1953,7 @@ app.hidePerf = () => { $("#perf").hidden = true; };
 
 // ---------------------------------------------------------------- start
 initTree(app);
+initStructure(app);
 initSearch(app);
 initInfo(app);
 initSets(app);
