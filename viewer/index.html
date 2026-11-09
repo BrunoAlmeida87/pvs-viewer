@@ -7,7 +7,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script>try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}
 if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.search).has("mobile")) document.documentElement.classList.add("mobile");</script>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=mobile-pov-2">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.js",
@@ -573,10 +573,10 @@ async function refreshModules() {
     for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
     await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
   };
-  await visit(new URL("viewer.js", location.href).href);
+  await visit(new URL("viewer.js?v=mobile-pov-2", location.href).href);
 }
 try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
-import("./viewer.js").catch((err) => {
+import("./viewer.js?v=mobile-pov-2").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
     ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";

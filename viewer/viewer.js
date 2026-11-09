@@ -25,7 +25,7 @@ import { initInfo } from "./ui/info.js";
 import { initSets } from "./ui/sets.js";
 import { initColors } from "./ui/colors.js";
 import { initTable } from "./ui/table.js";
-import { initDisplay } from "./ui/display.js";
+import { initDisplay } from "./ui/display.js?v=mobile-pov-2";
 import { $, status } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
 import { exportMobileZip } from "./lib/browser-mobile-export.js";
@@ -1921,7 +1921,14 @@ $("#mobileWalkToggle").onclick = () => {
   setWalk(!walk.on);
   $("#mobileViewChoices").hidden = true;
 };
-app.on("loaded", () => { $("#mobileCut").disabled = false; $("#mobileWalkToggle").disabled = false; });
+function updateMobileModelActions() {
+  const ready = !!app.tree;
+  $("#mobileCut").disabled = !ready;
+  $("#mobileWalkToggle").disabled = !ready;
+}
+app.on("model", updateMobileModelActions);
+app.on("loaded", updateMobileModelActions);
+updateMobileModelActions();
 $("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
 $("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
 const exportButton = $("#exportMobileBtn");
