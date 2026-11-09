@@ -82,6 +82,17 @@ export function initDisplay(app) {
     for (const s of r.querySelectorAll("input[type=range]")) s.oninput = () => { cb.checked = true; readCut(); };
     cb.onchange = readCut;
   });
+  document.querySelectorAll("#mobileCutPresets [data-cut-axis]").forEach((button) => {
+    button.onclick = () => {
+      const axis = +button.dataset.cutAxis;
+      rows.forEach((r, i) => {
+        r.querySelector("input[type=checkbox]").checked = i === axis;
+        r.querySelector(".lo").value = 0;
+        r.querySelector(".hi").value = i === axis ? 500 : 1000;
+      });
+      readCut();
+    };
+  });
   for (const id of ["#cutInvert", "#cutCap", "#cutShow"]) $(id).onchange = readCut;
   $("#cutSel").onclick = () => {
     if (!app.selNodes.size) { $("#load").textContent = "Selecione as peças para criar a caixa de corte em volta delas."; return; }

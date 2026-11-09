@@ -1603,7 +1603,7 @@ const boxEl = $("#boxSel"), pivotEl = $("#pivot");
 view.addEventListener("pointerdown", (e) => {
   if (e.target !== renderer.domElement) return;
   const r = renderer.domElement.getBoundingClientRect();
-  if (e.button === 0 && cube.inside(e.clientX - r.left, e.clientY - r.top)) {
+  if (e.button === 0 && cube.visible && cube.inside(e.clientX - r.left, e.clientY - r.top)) {
     e.stopPropagation();
     e.preventDefault();
     down = null;
@@ -1710,7 +1710,17 @@ function dragRotate(e) {
 }
 
 // ---------------------------------------------------------------- walk mode
-const walk = { on: false, keys: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0 };
+const walk = { on: false, keys: new Set(), touch: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0 };
+const walkPointers = new Map();
+function syncWalkTouch() {
+  walk.touch.clear();
+  for (const direction of walkPointers.values()) walk.touch.add(direction);
+  document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => button.classList.toggle("on", walk.touch.has(button.dataset.walk)));
+}
+function showWalkSpeed() {
+  $("#walkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
+  $("#mobileWalkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
+}
 const WALK_KEYS = new Set(["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", "pageup", "pagedown", "shift"]);
 function walkLook() {
   const f = new THREE.Vector3(Math.cos(walk.pitch) * Math.cos(walk.yaw), Math.cos(walk.pitch) * Math.sin(walk.yaw), Math.sin(walk.pitch));
@@ -1720,6 +1730,8 @@ function setWalk(on) {
   if (on === walk.on) return;
   walk.on = on;
   walk.keys.clear();
+  walkPointers.clear();
+  syncWalkTouch();
   tween = null;
   if (on) {
     if (camera === ortho) setOrtho(false);
@@ -1738,15 +1750,42 @@ function setWalk(on) {
   }
   $("#walkBtn").classList.toggle("on", on);
   $("#walkHint").hidden = !on;
-  $("#walkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
+  $("#mobileWalkControls").hidden = !on;
+  $("#view").classList.toggle("mobileWalking", on);
+  $("#mobileWalkToggle").textContent = on ? "Sair da exploração" : "Explorar por dentro";
+  cube.visible = on ? false : app.display.cube;
+  showWalkSpeed();
   requestRender();
 }
 app.setWalk = setWalk;
+document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => {
+  button.addEventListener("pointerdown", (e) => {
+    if (!walk.on) return;
+    e.preventDefault();
+    button.setPointerCapture(e.pointerId);
+    walkPointers.set(e.pointerId, button.dataset.walk);
+    syncWalkTouch();
+    walk.last = performance.now();
+    requestRender();
+  });
+  const release = (e) => {
+    if (!walkPointers.delete(e.pointerId)) return;
+    syncWalkTouch();
+    e.preventDefault();
+  };
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+  button.addEventListener("contextmenu", (e) => e.preventDefault());
+});
+$("#mobileWalkExit").onclick = () => setWalk(false);
+$("#mobileWalkSlower").onclick = () => { walk.speed = Math.max(0.05, walk.speed / 1.5); showWalkSpeed(); };
+$("#mobileWalkFaster").onclick = () => { walk.speed = Math.min(100, walk.speed * 1.5); showWalkSpeed(); };
 function stepWalk(now) {
   const dt = Math.min(0.3, (now - walk.last) / 1000);
   walk.last = now;
-  if (!walk.on || !walk.keys.size) return;
-  const K = walk.keys, v = new THREE.Vector3();
+  if (!walk.on || (!walk.keys.size && !walk.touch.size)) return;
+  const K = new Set([...walk.keys, ...walk.touch]), v = new THREE.Vector3();
   const f = new THREE.Vector3(Math.cos(walk.pitch) * Math.cos(walk.yaw), Math.cos(walk.pitch) * Math.sin(walk.yaw), Math.sin(walk.pitch));
   const r = new THREE.Vector3(Math.sin(walk.yaw), -Math.cos(walk.yaw), 0);
   if (K.has("w") || K.has("arrowup")) v.add(f);
@@ -1765,9 +1804,9 @@ renderer.domElement.addEventListener("wheel", (e) => {
   if (!walk.on) return;
   e.preventDefault();
   walk.speed = Math.max(0.05, Math.min(100, walk.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
-  $("#walkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
+  showWalkSpeed();
 }, { passive: false });
-window.addEventListener("blur", () => walk.keys.clear());
+window.addEventListener("blur", () => { walk.keys.clear(); walkPointers.clear(); syncWalkTouch(); });
 window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 
 // ---------------------------------------------------------------- toolbar & keys
@@ -1807,6 +1846,13 @@ $("#mobileSaved").onclick = () => {
 };
 $("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileCut").onclick = () => { $("#cutBtn").click(); $("#mobileViewChoices").hidden = true; };
+$("#mobileWalkToggle").onclick = () => {
+  if (!$("#cutPanel").hidden) $("#cutPanel [data-close]").click();
+  setWalk(!walk.on);
+  $("#mobileViewChoices").hidden = true;
+};
+app.on("loaded", () => { $("#mobileCut").disabled = false; $("#mobileWalkToggle").disabled = false; });
 $("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
 $("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
 const exportButton = $("#exportMobileBtn");

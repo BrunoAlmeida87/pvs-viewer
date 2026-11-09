@@ -316,8 +316,25 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button id="mobileOrtho">Ortográfica</button><button id="mobileSaved">Vistas salvas</button>
       <button id="mobileZoomSel">Enquadrar seleção</button>
       <button id="mobileIsolate">Isolar seleção</button><button id="mobileShowAll">Mostrar tudo</button>
+      <button id="mobileCut" disabled>Corte</button><button id="mobileWalkToggle" disabled>Explorar por dentro</button>
       <button id="mobileEdges">Arestas</button>
       <button id="mobileExport" hidden>Exportar modelo</button>
+    </div>
+    <div id="mobileWalkControls" hidden aria-label="Navegação em perspectiva">
+      <div class="mobileWalkHead"><strong>Explorar por dentro</strong><button id="mobileWalkExit" type="button">Sair</button></div>
+      <p>Arraste a imagem para olhar ao redor. Segure uma seta para se mover.</p>
+      <div class="mobileWalkMove">
+        <div class="mobileWalkPad" aria-label="Mover no plano">
+          <button data-walk="w" type="button" aria-label="Avançar">↑</button>
+          <button data-walk="a" type="button" aria-label="Mover para a esquerda">←</button>
+          <button data-walk="s" type="button" aria-label="Recuar">↓</button>
+          <button data-walk="d" type="button" aria-label="Mover para a direita">→</button>
+        </div>
+        <div class="mobileWalkExtra">
+          <div><button data-walk="e" type="button">Subir</button><button data-walk="q" type="button">Descer</button></div>
+          <div><button id="mobileWalkSlower" type="button" aria-label="Diminuir velocidade">−</button><span id="mobileWalkSpeed"></span><button id="mobileWalkFaster" type="button" aria-label="Aumentar velocidade">＋</button></div>
+        </div>
+      </div>
     </div>
     <div id="viewTabs" aria-label="Abas de vista"></div>
     <div id="legend" hidden></div>
@@ -453,6 +470,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <div id="cutPanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-cut"/></svg>Corte <button class="x" data-close="cutPanel" title="Fechar">✕</button></div>
         <div class="pb">
+          <div id="mobileCutPresets"><button data-cut-axis="2" type="button">Cortar em Z</button><button data-cut-axis="0" type="button">Cortar em X</button><button data-cut-axis="1" type="button">Cortar em Y</button></div>
           <div class="cutRow" data-axis="0"><label><input type="checkbox"> X</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
           <div class="cutRow" data-axis="1"><label><input type="checkbox"> Y</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>
           <div class="cutRow" data-axis="2"><label><input type="checkbox"> Z</label><input type="range" class="lo" min="0" max="1000" value="0"><input type="range" class="hi" min="0" max="1000" value="1000"></div>

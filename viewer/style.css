@@ -365,7 +365,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 @media (max-width: 1180px) { .tb span { display: none; } .tb { min-width: 38px; height: 38px; } #bar1 { min-height: 48px; } .panel { top: 110px; } }
 
 /* Small touch screens keep the model in view and put the frequent actions near the thumb. */
-#mobileBar, #mobileViewChoices, #mobileSideHead, #mobileQuickFilter, #mobileTreeActions, #mobileSideBackdrop { display: none; }
+#mobileBar, #mobileViewChoices, #mobileSideHead, #mobileQuickFilter, #mobileTreeActions, #mobileSideBackdrop, #mobileWalkControls, #mobileCutPresets { display: none; }
 .mobile #app { --side-w: 0px; grid-template-columns: 0 minmax(0, 1fr); height: 100dvh; }
 .mobile #app #side { visibility: hidden; }
 .mobile #app.mobileSide { --side-w: 0px; }
@@ -414,6 +414,31 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile #mobileBar button { flex: 1; min-width: 0; min-height: 48px; display: flex; flex-direction: column; gap: 0;
   border: 0; background: none; font-size: 19px; line-height: 1; }
 .mobile #mobileBar button span { font-size: 10px; line-height: 1.4; }
+.mobile #view.mobileWalking #mobileBar { display: none; }
+.mobile #walkHint { display: none; }
+.mobile #mobileWalkControls:not([hidden]) { display: block; position: absolute; z-index: 12; left: 8px; right: 8px;
+  bottom: max(8px, env(safe-area-inset-bottom)); max-width: 390px; margin: auto; padding: 9px 12px 12px;
+  color: #fff; background: rgba(20, 24, 31, .9); border: 1px solid rgba(255,255,255,.2); border-radius: 14px;
+  box-shadow: var(--shadow-lg); touch-action: none; user-select: none; }
+.mobileWalkHead { display: flex; align-items: center; justify-content: space-between; }
+.mobileWalkHead button { min-height: 40px; }
+.mobile #mobileWalkControls p { margin: 2px 0 9px; font-size: 12px; color: #d7dce4; }
+.mobileWalkMove { display: flex; align-items: center; justify-content: space-around; gap: 10px; }
+.mobileWalkPad { display: grid; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 46px); gap: 3px; }
+.mobileWalkPad [data-walk="w"] { grid-column: 2; grid-row: 1; }
+.mobileWalkPad [data-walk="a"] { grid-column: 1; grid-row: 2; }
+.mobileWalkPad [data-walk="s"] { grid-column: 2; grid-row: 2; }
+.mobileWalkPad [data-walk="d"] { grid-column: 3; grid-row: 2; }
+.mobileWalkExtra { display: grid; gap: 7px; }
+.mobileWalkExtra > div { display: flex; align-items: center; gap: 4px; }
+.mobile #mobileWalkControls [data-walk] { min-width: 44px; min-height: 44px; font-size: 16px; }
+.mobile #mobileWalkControls [data-walk].on { background: var(--accent); color: #fff; }
+.mobileWalkExtra [data-walk] { flex: 1; font-size: 12px !important; }
+.mobileWalkExtra #mobileWalkSlower, .mobileWalkExtra #mobileWalkFaster { min-width: 36px; min-height: 40px; padding: 0 4px; }
+.mobileWalkExtra #mobileWalkSpeed { min-width: 45px; text-align: center; font-size: 11px; }
+.mobile #mobileCutPresets { display: flex; gap: 5px; margin-bottom: 10px; }
+.mobile #mobileCutPresets button { flex: 1; min-width: 0; min-height: 42px; padding: 4px; }
+.mobile #cutPanel .cutRow { min-height: 50px; }
 .mobile #mobileViewChoices:not([hidden]) { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; position: absolute;
   z-index: 11; right: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); width: min(270px, calc(100% - 16px));
   padding: 9px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); }
