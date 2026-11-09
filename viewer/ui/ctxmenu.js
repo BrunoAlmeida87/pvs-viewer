@@ -20,8 +20,13 @@ export function initContextMenu(app) {
     if (!app.selNodes.has(node)) app.select([node], "replace", { reveal: false });
     const nodes = [...app.selNodes];
     const items = providers.flatMap((fn) => { const r = fn(nodes, node) || []; return r.length ? ["-", ...r] : []; }).slice(1);
+    app.showMenu(e, nodes.length > 1 ? `${nodes.length} itens selecionados` : app.tree.names[node], items);
+  };
+  // any small menu at the mouse (same look), e.g. the right-click menu of a view tab
+  app.showMenu = (e, title, items) => {
+    e.preventDefault();
     if (!items.length) return;
-    menu.replaceChildren(el("div.cmTitle", { text: nodes.length > 1 ? `${nodes.length} itens selecionados` : app.tree.names[node] }));
+    menu.replaceChildren(el("div.cmTitle", { text: title }));
     for (const it of items) {
       if (it === "-") { if (menu.lastChild && !menu.lastChild.classList.contains("cmSep")) menu.append(el("div.cmSep")); continue; }
       if (it.header) { menu.append(el("div.cmHead", { text: it.header })); continue; }

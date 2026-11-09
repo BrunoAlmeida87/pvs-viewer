@@ -57,7 +57,7 @@ export function initViewTabs(app) {
       for (let p = 0; p < b.mask.length; p++) if (b.mask[p]) list.push(p);
       app.frameBox(app.partsBox(list));
     }
-    render();
+    if (bar.querySelectorAll(".vt").length === tabs.length) mark(); else render();
     app.emit("viewtab", i);
     save();
   }
@@ -89,10 +89,46 @@ export function initViewTabs(app) {
     if (i === cur) { leave(); tabs.splice(i, 1); enter(i - 1, false); }
     else { tabs.splice(i, 1); if (cur > i) cur--; render(); save(); }
   }
+  // rename in place: the name becomes a text box (Enter or clicking away saves, Esc cancels)
   function rename(i) {
     if (i === 0) return;
-    const n = prompt("Nome da vista", tabs[i].name)?.trim();
-    if (n) { tabs[i].name = n; render(); save(); }
+    const tab = bar.children[i], span = tab?.querySelector(".vtName");
+    if (!span || tab.querySelector("input")) return;
+    const input = el("input.vtEdit", { value: tabs[i].name, size: String(Math.max(6, tabs[i].name.length)) });
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      const n = input.value.trim();
+      if (ok && n) { tabs[i].name = n; save(); }
+      render();
+    };
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation(); // keyboard shortcuts of the viewer stay off while typing
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    for (const ev of ["click", "dblclick", "pointerdown"]) input.addEventListener(ev, (e) => e.stopPropagation());
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+  }
+  function duplicate(i) {
+    const t = tabs[i];
+    if (i === cur) { t.vis = app.partVisible.slice(); t.cam = app.getCamera(); }
+    const mask = t.mask ? t.mask.slice() : new Uint8Array(app.nParts).fill(1);
+    tabs.push({ name: t.name + " (cópia)", mask, vis: t.vis ? t.vis.slice() : null, cam: t.cam });
+    leave();
+    enter(tabs.length - 1, false);
+  }
+  function tabMenu(e, i) {
+    const items = i === 0
+      ? [{ label: "Duplicar como nova vista", onClick: () => duplicate(0) }]
+      : [{ label: "Renomear", onClick: () => { switchTo(i); rename(i); } },
+        { label: "Duplicar", onClick: () => duplicate(i) },
+        { label: "Fechar", onClick: () => close(i) }];
+    app.showMenu(e, tabs[i].name, items);
   }
 
   // in a tab, "Mostrar tudo" shows everything of that tab, not the whole model
@@ -103,16 +139,20 @@ export function initViewTabs(app) {
   };
 
   // ------------------------------------------------------------ tab bar
+  // switching tabs only moves the highlight: rebuilding the bar would swallow a double click
+  function mark() { [...bar.querySelectorAll(".vt")].forEach((b, i) => b.classList.toggle("on", i === cur)); }
   function render() {
     bar.replaceChildren();
     if (!app.tree) return;
     tabs.forEach((t, i) => {
       const b = el("div.vt" + (i === cur ? ".on" : ""), {
-        title: i === 0 ? "O modelo inteiro, como sempre" : `${fmt(count(t.mask))} peça(s) · duplo clique renomeia · botão do meio fecha`,
+        title: i === 0 ? "O modelo inteiro, como sempre" : `${fmt(count(t.mask))} peça(s) · duplo clique ou ✎ renomeia · botão direito: mais opções`,
         onclick: () => switchTo(i),
         ondblclick: () => rename(i),
         onauxclick: (e) => { if (e.button === 1) close(i); },
+        oncontextmenu: (e) => tabMenu(e, i),
       }, el("span.vtName", { text: t.name }), i > 0 ? el("span.vtN", { text: fmt(count(t.mask)) }) : null,
+      i > 0 ? el("button.vtEd", { text: "✎", title: "Renomear a vista", onclick: (e) => { e.stopPropagation(); switchTo(i); rename(i); } }) : null,
       i > 0 ? el("button.vtX", { text: "×", title: "Fechar a vista", onclick: (e) => { e.stopPropagation(); close(i); } }) : null);
       bar.append(b);
     });

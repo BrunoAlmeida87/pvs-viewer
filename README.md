@@ -92,8 +92,9 @@ Acima do modelo ficam as abas de vista: **Modelo** é o modelo inteiro, como sem
 itens incluídos nela, com a sua própria câmera, e lembra o que foi ocultado ou mostrado ali (em uma aba, “Mostrar
 tudo” mostra tudo daquela aba). **+** cria uma aba com as peças selecionadas. Clique com o botão direito num item
 da árvore, num resultado da Busca ou numa peça no 3D: **Incluir em “…”** / **Tirar de “…”** para qualquer aba,
-**Nova vista com isto**, além de enquadrar, isolar, ocultar e mostrar na árvore. Duplo clique renomeia a aba; × (ou
-o botão do meio) fecha. As abas ficam salvas no navegador, por modelo.
+**Nova vista com isto**, além de enquadrar, isolar, ocultar e mostrar na árvore. Para **renomear** uma aba: duplo
+clique nela, o ✎ ou o botão direito → Renomear (o nome vira um campo: Enter ou clicar fora salva, Esc cancela). O
+botão direito na aba também duplica e fecha; × (ou o botão do meio) fecha. As abas ficam salvas no navegador, por modelo.
 
 ### Animação de montagem (tecla V)
 Um roteiro de **etapas**; em cada etapa um conjunto de peças chega ao lugar (desliza de uma direção, de fora
