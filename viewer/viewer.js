@@ -15,6 +15,8 @@ import { initNeighbor } from "./ui/neighbor.js";
 import { initLayers } from "./ui/layers.js";
 import { initBigrama } from "./ui/bigrama.js";
 import { initAnim } from "./ui/anim.js";
+import { initContextMenu } from "./ui/ctxmenu.js";
+import { initViewTabs } from "./ui/viewtabs.js";
 import { addBigrama } from "./lib/bigrama.js";
 import { initTree } from "./ui/tree.js";
 import { initStructure } from "./ui/structure.js";
@@ -1227,15 +1229,15 @@ function frame(box, dir) {
   const center = box.getCenter(new THREE.Vector3());
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.01);
   if (!dir) dir = camera.position.clone().sub(controls.target).normalize();
-  if (dir.lengthSq() === 0) dir.set(1, -1, 0.8).normalize();
+  if (!(dir.lengthSq() > 0)) dir.set(1, -1, 0.8).normalize(); // also recovers from an invalid (NaN) camera
   const vh = THREE.MathUtils.degToRad(persp.fov / 2);
-  const hh = Math.atan(Math.tan(vh) * persp.aspect); // narrow views: the horizontal angle is the smaller one
+  const hh = Math.atan(Math.tan(vh) * (persp.aspect > 0 ? persp.aspect : 1)); // narrow views: the horizontal angle is the smaller one
   const dist = radius / Math.sin(Math.min(vh, hh));
   controls.target.copy(center);
   persp.position.copy(center).addScaledVector(dir, dist);
   ortho.position.copy(center).addScaledVector(dir, dist);
   ortho.zoom = 1;
-  orthoHalf = radius * 1.1 / Math.min(1, persp.aspect);
+  orthoHalf = radius * 1.1 / Math.min(1, persp.aspect > 0 ? persp.aspect : 1);
   persp.lookAt(center); ortho.lookAt(center);
   updateOrtho();
   controls.update();
@@ -1248,12 +1250,13 @@ app.cameraFor = function (box, dir) {
   const center = box.getCenter(new THREE.Vector3());
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.01);
   const d = dir ? new THREE.Vector3(...dir).normalize() : camera.position.clone().sub(controls.target).normalize();
-  if (d.lengthSq() === 0) d.set(1, -1, 0.8).normalize();
+  if (!(d.lengthSq() > 0)) d.set(1, -1, 0.8).normalize();
+  const asp = persp.aspect > 0 ? persp.aspect : 1; // a hidden view has no width
   const vh = THREE.MathUtils.degToRad(persp.fov / 2);
-  const hh = Math.atan(Math.tan(vh) * persp.aspect);
+  const hh = Math.atan(Math.tan(vh) * asp);
   const dist = radius / Math.sin(Math.min(vh, hh));
   return { ortho: camera === ortho, pos: center.clone().addScaledVector(d, dist).toArray(), target: center.toArray(),
-    half: radius * 1.1 / Math.min(1, persp.aspect), zoom: 1 };
+    half: radius * 1.1 / Math.min(1, asp), zoom: 1 };
 };
 app.partsBox = (parts) => partsBox(parts);
 
@@ -1416,7 +1419,7 @@ app.worldPerPixel = function (p) {
 };
 app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray(), target: controls.target.toArray(), half: orthoHalf, zoom: ortho.zoom });
 app.setCamera = function (c) {
-  if (!c) return;
+  if (!c || !c.pos?.every(Number.isFinite) || !c.target?.every(Number.isFinite)) return; // never take an invalid camera
   if (walk.on) setWalk(false);
   tween = null;
   if ((camera === ortho) !== !!c.ortho) setOrtho(!!c.ortho);
@@ -1996,7 +1999,9 @@ function showPerf(now, cpuMs, moving) {
 app.hidePerf = () => { $("#perf").hidden = true; };
 
 // ---------------------------------------------------------------- start
+initContextMenu(app);
 initTree(app);
+initViewTabs(app);
 initStructure(app);
 initSearch(app);
 initInfo(app);

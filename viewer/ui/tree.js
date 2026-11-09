@@ -6,17 +6,12 @@ export function initTree(app) {
   let kids = null;
   const rowOf = new Map();
   const expanded = new Set();
-  const exportAction = el("button", { text: "Exportar modelo 3D…" });
-  const contextMenu = el("div.treeContextMenu", null, exportAction);
-  contextMenu.hidden = true;
-  document.body.append(contextMenu);
-  let contextNode = -1;
-  exportAction.onclick = () => {
-    contextMenu.hidden = true;
-    if (contextNode >= 0) app.exportModelNode(contextNode);
-  };
-  document.addEventListener("pointerdown", (e) => { if (!contextMenu.contains(e.target)) contextMenu.hidden = true; });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") contextMenu.hidden = true; });
+  // right-click menu (ui/ctxmenu.js): export of the clicked item
+  app.addContextItems((nodes, node) => [{
+    label: "Exportar modelo 3D…", disabled: !app.canExportModel?.(),
+    title: !app.canExportModel?.() ? "Aguarde o modelo terminar de abrir" : node === 0 ? "Exportar o modelo inteiro" : "Exportar esta peça ou seção",
+    onClick: () => app.exportModelNode(node),
+  }]);
 
   // side tabs
   document.querySelectorAll("#side .tabs button").forEach((b) => {
@@ -57,17 +52,7 @@ export function initTree(app) {
     cb.addEventListener("click", (e) => { e.stopPropagation(); app.setVisible([node], cb.checked); });
     row.addEventListener("click", (e) => app.select([node], e.ctrlKey || e.metaKey ? "toggle" : "replace", { reveal: false }));
     row.addEventListener("dblclick", () => { if (kids[node]) toggle(node); app.frameNodes([node]); });
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      contextNode = node;
-      exportAction.disabled = !app.canExportModel?.();
-      exportAction.title = exportAction.disabled ? "Aguarde o modelo terminar de abrir" :
-        node === 0 ? "Exportar o modelo inteiro" : "Exportar esta peça ou seção";
-      contextMenu.hidden = false;
-      const r = contextMenu.getBoundingClientRect();
-      contextMenu.style.left = Math.min(e.clientX, window.innerWidth - r.width - 8) + "px";
-      contextMenu.style.top = Math.min(e.clientY, window.innerHeight - r.height - 8) + "px";
-    });
+    row.addEventListener("contextmenu", (e) => app.openContextMenu(e, node));
     return wrap;
   }
 

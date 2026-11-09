@@ -577,6 +577,7 @@ export function initAnim(app) {
     if (playing) pause(); else play();
   }, true);
 
+  app.on("viewtab-leave", () => { if (rec) stopRecording(true); deactivate(false); });
   app.on("model", () => {
     deactivate(false);
     prep = null;

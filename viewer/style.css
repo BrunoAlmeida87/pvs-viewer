@@ -102,6 +102,22 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #sideGrip:hover, #app.resizing #sideGrip { background: var(--accent); opacity: .5; }
 #app.resizing { cursor: col-resize; user-select: none; }
 #app.resizing #view { pointer-events: none; }
+/* view tabs (over the 3D view, right of the view cube) */
+#viewTabs { position: absolute; top: 8px; left: 116px; right: 12px; z-index: 5; display: flex; gap: 4px; align-items: center;
+  overflow-x: auto; scrollbar-width: thin; pointer-events: none; }
+#viewTabs:empty { display: none; }
+#viewTabs > * { pointer-events: auto; flex: none; }
+.vt { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 28px; padding: 0 6px 0 10px; border-radius: 8px; cursor: pointer;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; user-select: none; }
+.vt:hover { background: var(--panel); }
+.vt.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.vt .vtName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vt .vtN { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+.vt .vtX { border: 0; background: none; padding: 0 4px; height: 20px; color: var(--muted); font-size: 15px; line-height: 1; }
+.vt .vtX:hover { color: var(--text); background: var(--hover); }
+.vtAdd { width: 28px; height: 28px; padding: 0; border-radius: 8px; font-size: 16px; }
+.mobile #viewTabs { display: none; }
+
 /* assembly animation */
 #animPanel { width: 400px; }
 #animPanel h4 { margin: 12px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
@@ -144,7 +160,12 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #treeTab #tree { flex: 1; overflow: auto; padding: 4px 0 8px; user-select: none; }
 .treeContextMenu { position: fixed; z-index: 100; min-width: 205px; padding: 5px; background: var(--panel);
   border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); }
-.treeContextMenu button { display: flex; width: 100%; min-height: 36px; justify-content: flex-start; border: 0; }
+.treeContextMenu button { display: flex; width: 100%; min-height: 30px; justify-content: flex-start; border: 0; text-align: left; }
+.treeContextMenu { max-height: calc(100vh - 16px); overflow: auto; max-width: 340px; }
+.treeContextMenu .cmTitle { padding: 4px 8px 6px; font-weight: 650; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.treeContextMenu .cmHead { padding: 6px 8px 2px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+.treeContextMenu .cmSep { height: 1px; background: var(--border); margin: 4px 2px; }
+@media (pointer: coarse) { .treeContextMenu button { min-height: 40px; } }
 #setsTab { padding: 4px 12px 12px; }
 #setsTab h3 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
 

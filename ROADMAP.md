@@ -65,6 +65,7 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Animação de montagem: etapas que deslizam/surgem até o lugar, peças fixas, câmeras por etapa, geração de
   etapas seguindo o circuito, gravação em vídeo `.webm`
 - [x] Estrutura reorganizada exportada em `.pvs` (validado no Creo View Express) e em pasta convertida
+- [x] Abas de vista (cada uma com seus itens e câmera) e menu do botão direito na árvore, na Busca e no 3D
 
 Limitações conhecidas: a interferência é calculada na malha facetada, então peças encostadas com o mesmo
 diâmetro (tubo dentro de abraçadeira) podem aparecer como interferência; raio e folga na pasta convertida têm

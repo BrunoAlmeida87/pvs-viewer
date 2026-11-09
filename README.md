@@ -87,6 +87,14 @@ estavam, ir para “Peças fora dos grupos” ou ficar de fora.
 - **Exportar pasta convertida**: uma pasta nova no formato que o visualizador abre mais rápido, com a geometria
   copiada da pasta convertida aberta (Chrome/Edge ou aplicativo desktop).
 
+### Abas de vista
+Acima do modelo ficam as abas de vista: **Modelo** é o modelo inteiro, como sempre; cada outra aba mostra só os
+itens incluídos nela, com a sua própria câmera, e lembra o que foi ocultado ou mostrado ali (em uma aba, “Mostrar
+tudo” mostra tudo daquela aba). **+** cria uma aba com as peças selecionadas. Clique com o botão direito num item
+da árvore, num resultado da Busca ou numa peça no 3D: **Incluir em “…”** / **Tirar de “…”** para qualquer aba,
+**Nova vista com isto**, além de enquadrar, isolar, ocultar e mostrar na árvore. Duplo clique renomeia a aba; × (ou
+o botão do meio) fecha. As abas ficam salvas no navegador, por modelo.
+
 ### Animação de montagem (tecla V)
 Um roteiro de **etapas**; em cada etapa um conjunto de peças chega ao lugar (desliza de uma direção, de fora
 espalhadas ou da câmera; surge por transparência; ou aparece) e a câmera acompanha (enquadra a etapa, enquadra e gira,
