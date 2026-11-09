@@ -85,6 +85,29 @@ app.whenReady().then(() => {
     modelDir = input.filePaths[0];
     return { pvs, base: "model://local/", folder: target, input: input.filePaths[0] };
   });
+  // Reorganized structure saved as a converted folder: the same writing steps as a conversion.
+  ipcMain.handle("export-folder-begin", async (_event, folderName) => {
+    if (conversion) throw new Error("Já existe uma conversão ou exportação em andamento.");
+    const parent = await dialog.showOpenDialog(win, { title: "Onde salvar a pasta com a nova estrutura?", properties: ["openDirectory", "createDirectory"] });
+    if (parent.canceled) return null;
+    const target = path.join(parent.filePaths[0], String(folderName).replace(/[\\/:*?"<>|]/g, "_"));
+    if (fss.existsSync(target)) throw new Error("A pasta " + target + " já existe. Escolha outro local ou renomeie a pasta existente.");
+    const temporary = target + ".parcial";
+    if (fss.existsSync(temporary)) throw new Error("Já existe uma exportação parcial nesse destino (" + temporary + ").");
+    await fs.mkdir(path.join(temporary, "c"), { recursive: true });
+    conversion = { temporary, target };
+    return target;
+  });
+  // One file chosen by the user in a save dialog (reorganized .pvs, animation video).
+  ipcMain.handle("save-file", async (_event, suggestedName, data, filterName, extensions) => {
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: path.join(modelDir || app.getPath("documents"), String(suggestedName).replace(/[\\/]/g, "_")),
+      filters: [{ name: String(filterName), extensions: extensions.map(String) }],
+    });
+    if (result.canceled) return null;
+    await fs.writeFile(result.filePath, Buffer.from(data));
+    return result.filePath;
+  });
   ipcMain.handle("conversion-write", async (_event, name, data) => {
     if (!conversion || !/^(?:c\/\d{5}\.bin|tree\.json|items\.bin|parts\.bin|layers\.bin|pvsbox\.bin|chunks\.json)$/.test(name))
       throw new Error("Arquivo de conversão inválido.");

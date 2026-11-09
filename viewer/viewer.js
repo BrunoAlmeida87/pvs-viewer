@@ -14,6 +14,7 @@ import { initLayout } from "./ui/layout.js";
 import { initNeighbor } from "./ui/neighbor.js";
 import { initLayers } from "./ui/layers.js";
 import { initBigrama } from "./ui/bigrama.js";
+import { initAnim } from "./ui/anim.js";
 import { addBigrama } from "./lib/bigrama.js";
 import { initTree } from "./ui/tree.js";
 import { initStructure } from "./ui/structure.js";
@@ -555,6 +556,25 @@ function writeOffsets() {
   }
   offTex.needsUpdate = true;
 }
+
+// Per-part offsets set by another tool (the assembly animation): a Float32Array of 3 × nParts, or
+// null to give the parts back to the exploded view.
+app.setPartOffsets = function (off) {
+  if (!off) { partOffset = null; app.setExplode({}); return; }
+  partOffset = off;
+  writeOffsets();
+  shared.exploded.value = 1;
+  for (const c of chunks) { c.mesh.frustumCulled = c.meshT.frustumCulled = false; if (c.edges) c.edges.frustumCulled = false; }
+  requestRender();
+};
+// Cheap redraw after changing partVisible / partOpacity / partColor many times a second: no
+// "state" event (the tree and panels would re-render on every frame).
+app.refreshQuiet = function () {
+  writeItems(0, nItems);
+  itemTex.needsUpdate = true;
+  updateVisibility();
+  requestRender();
+};
 
 // Move groups of parts (level-N assemblies or single parts) away from the centre.
 app.setExplode = function (patch) {
@@ -1222,6 +1242,20 @@ function frame(box, dir) {
   requestRender();
 }
 app.frameNodes = (nodes) => frame(app.nodesBox(nodes));
+// The camera that frame() would set for a box, without moving to it ({pos, target, ortho, half, zoom}).
+app.cameraFor = function (box, dir) {
+  if (!box || box.isEmpty()) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.01);
+  const d = dir ? new THREE.Vector3(...dir).normalize() : camera.position.clone().sub(controls.target).normalize();
+  if (d.lengthSq() === 0) d.set(1, -1, 0.8).normalize();
+  const vh = THREE.MathUtils.degToRad(persp.fov / 2);
+  const hh = Math.atan(Math.tan(vh) * persp.aspect);
+  const dist = radius / Math.sin(Math.min(vh, hh));
+  return { ortho: camera === ortho, pos: center.clone().addScaledVector(d, dist).toArray(), target: center.toArray(),
+    half: radius * 1.1 / Math.min(1, persp.aspect), zoom: 1 };
+};
+app.partsBox = (parts) => partsBox(parts);
 
 let orthoHalf = 10;
 function updateOrtho() {
@@ -1399,6 +1433,15 @@ app.frameMinMax = (a, b) => frame(new THREE.Box3(new THREE.Vector3(...a), new TH
 app.partBoxes = () => partBox;
 app.modelBox = () => modelBox();
 app.scene = scene;
+app.canvas = renderer.domElement;
+app.setCubeVisible = (on) => { cube.visible = on && app.display.cube; requestRender(); };
+// Treat the next frames as camera movement (lower level of detail, as when orbiting): used by the
+// animation so that playback stays fluid on slower graphics cards.
+app.markMoving = () => { lastMove = performance.now(); };
+// What the model was read from: the original .pvs bytes (raw folder) or the converted folder.
+app.sourceInfo = () => !source ? null : source.kind === "raw"
+  ? { kind: "raw", pvs: source.m.pvs, name: source.m.name }
+  : { kind: "converted", src: source.src, meta: source.meta };
 
 // Geometry of one part in world coordinates {pos, idx, edges}, read again from the source
 // (chunk files of a converted folder, or the part's .ol file). Cached.
@@ -1858,6 +1901,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "n") $("#nbBtn").click();
   else if (k === "k") $("#layerBtn").click();
   else if (k === "b") $("#bgBtn").click();
+  else if (k === "v") $("#animBtn").click();
   else if (k === "p") app.togglePerf();
   else if (k === "escape") app.clearSelection();
 });
@@ -1963,6 +2007,7 @@ initDisplay(app);
 initNeighbor(app);
 initLayers(app);
 initBigrama(app);
+initAnim(app);
 initLayout(app);
 initRegions(app);
 initMeasure(app);

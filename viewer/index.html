@@ -32,7 +32,8 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     <symbol id="i-sphere" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="8.5" ry="3.2"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
     <symbol id="i-explode" viewBox="0 0 24 24"><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M4 4h4v4H4zM16 4h4v4h-4zM4 16h4v4H4zM16 16h4v4h-4z"/></symbol>
     <symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3.5 16.5L16.5 3.5l4 4-13 13z"/><path d="M7.5 12.5l2 2M10.5 9.5l2 2M13.5 6.5l2 2"/></symbol>
-    <symbol id="i-walk" viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2"/><path d="M10 21l2.5-6.5L15 17v4M12.5 14.5L11 9l-3.5 2v3.5M11 9l3 1.5 2.5 3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M10 9v6l5-3z"/></symbol>
+    <symbol id="i-walk"viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2"/><path d="M10 21l2.5-6.5L15 17v4M12.5 14.5L11 9l-3.5 2v3.5M11 9l3 1.5 2.5 3"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.5l9 4.8-9 4.8-9-4.8z"/><path d="M3 12.5l9 4.8 9-4.8M3 16.5l9 4.8 9-4.8"/></symbol>
     <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3.5l13.5 7.2-5.8 1.7-2.4 5.8z"/><path d="M13 13l5 5"/></symbol>
     <symbol id="i-focus" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="3" stroke-dasharray="3 2.5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1.5" fill="currentColor" fill-opacity=".25"/></symbol>
@@ -122,6 +123,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
       <button id="analysisBtn" class="tb" title="Comparar versões e verificar interferências"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
+      <button id="animBtn" class="tb" title="Animação de montagem: peças que aparecem ou deslizam até o lugar, etapa por etapa, com câmeras (V)"><svg><use href="#i-play"/></svg><span>Animação</span></button>
     </div>
 
     <div class="tg" aria-label="Seleção">
@@ -193,11 +195,23 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     <section id="treeTab" class="tab on"><div id="tree"></div></section>
     <section id="structureTab" class="tab">
       <div class="searchBox">
-        <p class="muted small">Selecione peças na árvore original e adicione a um grupo. A estrutura original permanece disponível.</p>
-        <div class="row2"><input id="groupName" placeholder="Nome do grupo"><button id="groupNew">Criar grupo</button></div>
+        <p class="muted small">Selecione peças na árvore original (ou pela Busca / Bigramas) e crie grupos com elas. Montagens que vão inteiras para um grupo mantêm suas submontagens. A estrutura original continua disponível.</p>
+        <div class="row2"><input id="groupName" placeholder="Nome do grupo"><button id="groupNew" title="Cria o grupo; se houver peças selecionadas, elas já entram nele">Criar grupo</button></div>
         <div class="row2"><button id="groupExport" title="Salva somente os grupos criados nesta aba, em JSON">Exportar grupos (JSON)</button><button id="groupImport">Importar estrutura</button></div>
         <button id="objExport">Exportar seleção em OBJ</button>
         <input id="groupFile" type="file" accept=".json,application/json" hidden>
+        <div class="expBox">
+          <b>Exportar a estrutura reorganizada</b>
+          <p class="hint">Os grupos entram no topo da árvore, antes das montagens originais.</p>
+          <div class="row2"><span>Peças fora dos grupos</span><select id="restMode" title="O que fazer com as peças que não estão em nenhum grupo">
+            <option value="keep">ficam onde estavam</option><option value="box">vão para “Peças fora dos grupos”</option><option value="drop">ficam de fora</option></select></div>
+          <div class="row2">
+            <button id="pvsExport" title="Novo arquivo .pvs com a estrutura reorganizada. Abre no Creo View e aqui; precisa ficar na mesma pasta dos arquivos .ol">Exportar PVS</button>
+            <button id="convExport" title="Nova pasta convertida (o formato que este visualizador abre mais rápido), com a geometria copiada da pasta aberta">Exportar pasta convertida</button>
+          </div>
+          <div id="expStatus" class="hint"></div>
+          <input id="pvsOrigFile" type="file" accept=".pvs" hidden>
+        </div>
       </div>
       <div id="groupList"></div>
     </section>
@@ -304,6 +318,47 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
           <div class="row2"><button id="layerAll">Mostrar todas</button><button id="layerNone">Ocultar todas</button><button id="layerDefault" title="Todas, menos a 99">Padrão</button></div>
           <div id="layerInfo" class="hint"></div>
           <div id="layerList"></div>
+        </div>
+      </div>
+      <div id="animPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-play"/></svg>Animação de montagem <button class="x" data-close="animPanel" title="Fechar (a vista volta ao que era)">✕</button></div>
+        <div class="pb">
+          <div class="row2"><select id="animSel" title="Animações deste modelo"></select><button id="animNew" title="Nova animação">Nova</button><button id="animMore" title="Renomear, duplicar, excluir, exportar ou importar">⋯</button></div>
+          <div id="animMoreMenu" class="miniMenu" hidden>
+            <button data-act="rename">Renomear</button><button data-act="dup">Duplicar</button><button data-act="del">Excluir</button>
+            <button data-act="export">Exportar (JSON)</button><button data-act="import">Importar (JSON)</button>
+          </div>
+          <input id="animFile" type="file" accept=".json,application/json" hidden>
+
+          <h4>Peças fixas <span class="hint">sempre no lugar, durante toda a animação</span></h4>
+          <div class="row2"><span id="animFixedN" class="muted"></span>
+            <select id="animFixedLook" title="Como as peças fixas aparecem"><option value="normal">normais</option><option value="ghost">transparentes</option><option value="gray">cinza claro</option></select></div>
+          <div class="row2"><button id="animFixedVis" title="As peças visíveis agora (menos as das etapas) passam a ser as fixas">Visíveis agora</button><button id="animFixedNear" title="Só as peças visíveis que ficam em volta das etapas (mais leve e mais fácil de ler)">Perto das etapas…</button></div>
+          <div class="row2"><button id="animFixedAdd">+ seleção</button><button id="animFixedSub">− seleção</button><button id="animFixedClr">Limpar</button></div>
+
+          <h4>Etapas</h4>
+          <div id="animSteps"></div>
+          <div class="row2"><button id="animAddSel" class="primary" title="Nova etapa com as peças selecionadas">+ Etapa com a seleção</button></div>
+          <div class="row2">
+            <button id="animGenKids" title="Uma etapa para cada item dentro da seleção (filhos na árvore)">Uma por filho</button>
+            <button id="animGenPath" title="Ordena a seleção seguindo o circuito (do ponto mais extremo, sempre para o vizinho mais próximo) e divide em trechos">Seguir o circuito…</button>
+          </div>
+          <div id="animEdit"></div>
+
+          <h4>Reprodução</h4>
+          <div class="row2 animPlay">
+            <button id="animPlay" class="primary" title="Reproduzir / pausar (espaço com o painel aberto)">▶</button>
+            <button id="animStop" title="Parar e voltar a vista ao que era">■</button>
+            <input type="range" id="animTime" min="0" max="1000" value="0" title="Arraste para ver qualquer instante">
+            <span id="animClock" class="muted">0:00</span>
+          </div>
+          <div class="row2">
+            <select id="animSpeed" title="Velocidade"><option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+            <label class="chk inl"><input type="checkbox" id="animCam" checked> câmeras da animação</label>
+            <label class="chk inl"><input type="checkbox" id="animLoop"> repetir</label>
+          </div>
+          <div class="row2"><button id="animStartCam" title="Grava a vista atual como o começo da animação">Gravar vista inicial</button><button id="animRec" title="Reproduz do início e salva um vídeo (.webm) do que aparece na tela">● Gravar vídeo</button></div>
+          <div id="animInfo" class="hint"></div>
         </div>
       </div>
       <div id="bgPanel" class="panel" hidden>

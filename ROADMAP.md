@@ -61,6 +61,10 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Camadas do Creo (lidas dos `.ol`), com a camada 99 (volumes de movimento) desligada por padrão
 - [x] Novo layout: barra com ícones, tema claro/escuro, barra lateral recolhível, painéis arrastáveis
 - [x] GitHub Actions gerando o executável (artefato a cada push, Release a cada tag `v*`), ícone do aplicativo
+- [x] Bigramas (sistema do código `LPR-XX…`) como propriedade, painel de filtro e filtro na Busca
+- [x] Animação de montagem: etapas que deslizam/surgem até o lugar, peças fixas, câmeras por etapa, geração de
+  etapas seguindo o circuito, gravação em vídeo `.webm`
+- [x] Estrutura reorganizada exportada em `.pvs` (validado no Creo View Express) e em pasta convertida
 
 Limitações conhecidas: a interferência é calculada na malha facetada, então peças encostadas com o mesmo
 diâmetro (tubo dentro de abraçadeira) podem aparecer como interferência; raio e folga na pasta convertida têm

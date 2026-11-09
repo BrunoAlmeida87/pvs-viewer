@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld("desktop", {
   conversionBegin: () => ipcRenderer.invoke("conversion-begin"),
   conversionWrite: (name, data) => ipcRenderer.invoke("conversion-write", name, data),
   conversionFinish: () => ipcRenderer.invoke("conversion-finish"),
+  exportFolderBegin: (name) => ipcRenderer.invoke("export-folder-begin", name),
+  saveFile: (name, data, filterName, extensions) => ipcRenderer.invoke("save-file", name, data, filterName, extensions),
   conversionCancel: () => ipcRenderer.invoke("conversion-cancel"),
   mobileExport: (parts) => ipcRenderer.invoke("mobile-export", parts),
   objBegin: (name) => ipcRenderer.invoke("obj-begin", name),

@@ -57,6 +57,32 @@ export function download(name, text, type = "text/csv;charset=utf-8") {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
+// Save binary data where the user chooses: the desktop app's save dialog, the browser's file picker
+// (Chrome / Edge, starting in `startIn` when given) or an ordinary download. Returns a short
+// description of where it went, or null when cancelled.
+export async function saveBytes(name, data, { description, mime, ext, startIn } = {}) {
+  if (window.desktop?.saveFile) return window.desktop.saveFile(name, data, description, [ext]);
+  if (window.showSaveFilePicker) {
+    try {
+      const opts = { suggestedName: name, types: [{ description, accept: { [mime]: ["." + ext] } }] };
+      if (startIn) opts.startIn = startIn;
+      const h = await window.showSaveFilePicker(opts);
+      const w = await h.createWritable();
+      await w.write(data);
+      await w.close();
+      return h.name;
+    } catch (e) {
+      if (e.name === "AbortError") return null;
+      if (e.name !== "SecurityError" && e.name !== "TypeError") throw e; // not allowed here: download instead
+    }
+  }
+  const a = el("a", { href: URL.createObjectURL(new Blob([data], { type: mime })), download: name });
+  document.body.append(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  return "Downloads/" + name;
+}
+
 // CSV with ";" (opens as columns in Excel pt-BR).
 export function csv(rows) {
   const q = (v) => {

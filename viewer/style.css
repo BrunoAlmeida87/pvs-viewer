@@ -102,6 +102,34 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #sideGrip:hover, #app.resizing #sideGrip { background: var(--accent); opacity: .5; }
 #app.resizing { cursor: col-resize; user-select: none; }
 #app.resizing #view { pointer-events: none; }
+/* assembly animation */
+#animPanel { width: 400px; }
+#animPanel h4 { margin: 12px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+#animPanel h4 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0 0 0 4px; }
+#animPanel .row2 > span.muted { flex: 1; }
+#animSel { flex: 1; min-width: 0; }
+.miniMenu { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); }
+.miniMenu button { padding: 2px 8px; font-size: 12px; }
+#animSteps { max-height: 210px; overflow: auto; margin-top: 4px; border: 1px solid var(--border); border-radius: 8px; }
+#animSteps:empty { display: none; }
+.aStep { display: flex; align-items: center; gap: 6px; padding: 3px 6px; cursor: pointer; border-left: 3px solid transparent; }
+.aStep:hover { background: var(--hover); }
+.aStep.on { background: var(--sel); border-left-color: var(--sel-line); }
+.aStep.now { border-left-color: var(--accent); }
+.aStep .n { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.6em; text-align: right; }
+.aStep .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aStep .sum { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.aStep button { padding: 0 5px; font-size: 11px; }
+#animEdit:not(:empty) { margin-top: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel2); }
+#animEdit .row2 > span { flex: none; min-width: 74px; color: var(--muted); }
+#animEdit input[type=number] { width: 64px; flex: none; }
+#animEdit input[type=color] { width: 34px; height: 24px; padding: 0 2px; flex: none; }
+.animPlay input[type=range] { flex: 1; min-width: 0; }
+.animPlay button { min-width: 34px; }
+#animClock { font-variant-numeric: tabular-nums; min-width: 78px; text-align: right; }
+.chk.inl { margin: 0; flex: none; }
+.expBox { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.expBox .row2 > span { flex: none; font-size: 12px; }
 .chk { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; cursor: pointer; }
 .tabs { display: flex; gap: 2px; padding: 8px 8px 0; border-bottom: 1px solid var(--border); flex: none; }
 .tabs button { flex: 1; gap: 6px; border: 0; border-bottom: 2px solid transparent; border-radius: 6px 6px 0 0; background: none; color: var(--muted); padding: 7px 6px 8px; }

@@ -76,6 +76,31 @@ mover grupos para dentro de outros grupos e salvar ou importar a organização e
 fica guardada localmente para o mesmo modelo. Nessa aba, **Exportar seleção em OBJ** grava as malhas das peças
 selecionadas em coordenadas do modelo (metros). O OBJ contém triângulos, sem superfícies CAD editáveis.
 **Exportar grupos (JSON)** salva apenas a organização criada nessa aba, sem geometria 3D.
+**Criar grupo** já coloca no grupo as peças que estiverem selecionadas.
+
+**Exportar a estrutura reorganizada** gera a árvore nova: os grupos no topo, antes das montagens originais; uma
+montagem que foi inteira para um grupo leva junto as suas submontagens; as peças fora dos grupos podem ficar onde
+estavam, ir para “Peças fora dos grupos” ou ficar de fora.
+- **Exportar PVS**: um `.pvs` novo, que o Creo View e este visualizador abrem. Nada do original se perde (nomes,
+  propriedades, caixas, miniaturas): só muda quem está dentro de quem. Ele aponta para os mesmos `.ol`, então precisa
+  ficar na mesma pasta deles. Com uma pasta convertida aberta, o visualizador pede o `.pvs` original.
+- **Exportar pasta convertida**: uma pasta nova no formato que o visualizador abre mais rápido, com a geometria
+  copiada da pasta convertida aberta (Chrome/Edge ou aplicativo desktop).
+
+### Animação de montagem (tecla V)
+Um roteiro de **etapas**; em cada etapa um conjunto de peças chega ao lugar (desliza de uma direção, de fora
+espalhadas ou da câmera; surge por transparência; ou aparece) e a câmera acompanha (enquadra a etapa, enquadra e gira,
+mantém, vai para uma vista gravada ou mostra tudo). As **peças fixas** ficam no lugar o tempo todo, normais,
+transparentes ou em cinza: “Visíveis agora” usa o que está na tela; “Perto das etapas…” só o que fica em volta delas
+(mais leve e mais fácil de ler).
+- **+ Etapa com a seleção**, **Uma por filho** (cada item dentro da montagem selecionada vira uma etapa) e
+  **Seguir o circuito…**: ordena a seleção pelo caminho (do ponto mais extremo, sempre para o vizinho mais próximo),
+  agrupando as peças de um mesmo equipamento, e divide em trechos que chegam peça após peça — por exemplo, selecione
+  um bigrama em Bigramas → Selec. e gere a montagem do sistema.
+- Clicar numa etapa mostra o modelo no momento em que ela termina; a barra de tempo mostra qualquer instante;
+  espaço reproduz/pausa; velocidade, repetir e “câmeras da animação” (desligado, a câmera fica livre).
+- **Gravar vídeo** reproduz do início e salva um `.webm` do que aparece na tela (em tempo real: numa placa de vídeo
+  lenta, use menos peças fixas). Várias animações por modelo, salvas no navegador e exportáveis em JSON.
 
 Os modelos (`viewer/data/`) não vão para o repositório (`.gitignore`). Three.js e fflate ficam em
 `viewer/vendor/`, então o visualizador funciona sem internet depois de aberto.

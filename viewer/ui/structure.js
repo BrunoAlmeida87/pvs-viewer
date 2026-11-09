@@ -1,6 +1,8 @@
 // A user-owned hierarchy of part IDs, independent of the read-only PVS tree.
-import { $, el, fmt, store } from "./util.js";
+import { $, el, fmt, store, saveBytes } from "./util.js";
 import { exportOBJ } from "../lib/obj.js";
+import { writePVS } from "../lib/pvswrite.js";
+import { buildSpec, writeConverted, REST_NAME } from "../lib/restructure.js";
 
 export function initStructure(app) {
   let groups = [];
@@ -106,9 +108,109 @@ export function initStructure(app) {
   $("#groupNew").onclick = () => {
     const name = $("#groupName").value.trim();
     if (!name || !app.tree) return;
-    groups.push({ id: Math.max(0, ...groups.map((g) => g.id)) + 1, name, parent: null, parts: [] });
+    // the selected parts go into the new group (and leave the group they were in)
+    const parts = selectedParts();
+    for (const other of groups) other.parts = other.parts.filter((p) => !parts.has(p));
+    groups.push({ id: Math.max(0, ...groups.map((g) => g.id)) + 1, name, parent: null, parts: [...parts] });
     $("#groupName").value = "";
     changed();
+  };
+  $("#groupName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#groupNew").click(); });
+
+  // ---- export of the reorganized structure (PVS or converted folder)
+  const expStatus = (t) => { $("#expStatus").textContent = t; };
+  const baseName = () => (app.title || "modelo").replace(/\.pvs$/i, "");
+  const spec = (rest) => buildSpec(app.tree, app.nParts, groups, { rest });
+  const needGroups = () => {
+    if (groups.length) return true;
+    expStatus("Crie ao menos um grupo antes de exportar.");
+    return false;
+  };
+
+  // the original .pvs: kept in memory for a .pvs folder; a converted folder does not have it
+  function originalPVS() {
+    const s = app.sourceInfo();
+    if (s?.kind === "raw") return Promise.resolve(s.pvs);
+    expStatus("A pasta convertida não guarda o .pvs: escolha o arquivo original (" + (s?.meta?.source || "o .pvs do modelo") + ").");
+    return new Promise((resolve) => {
+      const input = $("#pvsOrigFile");
+      input.value = "";
+      input.onchange = async () => { const f = input.files[0]; resolve(f ? await f.arrayBuffer() : null); };
+      input.click();
+    });
+  }
+
+  $("#pvsExport").onclick = async () => {
+    if (!app.tree || !needGroups()) return;
+    const btn = $("#pvsExport");
+    btn.disabled = true;
+    try {
+      const buf = await originalPVS();
+      if (!buf) { expStatus(""); return; }
+      expStatus("Gerando o PVS…");
+      await new Promise((r) => setTimeout(r, 30)); // let the message show
+      const { spec: s, restParts } = spec($("#restMode").value);
+      const { bytes, components, added } = writePVS(buf, s, app.tree.names);
+      const name = baseName() + "-reorganizado.pvs";
+      const where = await saveBytes(name, bytes, { description: "Estrutura Creo View", mime: "application/octet-stream", ext: "pvs", startIn: app.access?.dir });
+      if (!where) { expStatus(""); return; }
+      expStatus(`PVS salvo (${where}): ${fmt(components)} componentes, ${fmt(added)} grupo(s) novo(s)` +
+        ($("#restMode").value === "drop" ? `, ${fmt(restParts.length)} peça(s) fora dos grupos deixadas de fora` : "") +
+        ". Coloque-o na mesma pasta dos arquivos .ol para abrir.");
+    } catch (e) {
+      expStatus("Não foi possível exportar o PVS: " + e.message);
+    } finally { btn.disabled = false; }
+  };
+
+  $("#convExport").onclick = async () => {
+    if (!app.tree || !needGroups()) return;
+    const s = app.sourceInfo();
+    if (s?.kind !== "converted" || !(s.meta.format >= 2)) {
+      expStatus("Para gerar uma pasta convertida, abra o modelo convertido (a pasta com chunks.json). Com a pasta do .pvs aberta, use Exportar PVS.");
+      return;
+    }
+    const folderName = baseName() + "-reorganizado";
+    const btn = $("#convExport");
+    btn.disabled = true;
+    let write, finish, cancel;
+    try {
+      if (window.desktop?.exportFolderBegin) {
+        const target = await window.desktop.exportFolderBegin(folderName);
+        if (!target) return;
+        write = (n, b) => window.desktop.conversionWrite(n, b);
+        finish = async () => { await window.desktop.conversionFinish(); return target; };
+        cancel = () => window.desktop.conversionCancel();
+      } else if (window.showDirectoryPicker) {
+        const parent = await window.showDirectoryPicker({ id: "pvs-export", mode: "readwrite" });
+        let exists = true;
+        try { await parent.getDirectoryHandle(folderName); } catch { exists = false; }
+        if (exists) throw new Error(`a pasta “${folderName}” já existe ali. Escolha outro local ou renomeie a pasta existente.`);
+        const dir = await parent.getDirectoryHandle(folderName, { create: true });
+        const cdir = await dir.getDirectoryHandle("c", { create: true });
+        write = async (n, b) => {
+          const d = n.startsWith("c/") ? cdir : dir;
+          const w = await (await d.getFileHandle(n.replace(/^c\//, ""), { create: true })).createWritable();
+          await w.write(b); await w.close();
+        };
+        finish = async () => folderName;
+        cancel = async () => { try { await parent.removeEntry(folderName, { recursive: true }); } catch { /* leave it */ } };
+      } else {
+        throw new Error("este navegador não grava pastas. Use o Chrome, o Edge ou o aplicativo desktop.");
+      }
+      const mode = $("#restMode").value;
+      const { spec: sp, restParts } = spec(mode === "drop" ? "box" : mode);
+      try {
+        const r = await writeConverted(app.tree, sp, s.src, s.meta, write, {
+          title: folderName + ".pvs", hidden: mode === "drop" ? restParts : [],
+          progress: (k, n) => expStatus(`Copiando a geometria: ${fmt(k)} de ${fmt(n)} blocos…`),
+        });
+        const where = await finish();
+        expStatus(`Pasta salva: ${where} (${fmt(r.nodes)} nós, ${fmt(r.parts)} peças). Abra-a com o botão de abrir modelo.` +
+          (mode === "drop" ? " As peças fora dos grupos ficam ocultas, em “" + REST_NAME + "”." : ""));
+      } catch (e) { await cancel(); throw e; }
+    } catch (e) {
+      if (e.name !== "AbortError") expStatus("Não foi possível exportar a pasta: " + e.message);
+    } finally { btn.disabled = false; }
   };
   $("#groupExport").onclick = () => {
     if (!app.tree) return;
