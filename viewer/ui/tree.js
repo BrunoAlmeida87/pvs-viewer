@@ -3,6 +3,13 @@ import { $, el, fmt } from "./util.js";
 
 export function initTree(app) {
   const treeEl = $("#tree");
+  const mobile = document.documentElement.classList.contains("mobile");
+  $("#mobileTreeIsolate").onclick = () => {
+    if (!app.selNodes.size) return;
+    app.isolate([...app.selNodes]);
+    app.closeMobileSide();
+  };
+  $("#mobileTreeShowAll").onclick = () => { if (app.tree) app.showAll(); app.closeMobileSide(); };
   let kids = null;
   const rowOf = new Map();
   const expanded = new Set();
@@ -50,7 +57,7 @@ export function initTree(app) {
     if (app.selNodes.has(node)) row.classList.add("sel");
     tw.addEventListener("click", (e) => { e.stopPropagation(); toggle(node); });
     cb.addEventListener("click", (e) => { e.stopPropagation(); app.setVisible([node], cb.checked); });
-    row.addEventListener("click", (e) => app.select([node], e.ctrlKey || e.metaKey ? "toggle" : "replace", { reveal: false }));
+    row.addEventListener("click", (e) => app.select([node], mobile || e.ctrlKey || e.metaKey ? "toggle" : "replace", { reveal: false }));
     row.addEventListener("dblclick", () => { if (kids[node]) toggle(node); app.frameNodes([node]); });
     row.addEventListener("contextmenu", (e) => app.openContextMenu(e, node));
     return wrap;
@@ -97,6 +104,9 @@ export function initTree(app) {
   app.on("state", () => { for (const r of rowOf.values()) setCheck(r); });
   app.on("selection", ({ reveal }) => {
     for (const [n, r] of rowOf) r.classList.toggle("sel", app.selNodes.has(n));
+    const count = app.selNodes.size;
+    $("#mobileTreeSelection").textContent = count ? `${fmt(count)} sistema(s) ou peça(s) selecionado(s).` : "Toque em sistemas ou peças para selecionar.";
+    $("#mobileTreeIsolate").disabled = count === 0;
     if (reveal && app.focus >= 0 && app.selNodes.size === 1) app.revealNode(app.focus);
   });
 }

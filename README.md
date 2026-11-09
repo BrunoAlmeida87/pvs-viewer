@@ -20,8 +20,11 @@ No celular, **Prévia geral** carrega primeiro até cerca de 2,5 milhões de tri
 o restante continua disponível em **Carregar**. Isso acelera a primeira visualização, mas a prévia não mostra
 todas as peças. Para ver uma área completa, escolha a seção correspondente e carregue-a depois.
 Um dedo gira e toca para selecionar; dois dedos aproximam, afastam e deslocam. A barra inferior oferece
-enquadramento, acesso à árvore e vistas isométrica, frontal, lateral e superior. Em **Vistas**, há projeção
-ortográfica, vistas salvas, isolamento da seleção e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por
+enquadramento, **Peças**, **Filtrar** e vistas isométrica, frontal, lateral e superior. O painel **Peças** fecha
+no botão ✕ ou tocando fora dele. Na árvore, toque em vários sistemas ou peças e use **Mostrar seleção**.
+Em **Filtrar**, busque pelo nome, escolha sistemas ou peças e use **Mostrar só resultados**, **Ocultar resultados**
+ou **Mostrar tudo**. A busca avançada continua disponível no mesmo painel. Em **Vistas**, há projeção
+ortográfica, vistas salvas, enquadramento da seleção, isolamento e modo de arestas. Esta versão usa qualidade rápida e menos carregamentos simultâneos por
 padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem instalação offline.
 
 Para exportar um modelo 3D no computador, clique com o botão direito na **árvore original**: no nó principal

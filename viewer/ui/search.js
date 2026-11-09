@@ -15,6 +15,10 @@ export function initSearch(app) {
     $("#results").innerHTML = "";
     $("#qActions").hidden = true;
     app.lastResults = [];
+    $("#mobileFilterText").value = "";
+    $("#mobileFilterHint").textContent = "Busque pelo nome para filtrar a visualização.";
+    $("#mobileFilterOnly").disabled = true;
+    $("#mobileFilterHide").disabled = true;
   });
 
   // bigrama drop-down, ready to pick from (the list comes from the Bigramas panel module)
@@ -28,6 +32,49 @@ export function initSearch(app) {
     }
     sel.disabled = sel.options.length < 2;
   });
+  function clearQuickResults() {
+    app.lastResults = [];
+    $("#results").innerHTML = "";
+    $("#qActions").hidden = true;
+    $("#mobileFilterOnly").disabled = true;
+    $("#mobileFilterHide").disabled = true;
+    $("#mobileFilterHint").textContent = "Toque em Buscar para atualizar os resultados.";
+  }
+  $("#mobileFilterText").addEventListener("input", clearQuickResults);
+  $("#mobileFilterScope").addEventListener("change", clearQuickResults);
+  $("#mobileFilterText").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); quickSearch(); $("#mobileFilterText").blur(); }
+  });
+  $("#mobileFilterRun").onclick = quickSearch;
+  function quickSearch() {
+    const term = $("#mobileFilterText").value.trim();
+    if (!app.tree || !term) {
+      clearQuickResults();
+      $("#mobileFilterHint").textContent = app.tree ? "Digite um nome para buscar." : "Abra um modelo para buscar.";
+      return;
+    }
+    $("#q").value = term;
+    $("#qScope").value = $("#mobileFilterScope").value;
+    $("#qBg").value = "";
+    $("#qProps").checked = false;
+    run();
+  }
+  $("#mobileFilterOnly").onclick = () => {
+    if (!app.lastResults.length) return;
+    app.isolate(app.lastResults);
+    app.closeMobileSide();
+  };
+  $("#mobileFilterHide").onclick = () => {
+    if (!app.lastResults.length) return;
+    app.setVisible(app.lastResults, false);
+    app.closeMobileSide();
+  };
+  $("#mobileFilterAll").onclick = () => { if (app.tree) app.showAll(); app.closeMobileSide(); };
+  $("#mobileAdvancedSearch").onclick = () => {
+    const open = $("#searchTab").classList.toggle("advancedSearch");
+    $("#mobileAdvancedSearch").setAttribute("aria-expanded", String(open));
+    $("#mobileAdvancedSearch").textContent = open ? "Busca avançada ▴" : "Busca avançada ▾";
+  };
 
   $("#qRun").onclick = run;
   $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
@@ -83,6 +130,9 @@ export function initSearch(app) {
     const parts = app.leafNodes(hits).length;
     $("#qActions").hidden = false;
     $("#qCount").textContent = `${fmt(hits.length)} resultado(s) · ${fmt(parts)} peça(s)` + (hits.length > MAX_ROWS ? ` · mostrando ${fmt(MAX_ROWS)}` : "");
+    $("#mobileFilterHint").textContent = hits.length ? `${fmt(hits.length)} resultado(s) encontrado(s). Escolha o que mostrar.` : "Nenhum resultado. Tente outro nome ou tipo.";
+    $("#mobileFilterOnly").disabled = hits.length === 0;
+    $("#mobileFilterHide").disabled = hits.length === 0;
     const res = $("#results");
     res.innerHTML = "";
     for (const n of hits.slice(0, MAX_ROWS)) {

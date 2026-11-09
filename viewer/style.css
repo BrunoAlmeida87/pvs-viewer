@@ -365,15 +365,36 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 @media (max-width: 1180px) { .tb span { display: none; } .tb { min-width: 38px; height: 38px; } #bar1 { min-height: 48px; } .panel { top: 110px; } }
 
 /* Small touch screens keep the model in view and put the frequent actions near the thumb. */
-#mobileBar, #mobileViewChoices { display: none; }
+#mobileBar, #mobileViewChoices, #mobileSideHead, #mobileQuickFilter, #mobileTreeActions, #mobileSideBackdrop { display: none; }
 .mobile #app { --side-w: 0px; grid-template-columns: 0 minmax(0, 1fr); height: 100dvh; }
 .mobile #app #side { visibility: hidden; }
 .mobile #app.mobileSide { --side-w: 0px; }
+.mobile #mobileSideBackdrop:not([hidden]) { display: block; position: absolute; z-index: 27; inset: 54px 0 28px; background: rgba(0, 0, 0, .35); }
 .mobile #app.mobileSide #side { visibility: visible; position: absolute; z-index: 28; left: 0; top: 54px; bottom: 28px;
   width: min(90vw, 380px); box-shadow: var(--shadow-lg); }
+.mobile #sideGrip { display: none; }
+.mobile #mobileSideHead { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 6px 10px;
+  min-height: 48px; border-bottom: 1px solid var(--border); }
+.mobile #mobileSideClose { min-width: 40px; min-height: 40px; font-size: 18px; }
 .mobile #side .tabs button { min-height: 44px; }
+.mobile #side .tabs { overflow-x: auto; }
+.mobile #side .tabs button { flex: none; }
 .mobile #side .row { min-height: 36px; height: auto; }
 .mobile #side .row .tw { width: 28px; }
+.mobile #mobileTreeActions { display: block; flex: none; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.mobile #mobileTreeActions .row2 button { flex: 1; min-height: 44px; }
+.mobile #mobileQuickFilter { display: block; padding: 12px; border-bottom: 1px solid var(--border); }
+.mobile #mobileQuickFilter label { display: block; font-weight: 650; margin-bottom: 6px; }
+.mobile #mobileFilterText { width: 100%; min-height: 44px; }
+.mobile #mobileQuickFilter .row2 select, .mobile #mobileQuickFilter .row2 button { min-height: 44px; }
+.mobile #mobileFilterHint { margin-top: 8px; }
+.mobile .mobileFilterActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.mobile .mobileFilterActions button { min-height: 44px; white-space: normal; }
+.mobile #mobileFilterAll { grid-column: span 2; }
+.mobile #mobileAdvancedSearch { width: 100%; margin-top: 8px; min-height: 40px; }
+.mobile #searchTab .searchBox { display: none; }
+.mobile #searchTab.advancedSearch .searchBox { display: block; }
+.mobile #qActions .actions button { min-height: 40px; }
 .mobile #bar1 { flex-wrap: nowrap; min-height: 54px; height: 54px; overflow: hidden; padding: 2px 7px; }
 .mobile #bar1 .tg:not([aria-label="Modelo"]) { display: none; }
 .mobile #bar1 .brand { flex: 1; margin-right: 0; }

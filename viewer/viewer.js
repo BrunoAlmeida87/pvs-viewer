@@ -1774,16 +1774,36 @@ window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 $("#fit").onclick = () => fitAll();
 $("#zoomSel").onclick = () => { if (app.selNodes.size) app.frameNodes([...app.selNodes]); };
 $("#mobileFit").onclick = () => $("#fit").click();
-$("#mobileZoomSel").onclick = () => $("#zoomSel").click();
-$("#mobileTree").onclick = () => $("#app").classList.toggle("mobileSide");
+$("#mobileZoomSel").onclick = () => { $("#zoomSel").click(); $("#mobileViewChoices").hidden = true; };
+function setMobileSide(open, tab) {
+  $("#app").classList.toggle("mobileSide", open);
+  $("#mobileSideBackdrop").hidden = !open;
+  $("#mobileTree").setAttribute("aria-expanded", String(open));
+  $("#mobileFilter").setAttribute("aria-expanded", String(open && tab === "searchTab"));
+  if (open) {
+    if (tab) app.showTab(tab);
+    $("#mobileViewChoices").hidden = true;
+  }
+}
+app.closeMobileSide = () => setMobileSide(false);
+$("#mobileTree").onclick = () => setMobileSide(!$("#app").classList.contains("mobileSide"), "treeTab");
+$("#mobileFilter").onclick = () => {
+  setMobileSide(true, "searchTab");
+  $("#mobileFilterText").focus();
+};
+$("#mobileSideClose").onclick = app.closeMobileSide;
+$("#mobileSideBackdrop").onclick = app.closeMobileSide;
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !$("#app").classList.contains("mobileSide")) return;
+  e.stopPropagation();
+  app.closeMobileSide();
+}, true);
 $("#mobileMore").onclick = () => $("#loadMoreBtn").click();
 app.on("geometry", () => { $("#mobileMore").disabled = $("#loadMoreBtn").hidden; });
 $("#mobileViews").onclick = () => { $("#mobileViewChoices").hidden = !$("#mobileViewChoices").hidden; };
 $("#mobileOrtho").onclick = () => { $("#ortho").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileSaved").onclick = () => {
-  $("#app").classList.add("mobileSide");
-  document.querySelector('[data-tab="setsTab"]').click();
-  $("#mobileViewChoices").hidden = true;
+  setMobileSide(true, "setsTab");
 };
 $("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
 $("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };

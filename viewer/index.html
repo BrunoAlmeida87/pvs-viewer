@@ -184,15 +184,23 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     </div>
   </header>
 
+  <div id="mobileSideBackdrop" hidden></div>
   <aside id="side">
     <div id="sideGrip" title="Arraste para mudar a largura · duplo clique volta ao tamanho original"></div>
+    <div id="mobileSideHead"><strong>Explorar modelo</strong><button id="mobileSideClose" type="button" aria-label="Fechar painel">✕</button></div>
     <nav class="tabs">
       <button data-tab="treeTab" class="on"><svg><use href="#i-tree"/></svg>Árvore</button>
       <button data-tab="structureTab"><svg><use href="#i-stack"/></svg>Minha estrutura</button>
       <button data-tab="searchTab"><svg><use href="#i-search"/></svg>Busca</button>
       <button data-tab="setsTab"><svg><use href="#i-bookmark"/></svg>Vistas</button>
     </nav>
-    <section id="treeTab" class="tab on"><div id="tree"></div></section>
+    <section id="treeTab" class="tab on">
+      <div id="mobileTreeActions">
+        <span id="mobileTreeSelection">Toque em sistemas ou peças para selecionar.</span>
+        <div class="row2"><button id="mobileTreeIsolate" type="button" disabled>Mostrar seleção</button><button id="mobileTreeShowAll" type="button">Mostrar tudo</button></div>
+      </div>
+      <div id="tree"></div>
+    </section>
     <section id="structureTab" class="tab">
       <div class="searchBox">
         <p class="muted small">Selecione peças na árvore original (ou pela Busca / Bigramas) e crie grupos com elas. Montagens que vão inteiras para um grupo mantêm suas submontagens. A estrutura original continua disponível.</p>
@@ -216,6 +224,25 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <div id="groupList"></div>
     </section>
     <section id="searchTab" class="tab">
+      <div id="mobileQuickFilter">
+        <label for="mobileFilterText">Encontrar sistema ou peça</label>
+        <input id="mobileFilterText" type="search" placeholder="Digite parte do nome" autocomplete="off">
+        <div class="row2">
+          <select id="mobileFilterScope" aria-label="Tipo de resultado">
+            <option value="all">Sistemas e peças</option>
+            <option value="asm">Só sistemas</option>
+            <option value="parts">Só peças</option>
+          </select>
+          <button id="mobileFilterRun" class="primary" type="button">Buscar</button>
+        </div>
+        <div id="mobileFilterHint" class="muted small">Busque pelo nome para filtrar a visualização.</div>
+        <div class="mobileFilterActions">
+          <button id="mobileFilterOnly" type="button" disabled>Mostrar só resultados</button>
+          <button id="mobileFilterHide" type="button" disabled>Ocultar resultados</button>
+          <button id="mobileFilterAll" type="button">Mostrar tudo</button>
+        </div>
+        <button id="mobileAdvancedSearch" type="button" aria-expanded="false">Busca avançada ▾</button>
+      </div>
       <div class="searchBox">
         <input id="q" placeholder="Buscar na estrutura… (texto, ou /regex/)" autocomplete="off">
         <div class="row2">
@@ -279,7 +306,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     <nav id="mobileBar" aria-label="Controles de visualização">
       <button id="mobileTree" title="Árvore e vistas salvas">☰ <span>Peças</span></button>
       <button id="mobileFit" title="Enquadrar modelo">▣ <span>Enquadrar</span></button>
-      <button id="mobileZoomSel" title="Enquadrar seleção">⌕ <span>Seleção</span></button>
+      <button id="mobileFilter" title="Filtrar sistemas e peças">⌕ <span>Filtrar</span></button>
       <button id="mobileViews" title="Abrir vistas">◈ <span>Vistas</span></button>
       <button id="mobileMore" title="Carregar mais seções" disabled>＋ <span>Carregar</span></button>
     </nav>
@@ -287,6 +314,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button data-view="iso">Isométrica</button><button data-view="front">Frente</button>
       <button data-view="side">Lado</button><button data-view="top">Topo</button>
       <button id="mobileOrtho">Ortográfica</button><button id="mobileSaved">Vistas salvas</button>
+      <button id="mobileZoomSel">Enquadrar seleção</button>
       <button id="mobileIsolate">Isolar seleção</button><button id="mobileShowAll">Mostrar tudo</button>
       <button id="mobileEdges">Arestas</button>
       <button id="mobileExport" hidden>Exportar modelo</button>
