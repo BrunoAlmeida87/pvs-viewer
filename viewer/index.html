@@ -321,21 +321,29 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button id="mobileExport" hidden>Exportar modelo</button>
     </div>
     <div id="mobileWalkControls" hidden aria-label="Navegação em perspectiva">
-      <div class="mobileWalkHead"><strong>Explorar por dentro</strong><button id="mobileWalkExit" type="button">Sair</button></div>
-      <p>Arraste a imagem para olhar ao redor. Segure uma seta para se mover.</p>
+      <div class="mobileWalkHead"><strong>Visão interna</strong><button id="mobileWalkExit" type="button">Sair</button></div>
+      <p id="mobileWalkGuide">Arraste a imagem para olhar ao redor. Segure as setas para andar ou olhar.</p>
+      <button id="mobileWalkPlace" type="button">Definir posição no modelo</button>
       <div class="mobileWalkMove">
-        <div class="mobileWalkPad" aria-label="Mover no plano">
+        <div class="mobileWalkGroup"><span>Andar</span><div class="mobileWalkPad" aria-label="Mover no plano">
           <button data-walk="w" type="button" aria-label="Avançar">↑</button>
           <button data-walk="a" type="button" aria-label="Mover para a esquerda">←</button>
           <button data-walk="s" type="button" aria-label="Recuar">↓</button>
           <button data-walk="d" type="button" aria-label="Mover para a direita">→</button>
-        </div>
-        <div class="mobileWalkExtra">
-          <div><button data-walk="e" type="button">Subir</button><button data-walk="q" type="button">Descer</button></div>
-          <div><button id="mobileWalkSlower" type="button" aria-label="Diminuir velocidade">−</button><span id="mobileWalkSpeed"></span><button id="mobileWalkFaster" type="button" aria-label="Aumentar velocidade">＋</button></div>
-        </div>
+        </div></div>
+        <div class="mobileWalkGroup"><span>Olhar</span><div class="mobileLookPad" aria-label="Girar a visão">
+          <button data-look="up" type="button" aria-label="Olhar para cima">↑</button>
+          <button data-look="left" type="button" aria-label="Olhar para a esquerda">←</button>
+          <button data-look="down" type="button" aria-label="Olhar para baixo">↓</button>
+          <button data-look="right" type="button" aria-label="Olhar para a direita">→</button>
+        </div></div>
+      </div>
+      <div class="mobileWalkExtra">
+        <div><button data-walk="e" type="button">Subir</button><button data-walk="q" type="button">Descer</button></div>
+        <div><button id="mobileWalkSlower" type="button" aria-label="Diminuir velocidade">−</button><span id="mobileWalkSpeed"></span><button id="mobileWalkFaster" type="button" aria-label="Aumentar velocidade">＋</button></div>
       </div>
     </div>
+    <div id="mobileWalkAim" hidden aria-hidden="true">＋</div>
     <div id="viewTabs" aria-label="Abas de vista"></div>
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>

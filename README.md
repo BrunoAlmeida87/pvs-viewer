@@ -26,10 +26,11 @@ Em **Filtrar**, busque pelo nome, escolha sistemas ou peças e use **Mostrar só
 ou **Mostrar tudo**. A busca avançada continua disponível no mesmo painel. Em **Vistas**, há projeção
 ortográfica, vistas salvas, enquadramento da seleção, isolamento e modo de arestas. No mesmo menu, **Corte**
 abre os planos X/Y/Z; os botões de corte rápido deixam metade do modelo visível, e os controles deslizantes
-ajustam os limites. **Explorar por dentro** usa perspectiva: arraste a imagem para virar o olhar a partir da
-posição da câmera, segure as setas para andar, use **Subir/Descer** para mudar a altura e **−/＋** para ajustar
-a velocidade. **Sair** retorna aos controles normais. Posicione a vista perto da área desejada antes de entrar;
-esta navegação ainda não tem colisão com as peças. Esta versão usa qualidade rápida e menos carregamentos
+ajustam os limites. **Explorar por dentro** usa perspectiva. Toque em **Definir posição no modelo** e depois
+numa superfície visível para colocar a câmera perto do ponto, a 1,6 m de altura. Arraste a imagem ou segure as
+setas **Olhar** para virar a visão a partir da posição da câmera. As setas **Andar** deslocam a câmera;
+**Subir/Descer** mudam a altura e **−/＋** ajustam a velocidade. **Sair** retorna aos controles normais.
+Esta navegação ainda não tem colisão com as peças. Esta versão usa qualidade rápida e menos carregamentos
 simultâneos por padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem
 instalação offline.
 

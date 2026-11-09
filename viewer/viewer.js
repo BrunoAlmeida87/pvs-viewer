@@ -1621,7 +1621,7 @@ view.addEventListener("pointerdown", (e) => {
 }, true);
 window.addEventListener("pointermove", (e) => {
   if (box) updateBox(e);
-  if (rot && rot.id === e.pointerId && touches.size < 2) dragRotate(e);
+  if (rot && rot.id === e.pointerId && touches.size < 2 && !(walk.on && walk.placing)) dragRotate(e);
 });
 window.addEventListener("pointerup", (e) => {
   if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
@@ -1650,6 +1650,12 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
   if (!down || down.id !== e.pointerId || touches.size > 1 || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > (e.pointerType === "touch" ? 9 : 4) || e.button !== 0) return;
+  if (walk.on && walk.placing) {
+    const point = pickPoint(e.clientX, e.clientY);
+    if (point) placeWalkAt(point);
+    else $("#mobileWalkGuide").textContent = "Toque numa superfície visível do modelo para definir a posição.";
+    return;
+  }
   if (app.tool) { app.tool(app.pick(e.clientX, e.clientY), e); return; }
   const node = pickNode(e.clientX, e.clientY);
   if (e.altKey && app.focus >= 0) { app.select([app.tree.parent[app.focus]], "replace"); return; }
@@ -1710,12 +1716,39 @@ function dragRotate(e) {
 }
 
 // ---------------------------------------------------------------- walk mode
-const walk = { on: false, keys: new Set(), touch: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0 };
+const walk = { on: false, placing: false, keys: new Set(), touch: new Set(), look: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0 };
 const walkPointers = new Map();
+const lookPointers = new Map();
 function syncWalkTouch() {
   walk.touch.clear();
   for (const direction of walkPointers.values()) walk.touch.add(direction);
   document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => button.classList.toggle("on", walk.touch.has(button.dataset.walk)));
+}
+function syncWalkLook() {
+  walk.look.clear();
+  for (const direction of lookPointers.values()) walk.look.add(direction);
+  document.querySelectorAll("#mobileWalkControls [data-look]").forEach((button) => button.classList.toggle("on", walk.look.has(button.dataset.look)));
+}
+function setWalkPlacing(on, message) {
+  walk.placing = on;
+  $("#mobileWalkPlace").classList.toggle("on", on);
+  $("#mobileWalkPlace").textContent = on ? "Cancelar posição" : "Definir posição no modelo";
+  $("#mobileWalkGuide").textContent = message || (on
+    ? "Toque numa superfície visível do modelo para entrar nesse ponto."
+    : "Arraste a imagem para olhar ao redor. Segure as setas para andar ou olhar.");
+  $("#mobileWalkAim").hidden = !walk.on || on;
+}
+function placeWalkAt(point) {
+  const forward = new THREE.Vector3(Math.cos(walk.yaw), Math.sin(walk.yaw), 0);
+  camera.position.copy(point).addScaledVector(forward, -0.35).addScaledVector(Z, 1.6);
+  walk.pitch = 0;
+  walk.speed = 1.5;
+  walkLook();
+  showWalkSpeed();
+  setWalkPlacing(false, "Posição definida. Arraste para olhar ou use os controles.");
+  userMoved = true;
+  lastMove = performance.now();
+  requestRender();
 }
 function showWalkSpeed() {
   $("#walkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
@@ -1731,7 +1764,10 @@ function setWalk(on) {
   walk.on = on;
   walk.keys.clear();
   walkPointers.clear();
+  lookPointers.clear();
   syncWalkTouch();
+  syncWalkLook();
+  setWalkPlacing(false);
   tween = null;
   if (on) {
     if (camera === ortho) setOrtho(false);
@@ -1739,7 +1775,7 @@ function setWalk(on) {
     walk.yaw = Math.atan2(f.y, f.x);
     walk.pitch = Math.asin(Math.max(-1, Math.min(1, f.z)));
     // initial speed: cross the current camera distance in about 8 seconds
-    walk.speed = Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
+    walk.speed = mobile ? 1.5 : Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
     controls.enabled = false;
     walkLook();
   } else {
@@ -1751,6 +1787,7 @@ function setWalk(on) {
   $("#walkBtn").classList.toggle("on", on);
   $("#walkHint").hidden = !on;
   $("#mobileWalkControls").hidden = !on;
+  $("#mobileWalkAim").hidden = !on;
   $("#view").classList.toggle("mobileWalking", on);
   $("#mobileWalkToggle").textContent = on ? "Sair da exploração" : "Explorar por dentro";
   cube.visible = on ? false : app.display.cube;
@@ -1758,6 +1795,7 @@ function setWalk(on) {
   requestRender();
 }
 app.setWalk = setWalk;
+$("#mobileWalkPlace").onclick = () => setWalkPlacing(!walk.placing);
 document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => {
   button.addEventListener("pointerdown", (e) => {
     if (!walk.on) return;
@@ -1778,13 +1816,44 @@ document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) =>
   button.addEventListener("lostpointercapture", release);
   button.addEventListener("contextmenu", (e) => e.preventDefault());
 });
+document.querySelectorAll("#mobileWalkControls [data-look]").forEach((button) => {
+  button.addEventListener("pointerdown", (e) => {
+    if (!walk.on) return;
+    e.preventDefault();
+    button.setPointerCapture(e.pointerId);
+    lookPointers.set(e.pointerId, button.dataset.look);
+    syncWalkLook();
+    walk.last = performance.now();
+    requestRender();
+  });
+  const release = (e) => {
+    if (!lookPointers.delete(e.pointerId)) return;
+    syncWalkLook();
+    e.preventDefault();
+  };
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+  button.addEventListener("contextmenu", (e) => e.preventDefault());
+});
 $("#mobileWalkExit").onclick = () => setWalk(false);
 $("#mobileWalkSlower").onclick = () => { walk.speed = Math.max(0.05, walk.speed / 1.5); showWalkSpeed(); };
 $("#mobileWalkFaster").onclick = () => { walk.speed = Math.min(100, walk.speed * 1.5); showWalkSpeed(); };
 function stepWalk(now) {
   const dt = Math.min(0.3, (now - walk.last) / 1000);
   walk.last = now;
-  if (!walk.on || (!walk.keys.size && !walk.touch.size)) return;
+  if (!walk.on) return;
+  if (walk.look.size) {
+    const turn = 1.4 * dt;
+    if (walk.look.has("left")) walk.yaw += turn;
+    if (walk.look.has("right")) walk.yaw -= turn;
+    if (walk.look.has("up")) walk.pitch = Math.min(1.55, walk.pitch + turn);
+    if (walk.look.has("down")) walk.pitch = Math.max(-1.55, walk.pitch - turn);
+    walkLook();
+    needRender = true;
+    lastMove = now;
+  }
+  if (!walk.keys.size && !walk.touch.size) return;
   const K = new Set([...walk.keys, ...walk.touch]), v = new THREE.Vector3();
   const f = new THREE.Vector3(Math.cos(walk.pitch) * Math.cos(walk.yaw), Math.cos(walk.pitch) * Math.sin(walk.yaw), Math.sin(walk.pitch));
   const r = new THREE.Vector3(Math.sin(walk.yaw), -Math.cos(walk.yaw), 0);
@@ -1806,7 +1875,7 @@ renderer.domElement.addEventListener("wheel", (e) => {
   walk.speed = Math.max(0.05, Math.min(100, walk.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
   showWalkSpeed();
 }, { passive: false });
-window.addEventListener("blur", () => { walk.keys.clear(); walkPointers.clear(); syncWalkTouch(); });
+window.addEventListener("blur", () => { walk.keys.clear(); walkPointers.clear(); lookPointers.clear(); syncWalkTouch(); syncWalkLook(); });
 window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 
 // ---------------------------------------------------------------- toolbar & keys
