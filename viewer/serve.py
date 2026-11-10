@@ -25,7 +25,8 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 class Handler(http.server.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"  # keep-alive: the viewer fetches thousands of files
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
-                      ".js": "text/javascript", ".json": "application/json", ".bin": "application/octet-stream"}
+                      ".js": "text/javascript", ".json": "application/json", ".bin": "application/octet-stream",
+                      ".webmanifest": "application/manifest+json"}
 
     def translate_path(self, path):
         if model_dir and path.startswith("/model/"):

@@ -67,7 +67,24 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Estrutura reorganizada exportada em `.pvs` (validado no Creo View Express) e em pasta convertida
 - [x] Abas de vista (cada uma com seus itens e câmera) e menu do botão direito na árvore, na Busca e no 3D
 
-Limitações conhecidas: a interferência é calculada na malha facetada, então peças encostadas com o mesmo
+## Navegação, celular e desempenho ✅
+- [x] Celular: modelo em tela cheia, barra de ícones, cartão da peça selecionada, ferramentas em folhas recolhíveis,
+  todas as ferramentas do PC disponíveis; tablet com a interface do PC
+- [x] Toque: dois toques enquadram, segurar abre o menu da peça, medição com mira e lupa
+- [x] Caminhada: posicionar no modelo, altura fixa sobre o piso, colisão, controles de toque
+- [x] Transições suaves, navegação pelo teclado, vista anterior / seguinte
+- [x] Barra do PC sempre em uma linha (menu “Mais”), realce e nome da peça sob o cursor, desfazer / refazer
+- [x] Desenho de frente para trás, clique que desenha só a região do cursor, qualidade automática adaptativa,
+  resolução plena com a câmera parada no celular
+- [x] Abrir o ZIP exportado sem extrair, modelos recentes, link direto para uma peça (`?peca=`)
+- [x] Instalável e offline (service worker + manifest)
+
+## A fazer
+- [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas
+  não as aplica. Falta um modelo de exemplo para confirmar a convenção da matriz antes de implementar.
+
+Limitações conhecidas: a colisão e o piso da caminhada são medidos no que está desenhado (peças ocultas ou cortadas
+não contam; grades vazadas contam como piso só onde há malha); a interferência é calculada na malha facetada, então peças encostadas com o mesmo
 diâmetro (tubo dentro de abraçadeira) podem aparecer como interferência; raio e folga na pasta convertida têm
 precisão de ~0,05 mm (posições quantizadas), exatos ao abrir a pasta original; a câmera das figuras do Creo
 ainda não é lida (a vista é enquadrada nos componentes visíveis).

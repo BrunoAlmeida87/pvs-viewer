@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("desktop", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   initialFolder: () => ipcRenderer.invoke("initial-folder"),
+  openFolder: (dir) => ipcRenderer.invoke("open-folder", dir),
   conversionBegin: () => ipcRenderer.invoke("conversion-begin"),
   conversionWrite: (name, data) => ipcRenderer.invoke("conversion-write", name, data),
   conversionFinish: () => ipcRenderer.invoke("conversion-finish"),

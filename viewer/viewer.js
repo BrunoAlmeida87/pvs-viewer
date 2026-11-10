@@ -25,15 +25,22 @@ import { initInfo } from "./ui/info.js";
 import { initSets } from "./ui/sets.js";
 import { initColors } from "./ui/colors.js";
 import { initTable } from "./ui/table.js";
-import { initDisplay } from "./ui/display.js?v=mobile-pov-2";
+import { initDisplay } from "./ui/display.js";
 import { $, status } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
 import { exportMobileZip } from "./lib/browser-mobile-export.js";
 import { exportRawModelZip } from "./lib/raw-model-export.js";
-import { previewChunks, completedParts } from "./lib/mobile-preview.js";
+import { previewChunks, completedParts, MOBILE_PREVIEW_TRIANGLES } from "./lib/mobile-preview.js";
+import { zipConverted } from "./lib/zipsrc.js";
+import { addRecent, listRecent, removeRecent, allow } from "./lib/recent.js";
+import { initMobile } from "./ui/mobile.js";
+import { initUndo } from "./ui/undo.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
+// "touch": finger as the main pointer (phones and tablets): lighter defaults. "mobile": a phone,
+// which also gets the compact full-screen layout (ui/mobile.js).
+const touch = document.documentElement.classList.contains("touch");
 const mobile = document.documentElement.classList.contains("mobile");
 
 // ---------------------------------------------------------------- app / events
@@ -47,7 +54,7 @@ export const app = {
   // display: style 0 shaded, 1 shaded + edges, 2 hidden line, 3 edges only, 4 x-ray
   // quality: "high" draws everything, "auto" skips sub-pixel parts (more while moving),
   // "fast" also drops edges/SSAO and resolution while moving
-  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: mobile ? "fast" : "auto", perf: false },
+  display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: "auto", perf: false, hover: true },
   tool: null, // when set, clicks in the 3D view go to tool(pickInfo, event) instead of selecting
   clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true },
   explode: { amount: 0, level: 1, selOnly: false },
@@ -55,9 +62,17 @@ export const app = {
 
 // ---------------------------------------------------------------- renderer
 const view = $("#view");
-const renderer = new THREE.WebGLRenderer({ antialias: !mobile, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2));
+const renderer = new THREE.WebGLRenderer({ antialias: !touch, alpha: true, powerPreference: "high-performance" });
+// At rest the view is drawn at up to 2 device pixels per CSS pixel (sharp on phone screens too);
+// while the camera moves the resolution may drop (see the quality presets in the render loop).
+const baseRatio = () => Math.min(window.devicePixelRatio || 1, 2);
+let curRatio = baseRatio();
+renderer.setPixelRatio(curRatio);
 renderer.setClearColor(0x000000, 0); // the background is the CSS of #view
+// Every chunk has its own material, and three.js sorts opaque objects by material before depth:
+// without this the chunks would be drawn in loading order. Front to back lets the depth test
+// discard hidden pixels before they are shaded.
+renderer.setOpaqueSort((a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder || a.z - b.z || a.id - b.id);
 view.prepend(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -79,7 +94,7 @@ function makeControls(cam) {
   c.screenSpacePanning = true;
   c.enableRotate = false; // rotation is done here, around the point under the cursor
   c.addEventListener("change", () => { lastMove = performance.now(); requestRender(); });
-  c.addEventListener("start", () => { userMoved = true; tween = null; });
+  c.addEventListener("start", () => { userMoved = true; tween = null; fly = null; });
   return c;
 }
 let userMoved = false;
@@ -375,6 +390,39 @@ function writeItems(a, b) {
   }
 }
 
+// Part under the mouse (desktop): its items are drawn a little lighter. The items of a part are
+// found through an index built on demand (items arrive chunk by chunk while loading).
+let hoverPart = -1, partItems = null;
+function itemsIndex() {
+  if (partItems && partItems.n === nItems) return partItems;
+  const start = new Uint32Array(app.nParts + 2);
+  for (let i = 0; i < nItems; i++) start[itemPart[i] + 2]++;
+  for (let p = 0; p < app.nParts; p++) start[p + 2] += start[p + 1];
+  const list = new Uint32Array(nItems);
+  for (let i = 0; i < nItems; i++) list[start[itemPart[i] + 1]++] = i;
+  partItems = { n: nItems, start, list };
+  return partItems;
+}
+function paintHover() {
+  if (hoverPart < 0 || hoverPart >= app.nParts) return;
+  const { start, list } = itemsIndex();
+  for (let k = start[hoverPart]; k < start[hoverPart + 1]; k++) {
+    const o = list[k] * 4;
+    for (let c = 0; c < 3; c++) itemTexData[o + c] += (255 - itemTexData[o + c]) * 0.4;
+  }
+}
+function setHoverPart(p) {
+  if (p === hoverPart) return;
+  if (hoverPart >= 0 && hoverPart < app.nParts) {
+    const { start, list } = itemsIndex();
+    for (let k = start[hoverPart]; k < start[hoverPart + 1]; k++) writeItems(list[k], list[k] + 1);
+  }
+  hoverPart = p;
+  paintHover();
+  if (itemTex) itemTex.needsUpdate = true;
+  requestRender();
+}
+
 // Which meshes take part in the frame, from the item states and the display style. The result
 // is stored in c.want; applyLod() then drops chunks whose parts are too small on screen.
 function updateVisibility() {
@@ -417,6 +465,7 @@ function applyLod(minPx, noEdges = false) {
 // Re-derive the GPU state after any change of visibility, selection or colour.
 app.refresh = function () {
   writeItems(0, nItems);
+  paintHover();
   itemTex.needsUpdate = true;
   updateVisibility();
   const vp = new Uint32Array(app.nParts + 1);
@@ -504,13 +553,16 @@ app.selectedParts = function () {
 
 // ---------------------------------------------------------------- visibility & colour
 function fillParts(arr, nodes, v) { for (const n of nodes) arr.fill(v, app.tree.p0[n], app.tree.p1[n]); }
-app.setVisible = (nodes, on) => { fillParts(app.partVisible, nodes, on ? 1 : 0); app.refresh(); };
-app.isolate = (nodes) => { app.partVisible.fill(0); fillParts(app.partVisible, nodes, 1); app.refresh(); };
-app.showAll = () => { app.partVisible.fill(1); app.refresh(); };
-app.setColor = (nodes, rgb) => { fillParts(app.partColor, nodes, rgb == null ? -1 : rgb); app.refresh(); };
-app.setOpacity = (nodes, op) => { fillParts(app.partOpacity, nodes, op); app.refresh(); };
+// app.checkpoint() (ui/undo.js) remembers visibility, colours and opacity for Ctrl+Z.
+app.checkpoint = () => {};
+app.setVisible = (nodes, on) => { app.checkpoint(); fillParts(app.partVisible, nodes, on ? 1 : 0); app.refresh(); };
+app.isolate = (nodes) => { app.checkpoint(); app.partVisible.fill(0); fillParts(app.partVisible, nodes, 1); app.refresh(); };
+app.showAll = () => { app.checkpoint(); app.partVisible.fill(1); app.refresh(); };
+app.setColor = (nodes, rgb) => { app.checkpoint(); fillParts(app.partColor, nodes, rgb == null ? -1 : rgb); app.refresh(); };
+app.setOpacity = (nodes, op) => { app.checkpoint(); fillParts(app.partOpacity, nodes, op); app.refresh(); };
 app.setRule = (arr) => { app.partRule = arr; app.refresh(); };
 app.resetColors = () => {
+  app.checkpoint();
   app.partColor.fill(-1); app.partOpacity.fill(255); app.partRule = null;
   app.emit("rule", null);
   app.refresh();
@@ -573,6 +625,7 @@ app.setPartOffsets = function (off) {
 // "state" event (the tree and panels would re-render on every frame).
 app.refreshQuiet = function () {
   writeItems(0, nItems);
+  paintHover();
   itemTex.needsUpdate = true;
   updateVisibility();
   requestRender();
@@ -770,7 +823,7 @@ async function pickModel() {
   }
   if (window.desktop) {
     const r = params.has("abrir") ? null : await window.desktop.initialFolder();
-    if (r) return fromDesktop(r);
+    if (r) { rememberPath(r); return fromDesktop(r); }
   } else if (!params.has("abrir")) {
     try { await httpConverted.json("chunks.json"); return { kind: "converted", src: httpConverted }; } catch { /* none on server */ }
   }
@@ -799,6 +852,7 @@ async function pickModel() {
           const r = await window.desktop.pickFolder();
           if (!r) return;
           const m = await fromDesktop(r);
+          rememberPath(r);
           card.hidden = true;
           resolve(m);
         } catch (e) { fail(e); }
@@ -809,6 +863,7 @@ async function pickModel() {
           const dir = await window.showDirectoryPicker({ id: "pvs-model", mode: "read" });
           status("Procurando o modelo na pasta…");
           const m = await fromDirectory(dir);
+          addRecent({ kind: "dir", name: dir.name, handle: dir });
           card.hidden = true;
           resolve(m);
         } catch (e) { fail(e); }
@@ -826,11 +881,18 @@ async function pickModel() {
       $("#openErr").textContent = "";
       const item = e.dataTransfer.items && e.dataTransfer.items[0];
       try {
+        const dropped = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (dropped && /\.zip$/i.test(dropped.name)) { // a ZIP written by "Exportar modelo"
+          const zh = !window.desktop && item && item.getAsFileSystemHandle ? await item.getAsFileSystemHandle().catch(() => null) : null;
+          await openZip(dropped, zh && zh.kind === "file" ? zh : null);
+          return;
+        }
         if (window.desktop) throw new Error("Use o botão “Escolher a pasta…”.");
         const h = item && item.getAsFileSystemHandle ? await item.getAsFileSystemHandle() : null;
-        if (!h || h.kind !== "directory") throw new Error("Solte uma pasta (a que contém o .pvs e os .ol). Neste navegador, use o botão.");
+        if (!h || h.kind !== "directory") throw new Error("Solte uma pasta (a que contém o .pvs e os .ol) ou um arquivo ZIP exportado. Neste navegador, use os botões.");
         status("Procurando o modelo na pasta…");
         const m = await fromDirectory(h);
+        addRecent({ kind: "dir", name: h.name, handle: h });
         card.hidden = true;
         resolve(m);
       } catch (err) { fail(err); }
@@ -842,7 +904,72 @@ async function pickModel() {
         resolve(m);
       } catch (e) { fail(e); }
     };
+    // a ZIP written by "Exportar modelo" opens directly, without extracting it
+    async function openZip(file, handle) {
+      status("Lendo o ZIP…");
+      const src = await zipConverted(file);
+      if (handle) addRecent({ kind: "zip", name: file.name, handle });
+      card.hidden = true;
+      resolve({ kind: "converted", src });
+    }
+    $("#openZipBtn").onclick = async () => {
+      $("#openErr").textContent = "";
+      if (window.showOpenFilePicker && !window.desktop) {
+        try {
+          const [h] = await window.showOpenFilePicker({ id: "pvs-zip", types: [{ description: "Modelo 3D (ZIP)", accept: { "application/zip": [".zip"] } }] });
+          await openZip(await h.getFile(), h);
+        } catch (e) { fail(e); }
+      } else $("#zipFile").click();
+    };
+    $("#zipFile").onchange = async () => {
+      const f = $("#zipFile").files[0];
+      if (!f) return;
+      try { await openZip(f, null); } catch (e) { fail(e); }
+    };
+    // models opened before: one click (the browser may ask again for permission to read)
+    const showRecent = async () => {
+      const list = (await listRecent()).filter((r) => (window.desktop ? r.kind === "path" && window.desktop.openFolder : r.kind !== "path"));
+      $("#recentBox").hidden = !list.length;
+      $("#recentList").replaceChildren(...list.map((r) => {
+        const go = document.createElement("button");
+        go.className = "recentGo";
+        go.title = r.path || r.name;
+        go.append(Object.assign(document.createElement("b"), { textContent: r.name }),
+          Object.assign(document.createElement("span"), { className: "muted", textContent: (r.kind === "zip" ? "ZIP · " : "pasta · ") + new Date(r.when).toLocaleDateString("pt-BR") }));
+        go.onclick = async () => {
+          $("#openErr").textContent = "";
+          try {
+            let m;
+            if (r.kind === "path") {
+              const d = await window.desktop.openFolder(r.path);
+              if (!d) throw new Error("A pasta não existe mais: " + r.path);
+              m = await fromDesktop(d);
+            } else {
+              if (!(await allow(r.handle))) throw new Error("Sem permissão para ler “" + r.name + "”.");
+              status("Abrindo " + r.name + "…");
+              m = r.kind === "dir" ? await fromDirectory(r.handle) : { kind: "converted", src: await zipConverted(await r.handle.getFile()) };
+            }
+            addRecent(r);
+            card.hidden = true;
+            resolve(m);
+          } catch (e) { fail(e && e.name === "NotFoundError" ? new Error("“" + r.name + "” não está mais no mesmo lugar.") : e); }
+        };
+        const del = document.createElement("button");
+        del.className = "recentDel";
+        del.textContent = "✕";
+        del.title = "Tirar da lista";
+        del.onclick = async () => { await removeRecent(r.id); showRecent(); };
+        const row = document.createElement("div");
+        row.className = "recentRow";
+        row.append(go, del);
+        return row;
+      }));
+    };
+    showRecent();
   });
+}
+function rememberPath(r) {
+  if (r && r.folder && window.desktop.openFolder) addRecent({ kind: "path", name: String(r.folder).split(/[\\/]/).filter(Boolean).pop() || r.folder, path: r.folder });
 }
 
 const NO_MODEL = "A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.";
@@ -920,7 +1047,9 @@ async function main() {
   animate();
   const m = await pickModel();
   status("Carregando estrutura…");
-  const ask = $("#openRegions")?.checked || mobile || new URLSearchParams(location.search).has("regioes");
+  // true: always ask which sections to load; "auto" (phones and tablets): ask only when the model
+  // is too big to load at once; a link to one part never asks.
+  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes") ? true : touch && !wantedCode() ? "auto" : false;
   if (m.kind === "converted") await loadConverted(m.src, ask);
   else { app.access = m.access; await loadRaw(m, ask); }
 }
@@ -934,7 +1063,7 @@ async function firstParts(ask) {
   if (!ask) return null;
   const selected = await chooseRegions(app);
   // On a phone, closing the section dialog must not load the entire model.
-  return mobile && selected === undefined ? new Uint8Array(app.nParts) : selected;
+  return touch && selected === undefined ? new Uint8Array(app.nParts) : selected;
 }
 
 async function loadConverted(src, ask) {
@@ -962,7 +1091,7 @@ async function loadConverted(src, ask) {
   addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
-  await loadParts(await firstParts(ask), mobile);
+  await loadParts(await firstParts(ask === "auto" ? (meta.tris || Infinity) > MOBILE_PREVIEW_TRIANGLES : ask), touch);
   app.emit("loaded");
 }
 
@@ -995,7 +1124,7 @@ async function loadConvertedParts(want, preview = false) {
       status(done < selected.length ? `Carregando geometria ${done}/${selected.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
-  await Promise.all(Array.from({ length: mobile ? 2 : 6 }, fetcher));
+  await Promise.all(Array.from({ length: touch ? 3 : 6 }, fetcher));
   // A part can span several chunks: count it as complete only after all its chunks load.
   app.partLoaded.set(completedParts(meta.chunks, itemPart, source.loaded, app.nParts));
 }
@@ -1012,10 +1141,13 @@ async function loadRaw(m, ask) {
   });
   app.pvsBoxes = boxes.slice(); // as stored in the PVS (the comparison tool uses them)
   setModel(m.name, t, boxes, lo, hi);
-  if (pvs.transformed) console.warn("O modelo tem instâncias com transformação; esta versão ainda não as aplica.");
+  if (pvs.transformed) { // not applied yet: say it where the user sees it, once the model is open
+    console.warn("O modelo tem instâncias com transformação; esta versão ainda não as aplica.");
+    app.on("loaded", () => status("Atenção: este modelo posiciona peças por transformação, o que esta versão ainda não aplica — algumas podem aparecer fora do lugar."));
+  }
   const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   source = { kind: "raw", m, t, small: isFinite(diag) ? diag * 0.004 : 0 }; // same rule as tools/build.py
-  await loadParts(await firstParts(ask));
+  await loadParts(await firstParts(ask === "auto" ? t.shapes.length > 1500 : ask));
   app.emit("loaded");
 }
 
@@ -1027,7 +1159,7 @@ async function loadRawParts(want) {
   const TASK = 150, total = todo.length;
   const tasks = [];
   for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
-  const nWorkers = Math.max(1, Math.min(mobile ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
+  const nWorkers = Math.max(1, Math.min(touch ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
   let missing = 0, next = 0, doneParts = 0;
   const files = m.access.files;
@@ -1222,10 +1354,12 @@ app.nodesBox = function (nodes) {
   return partsBox(parts);
 };
 
-function frame(box, dir) {
+// Look at a box from `dir` (default: the current direction). smooth: glide there instead of jumping.
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function frame(box, dir, smooth = false) {
   if (box.isEmpty()) return;
   if (walk.on) setWalk(false);
-  tween = null;
+  tween = null; fly = null;
   const center = box.getCenter(new THREE.Vector3());
   const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 0.01);
   if (!dir) dir = camera.position.clone().sub(controls.target).normalize();
@@ -1233,17 +1367,104 @@ function frame(box, dir) {
   const vh = THREE.MathUtils.degToRad(persp.fov / 2);
   const hh = Math.atan(Math.tan(vh) * (persp.aspect > 0 ? persp.aspect : 1)); // narrow views: the horizontal angle is the smaller one
   const dist = radius / Math.sin(Math.min(vh, hh));
-  controls.target.copy(center);
-  persp.position.copy(center).addScaledVector(dir, dist);
-  ortho.position.copy(center).addScaledVector(dir, dist);
-  ortho.zoom = 1;
-  orthoHalf = radius * 1.1 / Math.min(1, persp.aspect > 0 ? persp.aspect : 1);
-  persp.lookAt(center); ortho.lookAt(center);
+  const to = { pos: center.clone().addScaledVector(dir, dist), target: center, half: radius * 1.1 / Math.min(1, persp.aspect > 0 ? persp.aspect : 1), zoom: 1 };
+  if (smooth && !calm && camera.position.distanceToSquared(controls.target) > 0) flyTo(to);
+  else placeCamera(to);
+}
+function placeCamera(c) {
+  controls.target.copy(c.target);
+  persp.position.copy(c.pos);
+  ortho.position.copy(c.pos);
+  ortho.zoom = c.zoom;
+  orthoHalf = c.half;
+  persp.lookAt(c.target); ortho.lookAt(c.target);
   updateOrtho();
   controls.update();
   requestRender();
 }
-app.frameNodes = (nodes) => frame(app.nodesBox(nodes));
+// Glide the camera to {pos, target, half, zoom}: the target moves in a straight line while the
+// viewing direction turns and the distance changes around it.
+let fly = null;
+function flyTo(to, dur = 380) {
+  tween = null;
+  fly = { t0: performance.now(), dur, pos: camera.position.clone(), target: controls.target.clone(), half: orthoHalf, zoom: ortho.zoom, to };
+  requestRender();
+}
+function stepFly(now) {
+  if (!fly) return;
+  const f = fly, t = Math.min(1, (now - f.t0) / f.dur), e = t * t * (3 - 2 * t);
+  const target = f.target.clone().lerp(f.to.target, e);
+  const a = f.pos.clone().sub(f.target), b = f.to.pos.clone().sub(f.to.target);
+  const la = Math.max(a.length(), 1e-9), lb = Math.max(b.length(), 1e-9);
+  a.divideScalar(la); b.divideScalar(lb);
+  const q = new THREE.Quaternion().setFromUnitVectors(a, b);
+  const d = a.applyQuaternion(new THREE.Quaternion().slerp(q, e));
+  camera.position.copy(target).addScaledVector(d, la * Math.pow(lb / la, e));
+  controls.target.copy(target);
+  orthoHalf = f.half + (f.to.half - f.half) * e;
+  ortho.zoom = f.zoom + (f.to.zoom - f.zoom) * e;
+  if (camera === ortho) updateOrtho();
+  camera.lookAt(target);
+  needRender = true;
+  lastMove = now;
+  if (t >= 1) { fly = null; placeCamera({ pos: camera.position.clone(), target, half: orthoHalf, zoom: ortho.zoom }); }
+}
+// Where the camera is, or where it is gliding to (so that repeated keys add up).
+function cameraGoal() {
+  return fly ? { pos: fly.to.pos.clone(), target: fly.to.target.clone(), half: fly.to.half, zoom: fly.to.zoom }
+    : { pos: camera.position.clone(), target: controls.target.clone(), half: orthoHalf, zoom: ortho.zoom };
+}
+// Keyboard navigation: turn around the target, slide the view, zoom.
+function orbitBy(dAz, dEl) {
+  const g = cameraGoal(), off = g.pos.clone().sub(g.target), dist = off.length();
+  if (!(dist > 0)) return;
+  const az = Math.atan2(off.y, off.x) + dAz;
+  const el = Math.max(-1.55, Math.min(1.55, Math.asin(Math.max(-1, Math.min(1, off.z / dist))) + dEl));
+  g.pos.copy(g.target).addScaledVector(new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)), dist);
+  flyTo(g, 170);
+}
+function panBy(dx, dy) { // fractions of the view height
+  const g = cameraGoal();
+  const h = camera === ortho ? (2 * g.half) / g.zoom : 2 * g.pos.distanceTo(g.target) * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2));
+  camera.updateMatrixWorld();
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0), up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  const move = right.multiplyScalar(dx * h).addScaledVector(up, dy * h);
+  g.pos.add(move); g.target.add(move);
+  flyTo(g, 170);
+}
+function zoomBy(k) { // k < 1 gets closer
+  const g = cameraGoal();
+  if (camera === ortho) g.zoom /= k;
+  else g.pos.sub(g.target).multiplyScalar(k).add(g.target);
+  flyTo(g, 170);
+}
+// Camera history: every time the camera comes to rest its position is remembered, so that
+// Backspace goes back to where you were looking before (Shift+Backspace: forward again).
+const camHist = [];
+let camIdx = -1, histJump = false;
+function histPush() {
+  const c = app.getCamera(), last = camHist[camIdx];
+  if (!c.pos.every(Number.isFinite)) return;
+  if (last && last.ortho === c.ortho && last.zoom === c.zoom && last.pos.every((v, i) => Math.abs(v - c.pos[i]) < 1e-6) && last.target.every((v, i) => Math.abs(v - c.target[i]) < 1e-6)) return;
+  camHist.length = camIdx + 1;
+  camHist.push(c);
+  if (camHist.length > 60) camHist.shift();
+  camIdx = camHist.length - 1;
+}
+function histGo(step) {
+  const i = camIdx + step;
+  if (i < 0 || i >= camHist.length) { status(step < 0 ? "Não há vista anterior." : "Não há vista seguinte."); return; }
+  if (walk.on) setWalk(false);
+  camIdx = i;
+  histJump = true;
+  const c = camHist[i];
+  if ((camera === ortho) !== !!c.ortho) setOrtho(!!c.ortho);
+  const to = { pos: new THREE.Vector3(...c.pos), target: new THREE.Vector3(...c.target), half: c.half || orthoHalf, zoom: c.zoom || 1 };
+  if (calm) placeCamera(to); else flyTo(to);
+}
+app.viewPrev = () => histGo(-1);
+app.viewNext = () => histGo(1);
+app.frameNodes = (nodes) => frame(app.nodesBox(nodes), null, true);
 // The camera that frame() would set for a box, without moving to it ({pos, target, ortho, half, zoom}).
 app.cameraFor = function (box, dir) {
   if (!box || box.isEmpty()) return null;
@@ -1268,10 +1489,11 @@ function updateOrtho() {
   ortho.updateProjectionMatrix();
 }
 
-function fitAll(keepDir = true) {
+function fitAll(keepDir = true, smooth = false) {
   const box = partOffset ? partsBox(Array.from({ length: app.nParts }, (_, p) => p)) : modelBox();
-  frame(box, keepDir ? null : new THREE.Vector3(1, -1, 0.8).normalize());
+  frame(box, keepDir ? null : new THREE.Vector3(1, -1, 0.8).normalize(), smooth);
 }
+app.fitAll = () => fitAll(true, true);
 
 const VIEWS = {
   iso: new THREE.Vector3(1, -1, 0.8), front: new THREE.Vector3(1, 0, 0),
@@ -1282,6 +1504,7 @@ const VIEWS = {
 let tween = null;
 function turnTo(dir) {
   if (walk.on) setWalk(false);
+  fly = null;
   const d = dir.clone().normalize();
   if (Math.abs(d.z) > 0.9999) d.set(0, -1e-4 * Math.sign(d.z || 1), Math.sign(d.z)).normalize();
   const from = camera.position.clone().sub(controls.target);
@@ -1322,38 +1545,65 @@ function setOrtho(on) {
 
 // ---------------------------------------------------------------- picking
 let pickRT = null;
-// Render ids (mode 1) or view depth (mode 2) of a screen rectangle; returns the raw RGBA bytes.
-function pickRender(mode, x0, y0, x1, y1) {
-  const r = renderer.domElement.getBoundingClientRect();
-  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
-  if (!pickRT || pickRT.width !== w || pickRT.height !== h) {
-    if (pickRT) pickRT.dispose();
-    pickRT = new THREE.WebGLRenderTarget(w, h);
-  }
-  const rx = Math.max(0, Math.min(w - 1, Math.floor(Math.min(x0, x1) - r.left)));
-  const ry = Math.max(0, Math.min(h - 1, Math.floor(Math.min(y0, y1) - r.top)));
-  const rw = Math.max(1, Math.min(w - rx, Math.ceil(Math.abs(x1 - x0)) || 1));
-  const rh = Math.max(1, Math.min(h - ry, Math.ceil(Math.abs(y1 - y0)) || 1));
+// Draw the scene for picking into `rt` with `cam`: ids (mode 1) or view depth (mode 2).
+function renderPick(cam, mode, rt) {
   shared.pickMode.value = mode;
   const boxVis = clipBox.visible, nbVis = nbHelper.visible;
   clipBox.visible = false;
   nbHelper.visible = false;
-  pickRT.scissor.set(rx, h - ry - rh, rw, rh);
-  pickRT.scissorTest = true;
-  renderer.setRenderTarget(pickRT);
+  renderer.setRenderTarget(rt);
   renderer.clear();
-  renderer.render(scene, camera);
-  const buf = new Uint8Array(rw * rh * 4);
-  renderer.readRenderTargetPixels(pickRT, rx, h - ry - rh, rw, rh, buf);
+  renderer.render(scene, cam);
   renderer.setRenderTarget(null);
   clipBox.visible = boxVis;
   nbHelper.visible = nbVis;
   shared.pickMode.value = 0;
-  requestRender();
+}
+// Render ids (mode 1) or view depth (mode 2) of a screen rectangle; returns the raw RGBA bytes.
+// The camera is narrowed to that rectangle (view offset), so only the chunks that cross it are
+// drawn: a click costs a tiny fraction of a frame, however big the model is.
+function pickRender(mode, x0, y0, x1, y1) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+  const rx = Math.max(0, Math.min(w - 1, Math.floor(Math.min(x0, x1) - r.left)));
+  const ry = Math.max(0, Math.min(h - 1, Math.floor(Math.min(y0, y1) - r.top)));
+  const rw = Math.max(1, Math.min(w - rx, Math.ceil(Math.abs(x1 - x0)) || 1));
+  const rh = Math.max(1, Math.min(h - ry, Math.ceil(Math.abs(y1 - y0)) || 1));
+  if (!pickRT) pickRT = new THREE.WebGLRenderTarget(rw, rh);
+  else if (pickRT.width !== rw || pickRT.height !== rh) pickRT.setSize(rw, rh);
+  camera.setViewOffset(w, h, rx, ry, rw, rh);
+  renderPick(camera, mode, pickRT);
+  camera.clearViewOffset();
+  const buf = new Uint8Array(rw * rh * 4);
+  renderer.readRenderTargetPixels(pickRT, 0, 0, rw, rh, buf);
   return { buf, rw, rh };
 }
+// Distance from `origin` to the nearest drawn surface along `dir` (unit vector), up to `max`
+// metres; Infinity when there is nothing. Used by the walk mode (floor and walls).
+const probeCam = new THREE.PerspectiveCamera(5, 1, 0.02, 100);
+const PROBE = 5;
+let probeRT = null;
+const _probeBuf = new Uint8Array(PROBE * PROBE * 4), _probeF = new Float32Array(_probeBuf.buffer);
+function probe(origin, dir, max, fov = 5) {
+  if (!probeRT) probeRT = new THREE.WebGLRenderTarget(PROBE, PROBE);
+  probeCam.position.copy(origin);
+  probeCam.up.set(0, 0, 1);
+  if (Math.abs(dir.z) > 0.99) probeCam.up.set(1, 0, 0);
+  probeCam.lookAt(_pv2.copy(origin).add(dir));
+  probeCam.fov = fov;
+  probeCam.far = max;
+  probeCam.updateProjectionMatrix();
+  probeCam.updateMatrixWorld();
+  renderPick(probeCam, 2, probeRT);
+  renderer.readRenderTargetPixels(probeRT, 0, 0, PROBE, PROBE, _probeBuf);
+  let best = Infinity;
+  for (let i = 0; i < _probeF.length; i++) { const z = _probeF[i]; if (z > 0 && z < best) best = z; }
+  return best;
+}
+const _pv2 = new THREE.Vector3();
 function pickRect(x0, y0, x1, y1) {
   const { buf } = pickRender(1, x0, y0, x1, y1);
+  requestRender();
   const ids = new Set();
   for (let i = 0; i < buf.length; i += 4) {
     const id = buf[i] | (buf[i + 1] << 8) | (buf[i + 2] << 16) | (buf[i + 3] << 24);
@@ -1362,9 +1612,10 @@ function pickRect(x0, y0, x1, y1) {
   return ids;
 }
 // Item under the cursor, or the nearest one within a few pixels (edges are thin).
-function pickNode(x, y) {
+function pickNode(x, y, redraw = true) {
   const R = 4;
   const { buf, rw } = pickRender(1, x - R, y - R, x + R + 1, y + R + 1);
+  if (redraw) requestRender();
   let best = -1, bd = Infinity;
   for (let i = 0; i < buf.length; i += 4) {
     const id = buf[i] | (buf[i + 1] << 8) | (buf[i + 2] << 16) | (buf[i + 3] << 24);
@@ -1377,6 +1628,7 @@ function pickNode(x, y) {
 // World point under the cursor, or null.
 function pickPoint(x, y) {
   const { buf } = pickRender(2, x, y, x + 1, y + 1);
+  requestRender();
   const z = new Float32Array(buf.buffer, 0, 1)[0];
   if (!(z > 0) || !isFinite(z)) return null;
   const r = renderer.domElement.getBoundingClientRect();
@@ -1421,7 +1673,7 @@ app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray()
 app.setCamera = function (c) {
   if (!c || !c.pos?.every(Number.isFinite) || !c.target?.every(Number.isFinite)) return; // never take an invalid camera
   if (walk.on) setWalk(false);
-  tween = null;
+  tween = null; fly = null;
   if ((camera === ortho) !== !!c.ortho) setOrtho(!!c.ortho);
   camera.position.fromArray(c.pos);
   controls.target.fromArray(c.target);
@@ -1432,12 +1684,13 @@ app.setCamera = function (c) {
   requestRender();
 };
 app.frameBox = (b) => frame(b);
-app.frameMinMax = (a, b) => frame(new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)));
+app.frameMinMax = (a, b) => frame(new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)), null, true);
 app.partBoxes = () => partBox;
 app.modelBox = () => modelBox();
 app.scene = scene;
 app.canvas = renderer.domElement;
 app.setCubeVisible = (on) => { cube.visible = on && app.display.cube; requestRender(); };
+app.setCubeSize = (size, margin) => { cube.size = size; cube.margin = margin; requestRender(); };
 // Treat the next frames as camera movement (lower level of detail, as when orbiting): used by the
 // animation so that playback stays fluid on slower graphics cards.
 app.markMoving = () => { lastMove = performance.now(); };
@@ -1621,11 +1874,19 @@ view.addEventListener("pointerdown", (e) => {
 }, true);
 window.addEventListener("pointermove", (e) => {
   if (box) updateBox(e);
+  if (aim && aim.id === e.pointerId) { aim.x = e.clientX; aim.y = e.clientY; placeLoupe(); requestRender(); return; }
+  if (hold && hold.id === e.pointerId && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 9) endHold();
   if (rot && rot.id === e.pointerId && touches.size < 2 && !(walk.on && walk.placing)) dragRotate(e);
 });
 window.addEventListener("pointerup", (e) => {
   if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
   if (e.pointerType === "touch") touches.delete(e.pointerId);
+  if (hold?.id === e.pointerId) endHold();
+  if (aim && aim.id === e.pointerId) { // release: the tool gets the point under the crosshair
+    const a = aim;
+    endAim();
+    if (app.tool) app.tool(app.pick(a.x, a.y - AIM_UP), e);
+  }
   if (!box) return;
   const b = box;
   box = null;
@@ -1643,44 +1904,160 @@ function updateBox(e) {
 }
 
 renderer.domElement.addEventListener("pointerdown", (e) => {
+  clearHover();
   if (e.pointerType === "touch") touches.add(e.pointerId);
-  if (touches.size > 1) { down = null; rot = null; pivotEl.hidden = true; return; }
+  if (touches.size > 1) { down = null; rot = null; pivotEl.hidden = true; endHold(); endAim(); return; }
   down = { id: e.pointerId, x: e.clientX, y: e.clientY };
   if (e.button === 0) rot = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, pivot: null, started: false };
+  // a finger held still: with a tool on (measuring, placing a note) it aims with a magnifier;
+  // otherwise it opens the menu of the part under it (what the right button does on a PC)
+  if (e.pointerType === "touch" && !walk.on && app.tree) {
+    const x = e.clientX, y = e.clientY, id = e.pointerId;
+    hold = { id, x, y, timer: setTimeout(() => {
+      hold = null;
+      if (!down || down.id !== id) return;
+      if (app.tool) { down = null; rot = null; pivotEl.hidden = true; startAim(id, x, y); return; }
+      const node = pickNode(x, y);
+      if (node < 0) return;
+      down = null; rot = null; pivotEl.hidden = true;
+      if (navigator.vibrate) navigator.vibrate(12);
+      app.openContextMenu({ clientX: x, clientY: y, touchHold: true, preventDefault() {} }, node);
+    }, app.tool ? 230 : 520) };
+  }
 });
 renderer.domElement.addEventListener("pointerup", (e) => {
-  if (!down || down.id !== e.pointerId || touches.size > 1 || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > (e.pointerType === "touch" ? 9 : 4) || e.button !== 0) return;
+  const isTouch = e.pointerType === "touch";
+  if (isTouch) lastTouchUp = performance.now();
+  if (!down || down.id !== e.pointerId || touches.size > 1 || e.shiftKey || Math.hypot(e.clientX - down.x, e.clientY - down.y) > (isTouch ? 9 : 4) || e.button !== 0) return;
   if (walk.on && walk.placing) {
     const point = pickPoint(e.clientX, e.clientY);
     if (point) placeWalkAt(point);
-    else $("#mobileWalkGuide").textContent = "Toque numa superfície visível do modelo para definir a posição.";
+    else status("Escolha um ponto numa superfície visível do modelo.");
     return;
   }
   if (app.tool) { app.tool(app.pick(e.clientX, e.clientY), e); return; }
   const node = pickNode(e.clientX, e.clientY);
+  if (isTouch && !walk.on) { // second tap in the same place: frame the part (or everything)
+    const now = performance.now(), t = lastTap;
+    lastTap = { t: now, x: e.clientX, y: e.clientY };
+    if (t && now - t.t < 330 && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 28) {
+      lastTap = null;
+      if (node >= 0) { app.select([node], "replace"); app.frameNodes([node]); } else fitAll(true, true);
+      return;
+    }
+  }
   if (e.altKey && app.focus >= 0) { app.select([app.tree.parent[app.focus]], "replace"); return; }
   if (node < 0) { if (!(e.ctrlKey || e.metaKey)) app.clearSelection(); return; }
   app.select([node], e.ctrlKey || e.metaKey ? "toggle" : "replace");
 });
 renderer.domElement.addEventListener("dblclick", (e) => {
-  if (walk.on) return;
+  if (walk.on || app.tool || performance.now() - lastTouchUp < 700) return; // touch: handled as a double tap
   const node = pickNode(e.clientX, e.clientY);
-  if (node >= 0) app.frameNodes([node]);
+  if (node >= 0) app.frameNodes([node]); else fitAll(true, true);
 });
 window.addEventListener("pointercancel", (e) => {
   touches.delete(e.pointerId);
   if (down?.id === e.pointerId) down = null;
   if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
+  if (hold?.id === e.pointerId) endHold();
+  if (aim?.id === e.pointerId) endAim();
+});
+let hold = null, lastTap = null, lastTouchUp = 0;
+function endHold() { if (hold) { clearTimeout(hold.timer); hold = null; } }
+
+// Aiming on a touch screen: the finger hides the point, so a crosshair sits a little above it
+// and a magnifier shows what is under the crosshair. Lifting the finger gives that point to the tool.
+const AIM_UP = 56, LOUPE = 132, LOUPE_ZOOM = 2.6;
+let aim = null;
+const loupeEl = $("#loupe"), aimDot = $("#aimDot");
+function startAim(id, x, y) {
+  aim = { id, x, y };
+  view.classList.add("aiming");
+  loupeEl.hidden = false; aimDot.hidden = false;
+  placeLoupe();
+  requestRender();
+}
+function endAim() {
+  if (!aim) return;
+  aim = null;
+  view.classList.remove("aiming");
+  loupeEl.hidden = true; aimDot.hidden = true;
+}
+function placeLoupe() {
+  const r = view.getBoundingClientRect();
+  const tx = aim.x - r.left, ty = aim.y - AIM_UP - r.top;
+  aimDot.style.left = tx + "px"; aimDot.style.top = ty + "px";
+  let lx = tx - LOUPE / 2, ly = ty - LOUPE - 44;
+  if (ly < 6) { ly = Math.max(6, ty - LOUPE / 2); lx = tx < r.width / 2 ? tx + 60 : tx - LOUPE - 60; } // near the top: beside the finger
+  loupeEl.style.left = Math.max(4, Math.min(r.width - LOUPE - 4, lx)) + "px";
+  loupeEl.style.top = Math.max(4, ly) + "px";
+}
+// Copy the pixels around the crosshair into the magnifier (right after the frame is drawn).
+app.on("frame", () => {
+  if (!aim) return;
+  const c = renderer.domElement, r = c.getBoundingClientRect(), k = c.width / r.width;
+  if (loupeEl.width !== LOUPE * 2) loupeEl.width = loupeEl.height = LOUPE * 2;
+  const g = loupeEl.getContext("2d"), D = loupeEl.width, src = (LOUPE / LOUPE_ZOOM) * k;
+  g.fillStyle = getComputedStyle(view).backgroundColor || "#ccd";
+  g.fillRect(0, 0, D, D);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(c, (aim.x - r.left) * k - src / 2, (aim.y - AIM_UP - r.top) * k - src / 2, src, src, 0, 0, D, D);
+  g.strokeStyle = "rgba(232,89,12,.95)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(D / 2 - 18, D / 2); g.lineTo(D / 2 - 5, D / 2); g.moveTo(D / 2 + 5, D / 2); g.lineTo(D / 2 + 18, D / 2);
+  g.moveTo(D / 2, D / 2 - 18); g.lineTo(D / 2, D / 2 - 5); g.moveTo(D / 2, D / 2 + 5); g.lineTo(D / 2, D / 2 + 18); g.stroke();
 });
 
-// Left drag: orbit around the point under the cursor (or look around while walking).
+// Name and highlight of the part under the mouse (not on touch screens).
+const tip = $("#hoverTip");
+let hoverTimer = 0, hoverNode = -1;
+function clearHover() {
+  clearTimeout(hoverTimer);
+  hoverNode = -1;
+  setHoverPart(-1);
+  tip.hidden = true;
+}
+function placeTip(x, y) {
+  const r = view.getBoundingClientRect();
+  let lx = x - r.left + 16;
+  if (lx + tip.offsetWidth > r.width - 6) lx = x - r.left - tip.offsetWidth - 12;
+  tip.style.left = Math.max(4, lx) + "px";
+  tip.style.top = Math.min(r.height - tip.offsetHeight - 4, y - r.top + 18) + "px";
+}
+renderer.domElement.addEventListener("pointermove", (e) => {
+  if (e.pointerType !== "mouse") return;
+  clearTimeout(hoverTimer);
+  if (e.buttons || walk.on || box || !app.display.hover || !app.tree) { if (hoverNode >= 0 || !tip.hidden) clearHover(); return; }
+  const x = e.clientX, y = e.clientY;
+  if (!tip.hidden) placeTip(x, y);
+  hoverTimer = setTimeout(() => {
+    if (performance.now() - lastMove < 140 || fly || tween) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    const node = cube.visible && cube.inside(x - r.left, y - r.top) ? -1 : pickNode(x, y, false);
+    if (node < 0) { clearHover(); return; }
+    if (node !== hoverNode) {
+      hoverNode = node;
+      setHoverPart(app.tree.part[node]);
+      const par = app.tree.parent[node];
+      tip.replaceChildren(Object.assign(document.createElement("b"), { textContent: app.tree.names[node] }),
+        ...(par > 0 ? [Object.assign(document.createElement("span"), { textContent: app.tree.names[par] })] : []));
+    }
+    tip.hidden = false;
+    placeTip(x, y);
+  }, 40);
+});
+renderer.domElement.addEventListener("pointerleave", clearHover);
+app.on("model", clearHover);
+app.on("display", () => { if (!app.display.hover) clearHover(); });
+
+// Left drag: orbit around the point under the cursor (or look around while walking).// Left drag: orbit around the point under the cursor (or look around while walking).
 const Z = new THREE.Vector3(0, 0, 1);
 function dragRotate(e) {
   if (!rot.started) {
     if (Math.hypot(e.clientX - rot.sx, e.clientY - rot.sy) < 3) return;
     rot.started = true;
     userMoved = true;
-    tween = null;
+    tween = null; fly = null;
+    endHold();
     if (!walk.on) {
       rot.pivot = pickPoint(rot.sx, rot.sy) || controls.target.clone();
       const r = view.getBoundingClientRect();
@@ -1716,66 +2093,75 @@ function dragRotate(e) {
 }
 
 // ---------------------------------------------------------------- walk mode
-const walk = { on: false, placing: false, keys: new Set(), touch: new Set(), look: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0 };
-const walkPointers = new Map();
-const lookPointers = new Map();
-function syncWalkTouch() {
-  walk.touch.clear();
-  for (const direction of walkPointers.values()) walk.touch.add(direction);
-  document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => button.classList.toggle("on", walk.touch.has(button.dataset.walk)));
-}
-function syncWalkLook() {
-  walk.look.clear();
-  for (const direction of lookPointers.values()) walk.look.add(direction);
-  document.querySelectorAll("#mobileWalkControls [data-look]").forEach((button) => button.classList.toggle("on", walk.look.has(button.dataset.look)));
+// First person. It starts as free flight from the current view; "Posicionar" (or a tap on the
+// model, on a phone) stands the camera on a surface, 1.6 m above it, and turns on the two helpers:
+// "Chão" keeps that height over whatever is below, "Colisão" stops at walls and equipment. Both
+// measure the model with tiny depth renders (probe), so they work on any model without extra data.
+const EYE = 1.6, BODY = 0.4, DOWN = new THREE.Vector3(0, 0, -1), VIEW_FOV = 40, WALK_FOV = 62;
+const walk = { on: false, placing: false, keys: new Set(), touch: new Set(), speed: 0, yaw: 0, pitch: 0, last: 0,
+  ground: false, collide: false, mx: 0, my: 0, lx: 0, ly: 0,
+  free: Infinity, freeDir: new THREE.Vector3(), freeT: 0, floorT: 0, floorZ: null };
+function syncWalkUI() {
+  $("#walkPlace").classList.toggle("on", walk.placing);
+  $("#walkGround").classList.toggle("on", walk.ground);
+  $("#walkCollide").classList.toggle("on", walk.collide);
+  $("#walkAim").hidden = !walk.on || walk.placing;
+  view.classList.toggle("walkGround", walk.on && walk.ground);
+  const t = walk.speed.toFixed(1).replace(".", ",") + " m/s";
+  $("#walkSpeed").textContent = t;
+  $("#walkSpeedLbl").textContent = t;
 }
 function setWalkPlacing(on, message) {
   walk.placing = on;
-  $("#mobileWalkPlace").classList.toggle("on", on);
-  $("#mobileWalkPlace").textContent = on ? "Cancelar posição" : "Definir posição no modelo";
-  $("#mobileWalkGuide").textContent = message || (on
-    ? "Toque numa superfície visível do modelo para entrar nesse ponto."
-    : "Arraste a imagem para olhar ao redor. Segure as setas para andar ou olhar.");
-  $("#mobileWalkAim").hidden = !walk.on || on;
+  syncWalkUI();
+  status(message || (on ? "Toque ou clique num piso do modelo para ficar em pé nesse ponto." : "Caminhada: arraste para olhar ao redor."));
 }
 function placeWalkAt(point) {
   const forward = new THREE.Vector3(Math.cos(walk.yaw), Math.sin(walk.yaw), 0);
-  camera.position.copy(point).addScaledVector(forward, -0.35).addScaledVector(Z, 1.6);
+  camera.position.copy(point).addScaledVector(forward, -0.35).addScaledVector(Z, EYE);
+  // a point on a wall or a column: step back from it (as far as there is room behind), so that
+  // the view does not start with the nose against the surface
+  const ahead = probe(camera.position, forward, 4, 20);
+  if (ahead < 1.6) {
+    const back = forward.clone().negate();
+    camera.position.addScaledVector(back, Math.max(0, Math.min(1.6 - ahead, probe(camera.position, back, 4, 20) - BODY)));
+  }
   walk.pitch = 0;
   walk.speed = 1.5;
+  walk.ground = walk.collide = true;
+  walk.floorT = walk.freeT = 0; walk.floorZ = null;
   walkLook();
-  showWalkSpeed();
-  setWalkPlacing(false, "Posição definida. Arraste para olhar ou use os controles.");
+  setWalkPlacing(false, "Pés no chão. Arraste para olhar; ande com " + (touch ? "o controle da esquerda." : "W A S D."));
   userMoved = true;
   lastMove = performance.now();
   requestRender();
-}
-function showWalkSpeed() {
-  $("#walkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
-  $("#mobileWalkSpeed").textContent = walk.speed.toFixed(1) + " m/s";
 }
 const WALK_KEYS = new Set(["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", "pageup", "pagedown", "shift"]);
 function walkLook() {
   const f = new THREE.Vector3(Math.cos(walk.pitch) * Math.cos(walk.yaw), Math.cos(walk.pitch) * Math.sin(walk.yaw), Math.sin(walk.pitch));
   camera.lookAt(camera.position.clone().add(f));
 }
-function setWalk(on) {
+function setWalk(on, place = false) {
   if (on === walk.on) return;
   walk.on = on;
   walk.keys.clear();
-  walkPointers.clear();
-  lookPointers.clear();
-  syncWalkTouch();
-  syncWalkLook();
-  setWalkPlacing(false);
-  tween = null;
+  walk.touch.clear();
+  walk.mx = walk.my = walk.lx = walk.ly = 0;
+  walk.placing = false;
+  walk.ground = walk.collide = false;
+  walk.floorZ = null; walk.free = Infinity;
+  tween = null; fly = null;
+  clearHover();
+  // first person uses a wider lens: inside a building the normal one feels like a tunnel
+  persp.fov = on ? WALK_FOV : VIEW_FOV;
+  persp.updateProjectionMatrix();
   if (on) {
     if (camera === ortho) setOrtho(false);
     const f = camera.getWorldDirection(new THREE.Vector3());
     walk.yaw = Math.atan2(f.y, f.x);
     walk.pitch = Math.asin(Math.max(-1, Math.min(1, f.z)));
     // initial speed: cross the current camera distance in about 8 seconds
-    walk.speed = mobile ? 1.5 : Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
+    walk.speed = touch ? 1.5 : Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
     controls.enabled = false;
     walkLook();
   } else {
@@ -1786,85 +2172,115 @@ function setWalk(on) {
   }
   $("#walkBtn").classList.toggle("on", on);
   $("#walkHint").hidden = !on;
-  $("#mobileWalkControls").hidden = !on;
-  $("#mobileWalkAim").hidden = !on;
-  $("#view").classList.toggle("mobileWalking", on);
-  $("#mobileWalkToggle").textContent = on ? "Sair da exploração" : "Explorar por dentro";
+  $("#walkBar").hidden = !on;
+  $("#walkPads").hidden = !on;
+  view.classList.toggle("walking", on);
   cube.visible = on ? false : app.display.cube;
-  showWalkSpeed();
+  if (on && place) setWalkPlacing(true); else syncWalkUI();
+  app.emit("walk", on);
   requestRender();
 }
 app.setWalk = setWalk;
-$("#mobileWalkPlace").onclick = () => setWalkPlacing(!walk.placing);
-document.querySelectorAll("#mobileWalkControls [data-walk]").forEach((button) => {
-  button.addEventListener("pointerdown", (e) => {
-    if (!walk.on) return;
-    e.preventDefault();
-    button.setPointerCapture(e.pointerId);
-    walkPointers.set(e.pointerId, button.dataset.walk);
-    syncWalkTouch();
-    walk.last = performance.now();
-    requestRender();
-  });
-  const release = (e) => {
-    if (!walkPointers.delete(e.pointerId)) return;
-    syncWalkTouch();
-    e.preventDefault();
-  };
-  button.addEventListener("pointerup", release);
-  button.addEventListener("pointercancel", release);
-  button.addEventListener("lostpointercapture", release);
+app.walking = () => walk.on;
+$("#walkPlace").onclick = () => setWalkPlacing(!walk.placing);
+$("#walkGround").onclick = () => { walk.ground = !walk.ground; walk.floorT = 0; walk.floorZ = null; syncWalkUI(); status(walk.ground ? "Pés no chão: a câmera fica a 1,6 m do piso." : "Voo livre: suba e desça à vontade."); };
+$("#walkCollide").onclick = () => { walk.collide = !walk.collide; walk.freeT = 0; syncWalkUI(); status(walk.collide ? "Colisão ligada: você para em paredes e equipamentos." : "Colisão desligada: você atravessa as peças."); };
+$("#walkExit").onclick = () => setWalk(false);
+$("#walkSlower").onclick = () => { walk.speed = Math.max(0.05, walk.speed / 1.5); syncWalkUI(); };
+$("#walkFaster").onclick = () => { walk.speed = Math.min(100, walk.speed * 1.5); syncWalkUI(); };
+// up / down buttons (touch): held like keys
+document.querySelectorAll("#walkPads [data-walk]").forEach((button) => {
+  const key = button.dataset.walk;
+  button.addEventListener("pointerdown", (e) => { if (!walk.on) return; e.preventDefault(); button.setPointerCapture(e.pointerId); walk.touch.add(key); button.classList.add("on"); });
+  const release = () => { walk.touch.delete(key); button.classList.remove("on"); };
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(ev, release);
   button.addEventListener("contextmenu", (e) => e.preventDefault());
 });
-document.querySelectorAll("#mobileWalkControls [data-look]").forEach((button) => {
-  button.addEventListener("pointerdown", (e) => {
-    if (!walk.on) return;
-    e.preventDefault();
-    button.setPointerCapture(e.pointerId);
-    lookPointers.set(e.pointerId, button.dataset.look);
-    syncWalkLook();
-    walk.last = performance.now();
+// Two thumb sticks (touch): the left one walks, the right one turns the view. x, y in -1..1.
+function joystick(el, set) {
+  const knob = el.firstElementChild;
+  let id = null;
+  const move = (e) => {
+    const r = el.getBoundingClientRect(), R = r.width / 2;
+    let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R;
+    const l = Math.hypot(x, y);
+    if (l > 1) { x /= l; y /= l; }
+    knob.style.transform = `translate(${(x * R * 0.55).toFixed(1)}px, ${(y * R * 0.55).toFixed(1)}px)`;
+    set(Math.abs(x) < 0.12 ? 0 : x, Math.abs(y) < 0.12 ? 0 : y);
     requestRender();
-  });
-  const release = (e) => {
-    if (!lookPointers.delete(e.pointerId)) return;
-    syncWalkLook();
-    e.preventDefault();
   };
-  button.addEventListener("pointerup", release);
-  button.addEventListener("pointercancel", release);
-  button.addEventListener("lostpointercapture", release);
-  button.addEventListener("contextmenu", (e) => e.preventDefault());
-});
-$("#mobileWalkExit").onclick = () => setWalk(false);
-$("#mobileWalkSlower").onclick = () => { walk.speed = Math.max(0.05, walk.speed / 1.5); showWalkSpeed(); };
-$("#mobileWalkFaster").onclick = () => { walk.speed = Math.min(100, walk.speed * 1.5); showWalkSpeed(); };
-function stepWalk(now) {
-  const dt = Math.min(0.3, (now - walk.last) / 1000);
-  walk.last = now;
-  if (!walk.on) return;
-  if (walk.look.size) {
-    const turn = 1.4 * dt;
-    if (walk.look.has("left")) walk.yaw += turn;
-    if (walk.look.has("right")) walk.yaw -= turn;
-    if (walk.look.has("up")) walk.pitch = Math.min(1.55, walk.pitch + turn);
-    if (walk.look.has("down")) walk.pitch = Math.max(-1.55, walk.pitch - turn);
-    walkLook();
-    needRender = true;
-    lastMove = now;
+  el.addEventListener("pointerdown", (e) => { if (!walk.on) return; e.preventDefault(); id = e.pointerId; el.setPointerCapture(id); el.classList.add("on"); move(e); });
+  el.addEventListener("pointermove", (e) => { if (e.pointerId === id) move(e); });
+  const end = (e) => { if (e.pointerId !== id) return; id = null; el.classList.remove("on"); knob.style.transform = ""; set(0, 0); };
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(ev, end);
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+joystick($("#joyMove"), (x, y) => { walk.mx = x; walk.my = y; });
+joystick($("#joyLook"), (x, y) => { walk.lx = x; walk.ly = y; });
+
+// How far the camera may go along `dir` before touching something (collision).
+const _wd = new THREE.Vector3(), _wo = new THREE.Vector3();
+function freeStep(dir, step, now) {
+  _wd.copy(dir);
+  if (walk.ground) _wd.z = 0;
+  if (_wd.lengthSq() < 1e-8) return step;
+  _wd.normalize();
+  if (now - walk.freeT > 90 || _wd.dot(walk.freeDir) < 0.97) {
+    _wo.copy(camera.position);
+    if (walk.ground) _wo.z -= 0.45; // chest height: steps and low sills do not stop the walk
+    walk.free = probe(_wo, _wd, 8, 16);
+    walk.freeDir.copy(_wd);
+    walk.freeT = now;
   }
-  if (!walk.keys.size && !walk.touch.size) return;
-  const K = new Set([...walk.keys, ...walk.touch]), v = new THREE.Vector3();
-  const f = new THREE.Vector3(Math.cos(walk.pitch) * Math.cos(walk.yaw), Math.cos(walk.pitch) * Math.sin(walk.yaw), Math.sin(walk.pitch));
-  const r = new THREE.Vector3(Math.sin(walk.yaw), -Math.cos(walk.yaw), 0);
-  if (K.has("w") || K.has("arrowup")) v.add(f);
-  if (K.has("s") || K.has("arrowdown")) v.sub(f);
-  if (K.has("d") || K.has("arrowright")) v.add(r);
-  if (K.has("a") || K.has("arrowleft")) v.sub(r);
-  if (K.has("e") || K.has("pageup")) v.z += 1;
-  if (K.has("q") || K.has("pagedown")) v.z -= 1;
-  if (!v.lengthSq()) return;
-  camera.position.addScaledVector(v.normalize(), walk.speed * (K.has("shift") ? 4 : 1) * dt);
+  const ok = Math.max(0, Math.min(step, walk.free - BODY));
+  walk.free -= ok;
+  return ok;
+}
+// Keep the eyes 1.6 m above the floor (the nearest surface below): climbs steps, falls off edges.
+function floorStep(now, dt) {
+  if (now - walk.floorT > 110) {
+    walk.floorT = now;
+    const g = probe(camera.position, DOWN, 60, 5);
+    walk.floorZ = isFinite(g) ? camera.position.z - g + EYE : null;
+  }
+  if (walk.floorZ == null) return false;
+  const dz = walk.floorZ - camera.position.z;
+  if (Math.abs(dz) < 1e-3) return false;
+  const max = (dz > 0 ? 3.5 : 9) * dt;
+  camera.position.z += Math.max(-max, Math.min(max, dz));
+  return true;
+}
+function stepWalk(now) {
+  const dt = Math.min(0.1, (now - walk.last) / 1000);
+  walk.last = now;
+  if (!walk.on || walk.placing) return;
+  let moved = false;
+  if (walk.lx || walk.ly) {
+    walk.yaw -= walk.lx * 1.9 * dt;
+    walk.pitch = Math.max(-1.55, Math.min(1.55, walk.pitch - walk.ly * 1.3 * dt));
+    moved = true;
+  }
+  const K = walk.keys, T = walk.touch;
+  let fwd = -walk.my, side = walk.mx, up = 0;
+  if (K.has("w") || K.has("arrowup")) fwd += 1;
+  if (K.has("s") || K.has("arrowdown")) fwd -= 1;
+  if (K.has("d") || K.has("arrowright")) side += 1;
+  if (K.has("a") || K.has("arrowleft")) side -= 1;
+  if (K.has("e") || K.has("pageup") || T.has("e")) up += 1;
+  if (K.has("q") || K.has("pagedown") || T.has("q")) up -= 1;
+  const cy = Math.cos(walk.yaw), sy = Math.sin(walk.yaw), cp = Math.cos(walk.pitch);
+  const v = walk.ground ? new THREE.Vector3(cy, sy, 0) : new THREE.Vector3(cp * cy, cp * sy, Math.sin(walk.pitch));
+  v.multiplyScalar(fwd).add(new THREE.Vector3(sy * side, -cy * side, walk.ground ? 0 : up));
+  const mag = Math.min(1, v.length());
+  if (mag > 0.01) {
+    v.normalize();
+    let step = walk.speed * (K.has("shift") ? 4 : 1) * mag * dt;
+    if (walk.collide) step = freeStep(v, step, now);
+    if (step > 0) { camera.position.addScaledVector(v, step); moved = true; }
+  }
+  // the floor is measured while moving and for a moment after (settling), not while standing still
+  if (walk.ground && (moved || walk.floorT === 0 || now - lastMove < 600) && floorStep(now, dt)) moved = true;
+  if (!moved) return;
   walkLook();
   needRender = true;
   lastMove = now;
@@ -1873,64 +2289,16 @@ renderer.domElement.addEventListener("wheel", (e) => {
   if (!walk.on) return;
   e.preventDefault();
   walk.speed = Math.max(0.05, Math.min(100, walk.speed * (e.deltaY < 0 ? 1.25 : 0.8)));
-  showWalkSpeed();
+  syncWalkUI();
 }, { passive: false });
-window.addEventListener("blur", () => { walk.keys.clear(); walkPointers.clear(); lookPointers.clear(); syncWalkTouch(); syncWalkLook(); });
+window.addEventListener("blur", () => { walk.keys.clear(); walk.touch.clear(); walk.mx = walk.my = walk.lx = walk.ly = 0; });
 window.addEventListener("keyup", (e) => walk.keys.delete(e.key.toLowerCase()));
 
 // ---------------------------------------------------------------- toolbar & keys
-$("#fit").onclick = () => fitAll();
+$("#fit").onclick = () => fitAll(true, true);
 $("#zoomSel").onclick = () => { if (app.selNodes.size) app.frameNodes([...app.selNodes]); };
-$("#mobileFit").onclick = () => $("#fit").click();
-$("#mobileZoomSel").onclick = () => { $("#zoomSel").click(); $("#mobileViewChoices").hidden = true; };
-function setMobileSide(open, tab) {
-  $("#app").classList.toggle("mobileSide", open);
-  $("#mobileSideBackdrop").hidden = !open;
-  $("#mobileTree").setAttribute("aria-expanded", String(open));
-  $("#mobileFilter").setAttribute("aria-expanded", String(open && tab === "searchTab"));
-  if (open) {
-    if (tab) app.showTab(tab);
-    $("#mobileViewChoices").hidden = true;
-  }
-}
-app.closeMobileSide = () => setMobileSide(false);
-$("#mobileTree").onclick = () => setMobileSide(!$("#app").classList.contains("mobileSide"), "treeTab");
-$("#mobileFilter").onclick = () => {
-  setMobileSide(true, "searchTab");
-  $("#mobileFilterText").focus();
-};
-$("#mobileSideClose").onclick = app.closeMobileSide;
-$("#mobileSideBackdrop").onclick = app.closeMobileSide;
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || !$("#app").classList.contains("mobileSide")) return;
-  e.stopPropagation();
-  app.closeMobileSide();
-}, true);
-$("#mobileMore").onclick = () => $("#loadMoreBtn").click();
-app.on("geometry", () => { $("#mobileMore").disabled = $("#loadMoreBtn").hidden; });
-$("#mobileViews").onclick = () => { $("#mobileViewChoices").hidden = !$("#mobileViewChoices").hidden; };
-$("#mobileOrtho").onclick = () => { $("#ortho").click(); $("#mobileViewChoices").hidden = true; };
-$("#mobileSaved").onclick = () => {
-  setMobileSide(true, "setsTab");
-};
-$("#mobileIsolate").onclick = () => { $("#isolate").click(); $("#mobileViewChoices").hidden = true; };
-$("#mobileShowAll").onclick = () => { $("#showAll").click(); $("#mobileViewChoices").hidden = true; };
-$("#mobileCut").onclick = () => { $("#cutBtn").click(); $("#mobileViewChoices").hidden = true; };
-$("#mobileWalkToggle").onclick = () => {
-  if (!$("#cutPanel").hidden) $("#cutPanel [data-close]").click();
-  setWalk(!walk.on);
-  $("#mobileViewChoices").hidden = true;
-};
-function updateMobileModelActions() {
-  const ready = !!app.tree;
-  $("#mobileCut").disabled = !ready;
-  $("#mobileWalkToggle").disabled = !ready;
-}
-app.on("model", updateMobileModelActions);
-app.on("loaded", updateMobileModelActions);
-updateMobileModelActions();
-$("#mobileEdges").onclick = () => { app.setDisplay({ style: app.display.style === 1 ? 0 : 1 }); $("#mobileViewChoices").hidden = true; };
-$("#mobileExport").onclick = () => { $("#exportMobileBtn").click(); $("#mobileViewChoices").hidden = true; };
+$("#viewPrev").onclick = () => histGo(-1);
+$("#viewNext").onclick = () => histGo(1);
 const exportButton = $("#exportMobileBtn");
 let exportingMobile = false;
 function updateExportButton() {
@@ -1938,9 +2306,6 @@ function updateExportButton() {
   exportButton.disabled = exportButton.hidden || exportingMobile;
   const selected = app.selNodes.size > 0;
   exportButton.title = selected ? "Exportar as peças selecionadas em um modelo 3D" : "Exportar o modelo 3D completo";
-  $("#mobileExport").textContent = selected ? "Exportar seleção" : "Exportar modelo completo";
-  $("#mobileExport").hidden = exportButton.hidden;
-  $("#mobileExport").disabled = exportingMobile;
 }
 app.on("loaded", updateExportButton);
 app.on("selection", updateExportButton);
@@ -1981,7 +2346,7 @@ async function exportModelParts(parts) {
         link.click();
         setTimeout(() => { URL.revokeObjectURL(url); link.remove(); }, 60000);
       }
-      status("Modelo 3D exportado. Extraia o ZIP antes de abrir a pasta no visualizador.");
+      status("Modelo 3D exportado. O ZIP abre direto em “Abrir arquivo ZIP…”, no PC ou no celular.");
     }
   } catch (error) {
     if (writable) { try { await writable.abort(); } catch { /* already closed */ } }
@@ -1997,8 +2362,7 @@ exportButton.onclick = () => {
 };
 document.querySelectorAll("[data-view]").forEach((b) => {
   b.onclick = () => {
-    frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize());
-    $("#mobileViewChoices").hidden = true;
+    frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[b.dataset.view].clone().normalize(), true);
   };
 });
 $("#isolate").onclick = () => { if (app.selNodes.size) app.isolate([...app.selNodes]); };
@@ -2006,6 +2370,8 @@ $("#hideSel").onclick = () => { if (app.selNodes.size) app.setVisible([...app.se
 $("#showAll").onclick = () => app.showAll();
 $("#ortho").onclick = () => { if (walk.on) setWalk(false); setOrtho(camera !== ortho); };
 $("#walkBtn").onclick = () => setWalk(!walk.on);
+app.toggleOrtho = () => $("#ortho").click();
+app.isOrtho = () => camera === ortho;
 
 // drop-down menus
 document.querySelectorAll(".menu").forEach((m) => {
@@ -2016,7 +2382,7 @@ document.querySelectorAll(".menu").forEach((m) => {
     if (!open) m.classList.add("open");
   });
   m.querySelector(".menuBody").addEventListener("click", (e) => {
-    if (e.target.tagName === "BUTTON") m.classList.remove("open");
+    if (e.target.closest("button")) m.classList.remove("open");
     e.stopPropagation();
   });
 });
@@ -2027,11 +2393,34 @@ window.addEventListener("keydown", (e) => {
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
   const k = e.key.toLowerCase();
   if (walk.on) {
-    if (k === "escape") { setWalk(false); return; }
+    if (k === "escape") { if (walk.placing) setWalkPlacing(false); else setWalk(false); return; }
+    if (k === "g") { $("#walkGround").click(); return; }
+    if (k === "c") { $("#walkCollide").click(); return; }
+    if (k === "p") { $("#walkPlace").click(); return; }
     if (WALK_KEYS.has(k)) { walk.keys.add(k); walk.last = performance.now(); requestRender(); e.preventDefault(); }
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && app.tree) { // undo / redo of visibility and colours
+    if (k === "z" && !e.shiftKey) { app.undo(); e.preventDefault(); }
+    else if (k === "y" || (k === "z" && e.shiftKey)) { app.redo(); e.preventDefault(); }
+    return;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // navigation: arrows turn the view (Shift: slide it), + / - zoom, Home fits, 1-4 standard views
+  const A = THREE.MathUtils.degToRad(15);
+  if (k.startsWith("arrow") && app.tree) {
+    const dx = k === "arrowleft" ? -1 : k === "arrowright" ? 1 : 0, dy = k === "arrowup" ? 1 : k === "arrowdown" ? -1 : 0;
+    if (e.shiftKey) panBy(dx * 0.12, dy * 0.12); else orbitBy(dx * A, dy * A * 0.66);
+    e.preventDefault();
+    return;
+  }
+  if (k === "+" || k === "=") { zoomBy(0.8); return; }
+  if (k === "-" || k === "_") { zoomBy(1.25); return; }
+  if (k === "home") { fitAll(true, true); e.preventDefault(); return; }
+  if (k === "backspace") { histGo(e.shiftKey ? 1 : -1); e.preventDefault(); return; }
+  const std = { 1: "front", 2: "side", 3: "top", 4: "iso" }[k];
+  if (std && app.tree) { frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[std].clone().normalize(), true); return; }
+  if (k === "5") { $("#ortho").click(); return; }
   if (k === "f") $("#fit").click();
   else if (k === "z") $("#zoomSel").click();
   else if (k === "i") $("#isolate").click();
@@ -2057,25 +2446,51 @@ const SKY = new THREE.Vector3(0.35, -0.45, 1).normalize();
 // while moving, and what is dropped while moving.
 const QUALITY = {
   high: { idle: 0, move: 0, edges: true, ssao: true, ratio: 1 },
-  auto: { idle: 0.75, move: 5, edges: true, ssao: false, ratio: 1 },
+  auto: { idle: 0.75, move: 5, edges: true, ssao: false, ratio: 1, adaptive: true },
   fast: { idle: 1, move: 8, edges: false, ssao: false, ratio: 0.6 },
 };
-let wasMoving = false, ratioScale = 1;
+// "Automática" adapts to the machine: while the camera moves, the time between frames decides
+// how small a part may be before it is skipped (px) and, as a last resort, the resolution. A fast
+// graphics card keeps nearly everything; a slow one drops detail until the movement is fluid.
+const adapt = { px: 5, ratio: touch ? 0.75 : 1, ema: 0, n: 0, last: 0 };
+function adaptQuality(now, moving) {
+  if (!moving) { adapt.last = 0; return; }
+  const dt = adapt.last ? now - adapt.last : 0;
+  adapt.last = now;
+  if (!dt || dt > 500) return;
+  adapt.ema = adapt.ema ? adapt.ema * 0.75 + dt * 0.25 : dt;
+  if (++adapt.n < 5) return;
+  adapt.n = 0;
+  if (adapt.ema > 42) { // under about 24 frames/s: draw less
+    if (adapt.px < 24) adapt.px = Math.min(24, adapt.px * 1.4);
+    else if (adapt.ratio > 0.5) adapt.ratio -= 0.25;
+  } else if (adapt.ema < 24) { // over about 40 frames/s: there is room for more
+    if (adapt.ratio < (touch ? 0.75 : 1)) adapt.ratio += 0.25;
+    else if (adapt.px > 1.5) adapt.px = Math.max(1.5, adapt.px / 1.25);
+  }
+}
+let wasMoving = false;
 const frameTimes = [];
 function animate(now = performance.now()) {
   requestAnimationFrame(animate);
   stepTween(now);
+  stepFly(now);
   stepWalk(now);
-  if (!walk.on && !tween && controls.update()) needRender = true;
+  if (!walk.on && !tween && !fly && controls.update()) needRender = true;
   const moving = now - lastMove < 150;
-  if (wasMoving && !moving) needRender = true; // refine once the camera stops
+  if (wasMoving && !moving) { // the camera came to rest: refine, and remember where it stopped
+    needRender = true;
+    if (histJump) histJump = false; else if (!walk.on && app.tree) histPush();
+  }
   wasMoving = moving;
-  if (!needRender) return;
+  if (!needRender) { adapt.last = 0; return; }
   needRender = false;
   const Q = QUALITY[app.display.quality] || QUALITY.auto;
-  const ratio = moving ? Q.ratio : 1;
-  if (ratio !== ratioScale) { ratioScale = ratio; renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2) * ratio); resize(); }
-  applyLod(moving ? Q.move : Q.idle, moving && !Q.edges);
+  if (Q.adaptive) adaptQuality(now, moving);
+  const minPx = moving ? (Q.adaptive ? adapt.px : Q.move) : Q.idle;
+  const ratio = baseRatio() * (moving ? (Q.adaptive ? adapt.ratio : touch ? Math.min(Q.ratio, 0.75) : Q.ratio) : 1);
+  if (Math.abs(ratio - curRatio) > 0.01) { curRatio = ratio; renderer.setPixelRatio(ratio); resize(); }
+  applyLod(minPx, moving && (!Q.edges || (Q.adaptive && adapt.px >= 14)));
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {
     if (walk.on) { persp.near = 0.02; persp.far = size * 3; }
@@ -2130,7 +2545,8 @@ function showPerf(now, cpuMs, moving) {
   line("Blocos desenhados", `${drawnChunks} de ${chunks.length}`);
   line("Memória de vídeo (aprox.)", (gpuBytes / 1048576).toFixed(0) + " MB");
   if (performance.memory) line("Memória JS", (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + " MB");
-  line("Qualidade", { high: "alta", auto: "automática", fast: "rápida" }[app.display.quality] + (moving ? " · em movimento" : ""));
+  line("Qualidade", { high: "alta", auto: "automática", fast: "rápida" }[app.display.quality] + (moving ? " · em movimento" : "")
+    + (app.display.quality === "auto" ? ` · peças ≥ ${adapt.px.toFixed(1)} px${adapt.ratio < 1 ? ` · resolução ${Math.round(adapt.ratio * 100)}%` : ""}` : ""));
   if (app.gpuIntegrated) {
     const w = document.createElement("p");
     w.className = "warn";
@@ -2142,6 +2558,7 @@ app.hidePerf = () => { $("#perf").hidden = true; };
 
 // ---------------------------------------------------------------- start
 initContextMenu(app);
+initUndo(app);
 initTree(app);
 initViewTabs(app);
 initStructure(app);
@@ -2160,6 +2577,59 @@ initRegions(app);
 initMeasure(app);
 initViews(app);
 initAnalysis(app);
+initMobile(app);
+
+// ---------------------------------------------------------------- link to one part
+// ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.
+function wantedCode() {
+  const q = new URLSearchParams(location.search).get("peca");
+  if (q) return q;
+  const m = /[#&]peca=([^&]+)/.exec(location.hash);
+  return m ? decodeURIComponent(m[1]) : "";
+}
+const normCode = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.\/]+/g, "");
+app.findByCode = function (code) {
+  const want = normCode(code), t = app.tree, ki = app.keyIndex("part_objectid");
+  if (!want) return [];
+  const exact = [], partial = [];
+  for (let n = 1; n < app.nNodes; n++) {
+    const name = normCode(t.names[n]), id = ki >= 0 ? normCode(app.prop(n, ki) ?? "") : "";
+    if (name === want || id === want) exact.push(n);
+    else if (partial.length < 200 && (name.includes(want) || (id && id.includes(want)))) partial.push(n);
+  }
+  const hits = exact.length ? exact : partial;
+  const set = new Set(hits); // an assembly and its own parts: keep the assembly only
+  return hits.filter((n) => !set.has(t.parent[n]));
+};
+app.on("loaded", async () => {
+  const code = wantedCode();
+  if (!code) return;
+  const nodes = app.findByCode(code);
+  if (!nodes.length) { status(`Nenhuma peça com o código “${code}” neste modelo.`); return; }
+  const need = [];
+  app.forParts(nodes, (p) => { if (!isLoaded(p) && app.availableParts[p]) need.push(p); });
+  if (need.length) await app.loadParts(need);
+  app.select(nodes, "replace");
+  app.frameNodes(nodes);
+  status(`${code}: ${nodes.length === 1 ? app.tree.names[nodes[0]] : nodes.length + " itens"}`);
+});
+app.partLink = function (node) {
+  const ki = app.keyIndex("part_objectid");
+  const code = (ki >= 0 && app.prop(node, ki)) || app.tree.names[node];
+  const u = new URL(location.href);
+  u.hash = "";
+  u.searchParams.delete("abrir");
+  u.searchParams.set("peca", code);
+  return u.href;
+};
+if (!window.desktop) app.addContextItems((nodes, node) => [{
+  label: "Copiar link desta peça", title: "Um endereço que abre o visualizador, seleciona e enquadra esta peça (quem abrir precisa ter o mesmo modelo)",
+  onClick: async () => {
+    const url = app.partLink(node);
+    try { await navigator.clipboard.writeText(url); status("Link copiado: " + url); } catch { prompt("Copie o link:", url); }
+  },
+}]);
+
 app.on("selection", () => {
   const s = app.selNodes.size;
   $("#selInfo").textContent = s ? `${s.toLocaleString("pt-BR")} selecionado(s) · ${app.selectedParts().length.toLocaleString("pt-BR")} peça(s)` : "";

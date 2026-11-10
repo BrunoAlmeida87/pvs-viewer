@@ -17,7 +17,9 @@ export function initLayout(app) {
 
   // ------------------------------------------------------------ side bar and properties
   const appEl = $("#app");
-  if (store.get("pvs-viewer:noSide", false)) appEl.classList.add("noSide");
+  const phone = root.classList.contains("mobile");
+  // a narrow window (a tablet held upright) starts with the side bar closed: the model comes first
+  if (store.get("pvs-viewer:noSide", root.clientWidth < 900)) appEl.classList.add("noSide");
   $("#sideToggle").onclick = () => {
     appEl.classList.toggle("noSide");
     store.set("pvs-viewer:noSide", appEl.classList.contains("noSide"));
@@ -79,7 +81,7 @@ export function initLayout(app) {
     }).observe(p, { attributes: true, attributeFilter: ["hidden"] });
     const head = p.querySelector(".ph");
     head.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest("button")) return;
+      if (phone || e.button !== 0 || e.target.closest("button")) return; // on a phone the panels are fixed sheets
       e.preventDefault();
       const v = $("#view").getBoundingClientRect();
       const r = p.getBoundingClientRect();
@@ -102,6 +104,40 @@ export function initLayout(app) {
     head.addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; delete pos[p.id]; store.set("pvs-viewer:panelPos", pos); place(p); });
     head.title = "Arraste para mover · duplo clique volta à posição inicial";
   }
+
+  // ------------------------------------------------------------ top bar in one row
+  // When the buttons do not fit in the window: first the labels go (icons with tooltips), then the
+  // least used tools move into a "Mais" menu, one by one, until everything fits in a single row.
+  const bar = $("#bar1"), more = $("#moreMenu"), moreBody = more.querySelector(".menuBody");
+  const MOVABLE = ["#animBtn", "#analysisBtn", "#explodeBtn", "#nbBtn", "#bgBtn", "#layerBtn", "#walkBtn", "#ghost",
+    "#exportMobileBtn", "#measureBtn", "#cutBtn", "#hideSel", "#isolate", "#zoomSel", "#loadMoreBtn"];
+  const home = new Map(); // button -> placeholder at its place in the bar
+  for (const sel of MOVABLE) { const b = $(sel), ph = document.createComment(sel); b.before(ph); home.set(b, ph); }
+  const tooWide = () => bar.scrollWidth > bar.clientWidth + 1;
+  let fitting = false;
+  function fitBar() {
+    if (phone || fitting) return;
+    fitting = true;
+    for (const [b, ph] of home) if (b.parentNode === moreBody) ph.after(b);
+    more.hidden = true;
+    bar.classList.remove("compact");
+    if (tooWide()) {
+      bar.classList.add("compact");
+      if (tooWide()) {
+        more.hidden = false;
+        for (const [b] of home) { if (!tooWide()) break; if (!b.hidden) moreBody.prepend(b); }
+        if (!moreBody.children.length) more.hidden = true;
+      }
+    }
+    fitting = false;
+  }
+  new ResizeObserver(fitBar).observe(bar);
+  // buttons that appear later ("Carregar", "Exportar modelo") change the width too
+  // (the "Mais" menu itself and the drop-downs are left out: fitBar changes them)
+  new MutationObserver((list) => { if (list.some((m) => m.target !== more && m.target.classList.contains("tb"))) fitBar(); })
+    .observe(bar, { attributes: true, attributeFilter: ["hidden"], subtree: true });
+  app.on("model", fitBar);
+  fitBar();
 
   // ------------------------------------------------------------ open another model
   $("#openModelBtn").onclick = () => {

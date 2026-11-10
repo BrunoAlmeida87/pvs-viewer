@@ -4,13 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Visualizador PVS</title>
+<meta name="theme-color" content="#1a1e25">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <script>try { const t = localStorage.getItem("pvs-viewer:theme"); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}
-if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.search).has("mobile")) document.documentElement.classList.add("mobile");</script>
-<link rel="stylesheet" href="style.css?v=mobile-pov-2">
+// "touch": the finger is the main pointer (lighter defaults, bigger buttons). "mobile": a phone
+// (its smaller side is under 600 px): the 3D view takes the whole screen. A tablet keeps the PC layout.
+(() => {
+  const q = new URLSearchParams(location.search), c = document.documentElement.classList;
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  if (coarse || q.has("mobile") || q.has("touch")) c.add("touch");
+  if (q.has("mobile") || (coarse && Math.min(screen.width, screen.height) < 600)) c.add("mobile");
+})();</script>
+<link rel="stylesheet" href="style.css?v=nav-1">
 <script type="importmap">
 { "imports": {
-  "three": "./vendor/three.module.js",
+  "three": "./vendor/three.module.min.js",
   "three/addons/": "./vendor/addons/"
 } }
 </script>
@@ -50,6 +61,16 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
     <symbol id="i-stack" viewBox="0 0 24 24"><rect x="7.5" y="3.5" width="13" height="10" rx="1.5"/><path d="M5 7v8.5A1.5 1.5 0 0 0 6.5 17H16"/><path d="M2.5 10.5v8a2 2 0 0 0 2 2H13"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8.3" cy="8.3" r="1.4"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8.5 5.5L4 10l4.5 4.5"/><path d="M4 10h10a6 6 0 0 1 0 12h-3"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15.5 5.5L20 10l-4.5 4.5"/><path d="M20 10H10a6 6 0 0 0 0 12h3"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/></symbol>
+    <symbol id="i-ground" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M9 20v-3.5l1.5-4M15 20v-3.5l-1.5-4"/><path d="M10.5 12.5h3V7.8h-3z"/><circle cx="12" cy="4.6" r="1.7"/></symbol>
+    <symbol id="i-wall" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M3.5 9.5h17M3.5 14.5h17M9 4.5v5M15 4.5v5M6 9.5v5M12 9.5v5M18 9.5v5M9 14.5v5M15 14.5v5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6M4 12h16"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -77,6 +98,9 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
           <button data-view="top">Topo</button>
           <hr>
           <button id="ortho">Projeção ortográfica</button>
+          <hr>
+          <button id="viewPrev" title="Volta a câmera para onde ela estava antes (Backspace)">Vista anterior</button>
+          <button id="viewNext" title="Avança de novo (Shift+Backspace)">Vista seguinte</button>
         </div>
       </div>
       <div class="menu">
@@ -112,6 +136,7 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
           </select></div>
           <label class="menuRow"><input type="checkbox" id="dPerf"> Mostrar desempenho (P)</label>
           <label class="menuRow"><input type="checkbox" id="dCube" checked> Cubo de vistas</label>
+          <label class="menuRow"><input type="checkbox" id="dHover" checked> Realçar a peça sob o cursor</label>
         </div>
       </div>
     </div>
@@ -164,8 +189,14 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       <button id="ghost" class="tb" title="Deixa transparente o que não está selecionado (G)"><svg><use href="#i-ghost"/></svg><span>Fantasma</span></button>
     </div>
 
+    <div class="menu" id="moreMenu" hidden>
+      <button class="menuBtn tb" title="Mais ferramentas (as que não couberam na barra)"><svg><use href="#i-dots"/></svg><span>Mais<svg class="dd"><use href="#i-down"/></svg></span></button>
+      <div class="menuBody"></div>
+    </div>
     <span class="spacer"></span>
     <div class="tg end">
+      <button id="undoBtn" class="ib" title="Desfazer a última mudança de visibilidade ou cor (Ctrl+Z)" disabled><svg><use href="#i-undo"/></svg></button>
+      <button id="redoBtn" class="ib" title="Refazer (Ctrl+Y)" disabled><svg><use href="#i-redo"/></svg></button>
       <button id="listBtn" class="tb" title="Lista de peças e estatísticas (L)"><svg><use href="#i-table"/></svg><span>Lista</span></button>
       <div class="menu right">
         <button class="menuBtn ib" title="Atalhos de teclado"><svg><use href="#i-keys"/></svg></button>
@@ -175,9 +206,16 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
           <div><kbd>G</kbd> fantasma</div><div><kbd>E</kbd> arestas</div><div><kbd>X</kbd> raio-X</div>
           <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>K</kbd> camadas</div><div><kbd>M</kbd> medir</div>
           <div><kbd>L</kbd> lista de peças</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
+          <div><kbd>Ctrl</kbd><kbd>Z</kbd> desfazer</div><div><kbd>Ctrl</kbd><kbd>Y</kbd> refazer</div>
+          <hr>
+          <div><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> girar a vista · com <kbd>Shift</kbd> desloca</div>
+          <div><kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Home</kbd> enquadrar tudo</div>
+          <div><kbd>1</kbd> frente <kbd>2</kbd> lado <kbd>3</kbd> topo <kbd>4</kbd> isométrica <kbd>5</kbd> ortográfica</div>
+          <div><kbd>⌫</kbd> vista anterior · com <kbd>Shift</kbd> a seguinte</div>
           <hr>
           <div>Arrastar: gira em torno do ponto · botão direito ou do meio: desloca · roda: zoom</div>
-          <div>Ctrl+clique soma · Shift+arrastar seleciona área · Alt+clique sobe um nível · duplo clique enquadra</div>
+          <div>Ctrl+clique soma · Shift+arrastar seleciona área · Alt+clique sobe um nível</div>
+          <div>Duplo clique numa peça enquadra a peça; no fundo, enquadra tudo · botão direito: menu da peça</div>
         </div>
       </div>
       <button id="themeBtn" class="ib" title="Tema claro / escuro"><svg class="moon"><use href="#i-moon"/></svg><svg class="sun"><use href="#i-sun"/></svg></button>
@@ -196,8 +234,8 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
     </nav>
     <section id="treeTab" class="tab on">
       <div id="mobileTreeActions">
-        <span id="mobileTreeSelection">Toque em sistemas ou peças para selecionar.</span>
-        <div class="row2"><button id="mobileTreeIsolate" type="button" disabled>Mostrar seleção</button><button id="mobileTreeShowAll" type="button">Mostrar tudo</button></div>
+        <span id="mobileTreeSelection">Toque para selecionar.</span>
+        <button id="mobileTreeIsolate" type="button" disabled>Só a seleção</button><button id="mobileTreeShowAll" type="button">Tudo</button>
       </div>
       <div id="tree"></div>
     </section>
@@ -303,47 +341,83 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
   </aside>
 
   <main id="view">
-    <nav id="mobileBar" aria-label="Controles de visualização">
-      <button id="mobileTree" title="Árvore e vistas salvas">☰ <span>Peças</span></button>
-      <button id="mobileFit" title="Enquadrar modelo">▣ <span>Enquadrar</span></button>
-      <button id="mobileFilter" title="Filtrar sistemas e peças">⌕ <span>Filtrar</span></button>
-      <button id="mobileViews" title="Abrir vistas">◈ <span>Vistas</span></button>
-      <button id="mobileMore" title="Carregar mais seções" disabled>＋ <span>Carregar</span></button>
+    <!-- phone: the 3D view takes the whole screen; these float over it and stay small -->
+    <div id="mProgress" hidden><i></i></div>
+    <div id="toast" hidden></div>
+    <nav id="mobileBar" aria-label="Controles">
+      <button id="mTree" aria-label="Árvore de peças" title="Árvore de peças"><svg><use href="#i-tree"/></svg></button>
+      <button id="mSearch" aria-label="Buscar e filtrar" title="Buscar e filtrar"><svg><use href="#i-search"/></svg></button>
+      <button id="mFit" aria-label="Enquadrar" title="Enquadrar tudo (ou a seleção)"><svg><use href="#i-fit"/></svg></button>
+      <button id="mViews" aria-label="Vistas" title="Vistas"><svg><use href="#i-cube"/></svg></button>
+      <button id="mTools" aria-label="Ferramentas" title="Ferramentas"><svg><use href="#i-grid"/></svg></button>
     </nav>
-    <div id="mobileViewChoices" hidden>
-      <button data-view="iso">Isométrica</button><button data-view="front">Frente</button>
-      <button data-view="side">Lado</button><button data-view="top">Topo</button>
-      <button id="mobileOrtho">Ortográfica</button><button id="mobileSaved">Vistas salvas</button>
-      <button id="mobileZoomSel">Enquadrar seleção</button>
-      <button id="mobileIsolate">Isolar seleção</button><button id="mobileShowAll">Mostrar tudo</button>
-      <button id="mobileCut" disabled>Corte</button><button id="mobileWalkToggle" disabled>Explorar por dentro</button>
-      <button id="mobileEdges">Arestas</button>
-      <button id="mobileExport" hidden>Exportar modelo</button>
+    <div id="selCard" hidden>
+      <button id="selCardName" title="Ver as propriedades"><b></b><span></span></button>
+      <button data-act="zoom" aria-label="Enquadrar a seleção" title="Enquadrar"><svg><use href="#i-zoom"/></svg></button>
+      <button data-act="isolate" aria-label="Mostrar só a seleção" title="Isolar"><svg><use href="#i-focus"/></svg></button>
+      <button data-act="hide" aria-label="Ocultar a seleção" title="Ocultar"><svg><use href="#i-eyeoff"/></svg></button>
+      <button data-act="more" aria-label="Mais ações" title="Mais ações"><svg><use href="#i-dots"/></svg></button>
     </div>
-    <div id="mobileWalkControls" hidden aria-label="Navegação em perspectiva">
-      <div class="mobileWalkHead"><strong>Visão interna</strong><button id="mobileWalkExit" type="button">Sair</button></div>
-      <p id="mobileWalkGuide">Arraste a imagem para olhar ao redor. Segure as setas para andar ou olhar.</p>
-      <button id="mobileWalkPlace" type="button">Definir posição no modelo</button>
-      <div class="mobileWalkMove">
-        <div class="mobileWalkGroup"><span>Andar</span><div class="mobileWalkPad" aria-label="Mover no plano">
-          <button data-walk="w" type="button" aria-label="Avançar">↑</button>
-          <button data-walk="a" type="button" aria-label="Mover para a esquerda">←</button>
-          <button data-walk="s" type="button" aria-label="Recuar">↓</button>
-          <button data-walk="d" type="button" aria-label="Mover para a direita">→</button>
-        </div></div>
-        <div class="mobileWalkGroup"><span>Olhar</span><div class="mobileLookPad" aria-label="Girar a visão">
-          <button data-look="up" type="button" aria-label="Olhar para cima">↑</button>
-          <button data-look="left" type="button" aria-label="Olhar para a esquerda">←</button>
-          <button data-look="down" type="button" aria-label="Olhar para baixo">↓</button>
-          <button data-look="right" type="button" aria-label="Olhar para a direita">→</button>
-        </div></div>
-      </div>
-      <div class="mobileWalkExtra">
-        <div><button data-walk="e" type="button">Subir</button><button data-walk="q" type="button">Descer</button></div>
-        <div><button id="mobileWalkSlower" type="button" aria-label="Diminuir velocidade">−</button><span id="mobileWalkSpeed"></span><button id="mobileWalkFaster" type="button" aria-label="Aumentar velocidade">＋</button></div>
+    <div id="mSheetBack" hidden></div>
+    <div id="mViewSheet" class="mSheet" hidden>
+      <div class="chips">
+        <button data-view="iso">Isométrica</button><button data-view="front">Frente</button><button data-view="side">Lado</button><button data-view="top">Topo</button>
+        <button data-do="ortho" id="mOrtho">Ortográfica</button><button data-do="prev">◂ Anterior</button><button data-do="next">Seguinte ▸</button><button data-do="saved">Vistas salvas</button>
       </div>
     </div>
-    <div id="mobileWalkAim" hidden aria-hidden="true">＋</div>
+    <div id="mToolSheet" class="mSheet" hidden>
+      <div class="mSheetHead"><b id="mToolTitle">Ferramentas</b><button data-do="close" aria-label="Fechar">✕</button></div>
+      <h5>Mostrar</h5>
+      <div class="tiles">
+        <button data-do="showAll"><svg><use href="#i-eye"/></svg><span>Mostrar tudo</span></button>
+        <button data-do="isolate"><svg><use href="#i-focus"/></svg><span>Isolar</span></button>
+        <button data-do="hide"><svg><use href="#i-eyeoff"/></svg><span>Ocultar</span></button>
+        <button data-do="ghost"><svg><use href="#i-ghost"/></svg><span>Fantasma</span></button>
+        <button data-do="undo"><svg><use href="#i-undo"/></svg><span>Desfazer</span></button>
+        <button data-do="display"><svg><use href="#i-sun"/></svg><span>Exibição</span></button>
+        <button data-do="colors"><svg><use href="#i-palette"/></svg><span>Cores</span></button>
+        <button data-do="select"><svg><use href="#i-cursor"/></svg><span>Seleção</span></button>
+      </div>
+      <h5>Ferramentas</h5>
+      <div class="tiles">
+        <button data-do="cut"><svg><use href="#i-cut"/></svg><span>Corte</span></button>
+        <button data-do="measure"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
+        <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
+        <button data-do="layers"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
+        <button data-do="bigramas"><svg><use href="#i-tag"/></svg><span>Bigramas</span></button>
+        <button data-do="nb"><svg><use href="#i-sphere"/></svg><span>Vizinhança</span></button>
+        <button data-do="explode"><svg><use href="#i-explode"/></svg><span>Explodir</span></button>
+        <button data-do="list"><svg><use href="#i-table"/></svg><span>Lista</span></button>
+        <button data-do="analysis"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
+        <button data-do="anim"><svg><use href="#i-play"/></svg><span>Animação</span></button>
+      </div>
+      <h5>Modelo</h5>
+      <div class="tiles">
+        <button data-do="open"><svg><use href="#i-open"/></svg><span>Abrir outro</span></button>
+        <button data-do="more" id="mMore"><svg><use href="#i-more"/></svg><span>Carregar mais</span></button>
+        <button data-do="export" id="mExport"><svg><use href="#i-export"/></svg><span>Exportar</span></button>
+        <button data-do="full" id="mFull"><svg><use href="#i-full"/></svg><span>Tela cheia</span></button>
+        <button data-do="theme"><svg><use href="#i-moon"/></svg><span>Tema</span></button>
+        <button data-do="perf"><svg><use href="#i-gpu"/></svg><span>Desempenho</span></button>
+      </div>
+    </div>
+    <!-- walk mode: one small bar for every device; thumb sticks on touch screens -->
+    <div id="walkBar" hidden>
+      <button id="walkPlace" title="Escolher onde ficar: clique num piso do modelo (P)"><svg><use href="#i-target"/></svg><span>Posicionar</span></button>
+      <button id="walkGround" title="Pés no chão: mantém a câmera a 1,6 m do piso (G)"><svg><use href="#i-ground"/></svg><span>Chão</span></button>
+      <button id="walkCollide" title="Parar em paredes e equipamentos (C)"><svg><use href="#i-wall"/></svg><span>Colisão</span></button>
+      <span class="walkSpeed"><button id="walkSlower" title="Mais devagar" aria-label="Mais devagar">−</button><i id="walkSpeedLbl"></i><button id="walkFaster" title="Mais rápido" aria-label="Mais rápido">＋</button></span>
+      <button id="walkExit" title="Sair da caminhada (Esc)" aria-label="Sair da caminhada">✕</button>
+    </div>
+    <div id="walkPads" hidden>
+      <div class="joy" id="joyMove" aria-label="Andar"><i></i></div>
+      <div class="walkVert"><button data-walk="e" type="button" aria-label="Subir">▲</button><button data-walk="q" type="button" aria-label="Descer">▼</button></div>
+      <div class="joy" id="joyLook" aria-label="Olhar"><i></i></div>
+    </div>
+    <div id="walkAim" hidden aria-hidden="true"></div>
+    <div id="hoverTip" hidden></div>
+    <canvas id="loupe" hidden aria-hidden="true"></canvas>
+    <div id="aimDot" hidden aria-hidden="true"></div>
     <div id="viewTabs" aria-label="Abas de vista"></div>
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
@@ -364,6 +438,23 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       </div>
     </div>
     <div id="floaters">
+      <!-- phone only: what the PC shows in the top bar menus and in the side bar -->
+      <div id="infoPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-info"/></svg>Propriedades <button class="x" data-close="infoPanel" title="Fechar">✕</button></div>
+        <div class="pb"></div>
+      </div>
+      <div id="displayPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-eye"/></svg>Exibição <button class="x" data-close="displayPanel" title="Fechar">✕</button></div>
+        <div class="pb menuForm"></div>
+      </div>
+      <div id="colorPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-palette"/></svg>Cores <button class="x" data-close="colorPanel" title="Fechar">✕</button></div>
+        <div class="pb menuForm"></div>
+      </div>
+      <div id="selPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-cursor"/></svg>Seleção <button class="x" data-close="selPanel" title="Fechar">✕</button></div>
+        <div class="pb menuForm"></div>
+      </div>
       <div id="layerPanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-stack"/></svg>Camadas <button class="x" data-close="layerPanel" title="Fechar">✕</button></div>
         <div class="pb">
@@ -505,8 +596,8 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
       </div>
     </div>
     <div id="walkHint" hidden>
-      <b>Caminhada</b> · W/S frente e trás · A/D lados · Q/E desce e sobe · arraste para olhar ·
-      Shift corre · roda do mouse muda a velocidade (<span id="walkSpeed"></span>) · Esc sai
+      <b>Caminhada</b> · W A S D anda · Q/E desce e sobe · arraste para olhar · Shift corre · roda muda a velocidade
+      (<span id="walkSpeed"></span>) · P posiciona · G chão · C colisão · Esc sai
     </div>
     <div id="open" hidden>
       <div class="openHead"><svg class="logo"><use href="#i-logo"/></svg><div><h2>Abrir modelo</h2><p class="muted">Creo View (.pvs + .ol) ou pasta convertida</p></div></div>
@@ -515,12 +606,19 @@ if (matchMedia("(pointer: coarse)").matches || new URLSearchParams(location.sear
         <div>Abra a pasta do modelo</div>
         <div class="muted">ou</div>
         <button class="btn" id="openBtn">Escolher a pasta…</button>
+        <button class="btn ghost" id="openZipBtn" title="O ZIP gravado por “Exportar modelo” abre direto, sem extrair">Abrir arquivo ZIP…</button>
         <button class="btn" id="convertBtn" hidden>Converter modelo para abertura rápida…</button>
+      </div>
+      <div id="recentBox" hidden>
+        <h3>Abertos recentemente</h3>
+        <div id="recentList"></div>
       </div>
       <label class="openOpt"><input type="checkbox" id="openRegions"> Escolher as seções antes de carregar (abre mais rápido e usa menos memória)</label>
       <p class="muted small">Os arquivos são lidos no seu dispositivo e não são enviados para nenhum servidor. No Chrome e no Edge o
-        navegador só pede permissão para <em>ver</em> a pasta. Também aceita uma pasta convertida por <code>tools/build.py</code>, que abre mais rápido.</p>
+        navegador só pede permissão para <em>ver</em> a pasta. Também aceita uma pasta convertida (abre mais rápido) e o ZIP
+        gravado por “Exportar modelo” — no celular, o ZIP é o caminho mais simples.</p>
       <input id="folder" type="file" webkitdirectory directory multiple hidden>
+      <input id="zipFile" type="file" accept=".zip,application/zip" hidden>
       <p id="openErr"></p>
     </div>
     <div id="bom" hidden>
@@ -573,10 +671,17 @@ async function refreshModules() {
     for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
     await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
   };
-  await visit(new URL("viewer.js?v=mobile-pov-2", location.href).href);
+  await visit(new URL("viewer.js?v=nav-1", location.href).href);
 }
-try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
-import("./viewer.js?v=mobile-pov-2").catch((err) => {
+// The service worker (sw.js) does the same revalidation for every file and keeps a copy, so the
+// viewer also opens without a connection and can be installed as an app on the phone. It is not
+// used in the desktop app nor from plain http on the local network (browsers do not allow it).
+const sw = "serviceWorker" in navigator && !window.desktop && /^https?:$/.test(location.protocol);
+if (sw) navigator.serviceWorker.register("sw.js").catch(() => {});
+if (!(sw && navigator.serviceWorker.controller)) {
+  try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
+}
+import("./viewer.js?v=nav-1").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
     ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";

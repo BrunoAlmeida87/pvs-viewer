@@ -57,8 +57,11 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 
 /* ------------------------------------------------------------------ top bar */
 #bar1 { grid-column: 1 / 3; display: flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--panel);
-  border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,.02); position: relative; z-index: 30; min-height: 56px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 8px; margin: 0 10px 0 2px; min-width: 0; }
+  border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,.02); position: relative; z-index: 30; min-height: 56px; flex-wrap: nowrap; }
+/* one row: only the title gives way; ui/layout.js then drops the labels and fills the "Mais" menu */
+#bar1 > * { flex: none; }
+#bar1 > .spacer { flex: 1 1 0; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 8px; margin: 0 10px 0 2px; min-width: 26px; flex: 0 1 auto !important; overflow: hidden; }
 .brand .logo, .openHead .logo { width: 26px; height: 26px; color: var(--accent); stroke-width: 1.8; }
 #title { font-size: 14px; font-weight: 650; margin: 0; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .tg { display: flex; align-items: stretch; gap: 0; padding: 0 4px; border-left: 1px solid var(--border); }
@@ -71,6 +74,14 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .tb:hover { background: var(--hover); border-color: transparent; }
 .tb.on { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
 .tb.active { color: var(--warn); }
+#bar1.compact { min-height: 48px; }
+#bar1.compact .tb > span { display: none; }
+#bar1.compact .tb { min-width: 38px; height: 38px; }
+#moreMenu .menuBody { left: auto; right: 0; min-width: 200px; }
+#moreMenu .menuBody .tb { flex-direction: row; justify-content: flex-start; gap: 10px; width: 100%; height: auto; min-height: 34px; padding: 6px 10px; font-size: 13px; }
+#moreMenu .menuBody .tb > span { display: flex; }
+#moreMenu:has(.menuBody .on) > .menuBtn { color: var(--accent-text); }
+#moreMenu:has(.menuBody .active) > .menuBtn { color: var(--warn); }
 .ib { width: 34px; height: 34px; padding: 0; border-color: transparent; background: none; border-radius: 7px; }
 .ib:hover { background: var(--hover); border-color: transparent; }
 #themeBtn .sun { display: none; }
@@ -97,7 +108,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .menuBody.keys > div { padding: 2px 0; white-space: normal; }
 
 /* ------------------------------------------------------------------ side bar */
-#side { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
+#side { container-type: inline-size; position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
 #sideGrip { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; touch-action: none; }
 #sideGrip:hover, #app.resizing #sideGrip { background: var(--accent); opacity: .5; }
 #app.resizing { cursor: col-resize; user-select: none; }
@@ -120,7 +131,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .vt .vtEd:hover { color: var(--text); background: var(--hover); }
 .vt .vtEdit { width: auto; min-width: 70px; max-width: 170px; height: 22px; padding: 0 6px; font: inherit; font-weight: 400; }
 .vtAdd { width: 28px; height: 28px; padding: 0; border-radius: 8px; font-size: 16px; }
-.mobile #viewTabs { display: none; }
+.mobile #viewTabs, #view.walking #viewTabs { display: none; }
 
 /* assembly animation */
 #animPanel { width: 400px; }
@@ -156,6 +167,9 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .tabs button svg { width: 16px; height: 16px; }
 .tabs button:hover { background: var(--hover); color: var(--text); }
 .tabs button.on { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 600; background: none; }
+#side .tabs { overflow-x: auto; scrollbar-width: none; }
+#side .tabs button { flex: 1 0 auto; }
+@container (max-width: 400px) { .tabs button svg { display: none; } }
 .tabs.small { border: 0; padding: 0; }
 .tabs.small button { flex: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
 .tabs.small button.on { border-color: var(--accent); background: var(--accent-soft); }
@@ -221,9 +235,10 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #view[data-bg=white] { background: #fff; }
 #view[data-bg=dark] { background: linear-gradient(#434b59, #1a1e25); }
 #view[data-bg=black] { background: #000; }
-#view canvas { display: block; width: 100%; height: 100%; outline: none; position: relative; z-index: 0; }
+#view > canvas:first-of-type { display: block; width: 100%; height: 100%; outline: none; position: relative; z-index: 0; }
 #boxSel { position: absolute; border: 1px dashed var(--sel-line); background: rgba(232, 89, 12, .08); pointer-events: none; z-index: 5; }
 #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; overflow: visible; }
+#overlay text { stroke: none; } /* the icon style above (outlined, no fill) must not reach the measurement labels */
 #pivot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; z-index: 5; pointer-events: none;
   background: var(--sel-line); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 
@@ -316,6 +331,14 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #dropZone > svg { width: 36px; height: 36px; color: var(--accent); stroke-width: 1.5; }
 #dropZone.over { border-color: var(--accent); background: var(--accent-soft); }
 .btn { display: inline-flex; padding: 8px 18px; border-radius: 8px; border: 0; cursor: pointer; font-weight: 600; }
+.btn.ghost { background: none; color: var(--accent-text); border: 1px solid var(--border2); }
+.btn.ghost:hover { background: var(--hover); filter: none; }
+#recentBox h3 { font-size: 11px; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+.recentRow { display: flex; gap: 4px; margin-top: 4px; }
+.recentGo { flex: 1; min-width: 0; justify-content: space-between; gap: 10px; padding: 7px 10px; }
+.recentGo b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.recentGo span { font-size: 11.5px; flex: none; }
+.recentDel { padding: 0 9px; border-color: transparent; background: none; color: var(--muted); }
 .openOpt { display: flex; gap: 6px; align-items: flex-start; margin: 14px 0 6px; font-size: 12.5px; cursor: pointer; }
 #openErr { color: var(--danger); margin: 8px 0 0; }
 
@@ -361,98 +384,172 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .chip.bad { color: var(--warn); border-color: var(--warn); }
 .chip.good { color: var(--ok); }
 
-@media (max-width: 1420px) { #title { max-width: 120px; } .brand { margin-right: 4px; } }
-@media (max-width: 1180px) { .tb span { display: none; } .tb { min-width: 38px; height: 38px; } #bar1 { min-height: 48px; } .panel { top: 110px; } }
+/* ------------------------------------------------------------------ over the 3D view */
+/* name of the part under the mouse */
+#hoverTip { position: absolute; z-index: 6; pointer-events: none; display: flex; flex-direction: column; max-width: 340px; padding: 4px 9px;
+  border-radius: 7px; background: rgba(20, 24, 31, .88); color: #fff; font-size: 12px; box-shadow: var(--shadow); }
+#hoverTip b, #hoverTip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hoverTip b { font-weight: 600; }
+#hoverTip span { color: #b6bfcc; font-size: 11px; }
+/* aiming with a finger: crosshair above the finger and a magnifier */
+#loupe { position: absolute; z-index: 14; width: 132px; height: 132px; border-radius: 50%; border: 2px solid #fff; background: #ccd;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .45); pointer-events: none; }
+#aimDot { position: absolute; z-index: 14; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--sel-line);
+  box-shadow: 0 0 0 1px #fff; pointer-events: none; }
 
-/* Small touch screens keep the model in view and put the frequent actions near the thumb. */
-#mobileBar, #mobileViewChoices, #mobileSideHead, #mobileQuickFilter, #mobileTreeActions, #mobileSideBackdrop, #mobileWalkControls, #mobileWalkAim, #mobileCutPresets { display: none; }
-.mobile #app { --side-w: 0px; grid-template-columns: 0 minmax(0, 1fr); height: 100dvh; }
-.mobile #app #side { visibility: hidden; }
-.mobile #app.mobileSide { --side-w: 0px; }
-.mobile #mobileSideBackdrop:not([hidden]) { display: block; position: absolute; z-index: 27; inset: 54px 0 28px; background: rgba(0, 0, 0, .35); }
-.mobile #app.mobileSide #side { visibility: visible; position: absolute; z-index: 28; left: 0; top: 54px; bottom: 28px;
-  width: min(90vw, 380px); box-shadow: var(--shadow-lg); }
+/* walk mode */
+#walkBar { position: absolute; z-index: 12; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 3px;
+  padding: 4px; border-radius: 12px; background: rgba(20, 24, 31, .82); color: #fff; box-shadow: var(--shadow-lg); backdrop-filter: blur(8px);
+  max-width: calc(100% - 12px); }
+#walkBar button { height: 34px; padding: 0 9px; background: none; border: 1px solid transparent; color: #e9ecef; }
+#walkBar button:hover { background: rgba(255, 255, 255, .12); }
+#walkBar button.on { background: var(--accent); color: #fff; }
+#walkBar .walkSpeed { display: flex; align-items: center; gap: 0; margin: 0 2px; }
+#walkBar .walkSpeed i { font-style: normal; min-width: 52px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+#walkBar .walkSpeed button { width: 30px; padding: 0; }
+#walkAim { position: absolute; z-index: 5; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+  background: rgba(255, 255, 255, .85); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); pointer-events: none; }
+#walkPads { display: none; }
+.touch #walkPads:not([hidden]) { display: block; }
+.touch #walkHint { display: none; }
+.joy { position: absolute; z-index: 11; bottom: calc(18px + env(safe-area-inset-bottom)); width: 112px; height: 112px; border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, .6); background: rgba(20, 24, 31, .16); box-shadow: 0 0 0 1px rgba(0, 0, 0, .25); touch-action: none; user-select: none; }
+#joyMove { left: calc(18px + env(safe-area-inset-left)); }
+#joyLook { right: calc(18px + env(safe-area-inset-right)); }
+.joy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%;
+  background: rgba(255, 255, 255, .6); box-shadow: 0 1px 5px rgba(0, 0, 0, .45); pointer-events: none; }
+.joy.on { background: rgba(20, 24, 31, .3); }
+.joy.on i { background: #fff; }
+.walkVert { position: absolute; z-index: 11; right: calc(22px + env(safe-area-inset-right)); bottom: calc(142px + env(safe-area-inset-bottom)); display: flex; gap: 6px; }
+.walkVert button { width: 48px; height: 40px; padding: 0; border-radius: 10px; background: rgba(20, 24, 31, .35); color: #fff;
+  border: 1px solid rgba(255, 255, 255, .45); touch-action: none; }
+.walkVert button.on { background: var(--accent); }
+#view.walkGround .walkVert { display: none; }
+
+/* ------------------------------------------------------------------ touch screens (tablets keep the PC layout) */
+.touch #view > canvas:first-of-type { touch-action: none; }
+.touch .tb { min-width: 48px; height: 48px; }
+.touch #bar1.compact .tb { min-width: 44px; height: 44px; }
+.touch .ib { width: 42px; height: 42px; }
+.touch input[type=checkbox] { width: 18px; height: 18px; }
+.touch .row { min-height: 38px; height: auto; }
+.touch .row .tw { width: 32px; align-self: stretch; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.touch .row input { margin-right: 8px; }
+.touch .menuBody > button, .touch .panel button, .touch #side button, .touch .bomBar button, .touch select, .touch .lrow { min-height: 38px; }
+.touch .panel .ph .x { width: 38px; height: 38px; }
+.touch .vt { height: 36px; }
+.touch .vtAdd { width: 36px; height: 36px; }
+.touch .treeContextMenu button { min-height: 42px; }
+
+/* ------------------------------------------------------------------ phone
+   The model takes the whole screen. What floats over it is small, translucent, and fades while a
+   finger is moving the model; tools open as low sheets that fold down to their title. */
+.menuForm .menuRow { padding: 5px 0; }
+.menuForm .menuRow > span { width: 78px; color: var(--muted); flex: none; }
+.menuForm .menuRow > select, .menuForm .menuRow > input[type=range] { flex: 1; min-width: 0; }
+.menuForm label.menuRow { display: flex; margin: 0; cursor: pointer; }
+.menuForm > button { display: flex; width: 100%; justify-content: flex-start; margin-top: 4px; }
+.menuForm hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
+.menuForm .hint { margin: 6px 0 0; }
+#mobileBar, #selCard, .mSheet, #mSheetBack, #mProgress, #toast, #mobileSideHead, #mobileQuickFilter, #mobileTreeActions,
+#mobileSideBackdrop, #mobileCutPresets { display: none; }
+.mobile, .mobile body { overflow: hidden; overscroll-behavior: none; }
+.mobile #app { display: block; position: relative; height: 100dvh; }
+.mobile #bar1, .mobile #status { display: none; }
+.mobile #view { position: absolute; inset: 0; }
+
+.mobile #mobileBar { display: flex; position: absolute; z-index: 10; left: 50%; transform: translateX(-50%); bottom: calc(8px + env(safe-area-inset-bottom));
+  gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--panel) 80%, transparent);
+  backdrop-filter: blur(10px); box-shadow: var(--shadow); transition: opacity .2s; }
+.mobile #mobileBar button { width: 46px; height: 40px; padding: 0; border: 0; background: none; border-radius: 999px; }
+.mobile #mobileBar button svg { width: 21px; height: 21px; }
+.mobile #mobileBar button.on { background: var(--accent-soft); color: var(--accent-text); }
+.mobile #selCard { display: flex; align-items: center; gap: 2px; position: absolute; z-index: 10; left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom));
+  max-width: 420px; height: 40px; margin: 0 auto; padding: 0 3px 0 0; border: 1px solid var(--border); border-left: 3px solid var(--sel-line); border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); transition: opacity .2s; }
+.mobile #selCard button { height: 36px; min-width: 38px; padding: 0; border: 0; background: none; }
+.mobile #selCardName { flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 0 4px 0 9px !important; text-align: left; }
+.mobile #selCardName b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.mobile #selCardName span { flex: none; color: var(--muted); font-size: 11px; }
+.mobile #view.nav #mobileBar, .mobile #view.nav #selCard { opacity: .2; }
+.mobile #view.sheetOpen #mobileBar, .mobile #view.sheetOpen #selCard, .mobile #view.walking #mobileBar, .mobile #view.walking #selCard,
+.mobile #view.bomOpen #mobileBar, .mobile #view.bomOpen #selCard, .mobile #view.aiming #mobileBar, .mobile #view.aiming #selCard { display: none; }
+
+.mobile #mSheetBack:not([hidden]) { display: block; position: absolute; inset: 0; z-index: 9; }
+.mobile .mSheet { display: block; position: absolute; z-index: 11; left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); max-width: 420px;
+  max-height: calc(100dvh - 76px - env(safe-area-inset-bottom)); margin: 0 auto; padding: 8px; overflow: auto; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); }
+.mSheet .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mSheet .chips button { min-height: 40px; padding: 4px 2px; font-size: 12.5px; }
+.mSheetHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 2px 6px; }
+.mSheetHead b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.mSheetHead button { width: 36px; height: 34px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 15px; }
+.mSheet h5 { margin: 8px 4px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
+.mSheet .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.mSheet .tiles button { flex-direction: column; gap: 3px; min-height: 54px; padding: 6px 2px; border: 0; border-radius: 10px; background: var(--panel2);
+  font-size: 10.5px; white-space: normal; line-height: 1.15; }
+.mSheet .tiles button svg { width: 21px; height: 21px; }
+.mSheet .tiles button.on, .mSheet .chips button.on { background: var(--accent-soft); color: var(--accent-text); }
+
+/* tools: sheets at the bottom (beside the model when the phone is lying down) */
+.mobile .panel { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto !important; max-height: 44dvh; border-radius: 14px 14px 0 0;
+  border-width: 1px 0 0; padding-bottom: env(safe-area-inset-bottom); transition: opacity .15s; }
+.mobile .panel .ph { cursor: pointer; padding: 3px 4px 3px 12px; min-height: 40px; }
+.mobile .panel.min .pb { display: none; }
+.mobile .panel.min { opacity: .92; }
+.mobile #view.aiming .panel { opacity: 0; pointer-events: none; }
+.mobile #layerList, .mobile #bgList, .mobile #mList, .mobile #intList, .mobile #animSteps { max-height: none; }
+@media (orientation: landscape) {
+  .mobile .panel { left: auto !important; top: 0 !important; width: min(330px, 50vw) !important; max-height: none; border-radius: 14px 0 0 14px; border-width: 0 0 0 1px;
+    padding-right: env(safe-area-inset-right); }
+  .mobile .panel.min { top: auto !important; border-radius: 14px 0 0 0; }
+  .mobile .mSheet { max-width: 460px; }
+}
+
+/* drawer: tree, search and saved views */
+.mobile #side { position: absolute; z-index: 28; left: 0; top: 0; bottom: 0; width: min(86vw, 360px); visibility: hidden; transform: translateX(-104%);
+  transition: transform .18s, visibility .18s; box-shadow: var(--shadow-lg); padding-top: env(safe-area-inset-top); }
+.mobile #app.mobileSide #side { visibility: visible; transform: none; }
+.mobile #mobileSideBackdrop:not([hidden]) { display: block; position: absolute; z-index: 27; inset: 0; background: rgba(0, 0, 0, .35); }
 .mobile #sideGrip { display: none; }
-.mobile #mobileSideHead { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 6px 10px;
-  min-height: 48px; border-bottom: 1px solid var(--border); }
-.mobile #mobileSideClose { min-width: 40px; min-height: 40px; font-size: 18px; }
-.mobile #side .tabs button { min-height: 44px; }
-.mobile #side .tabs { overflow-x: auto; }
-.mobile #side .tabs button { flex: none; }
-.mobile #side .row { min-height: 36px; height: auto; }
-.mobile #side .row .tw { width: 28px; }
-.mobile #mobileTreeActions { display: block; flex: none; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-.mobile #mobileTreeActions .row2 button { flex: 1; min-height: 44px; }
-.mobile #mobileQuickFilter { display: block; padding: 12px; border-bottom: 1px solid var(--border); }
+.mobile #mobileSideHead { display: block; position: absolute; z-index: 6; top: calc(2px + env(safe-area-inset-top)); right: 2px; background: var(--panel); }
+.mobile #mobileSideHead strong { display: none; }
+.mobile #mobileSideClose { width: 42px; height: 42px; padding: 0; border: 0; background: none; font-size: 17px; color: var(--muted); }
+.mobile #side .tabs { padding: 2px 46px 0 4px; }
+.mobile #side .tabs button { flex: none; min-height: 42px; padding: 7px 9px; }
+.mobile #side .tabs button svg { display: none; }
+.mobile #mobileTreeActions { display: flex; align-items: center; gap: 6px; flex: none; padding: 5px 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.mobile #mobileTreeSelection { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile #mobileQuickFilter { display: block; padding: 10px; border-bottom: 1px solid var(--border); }
 .mobile #mobileQuickFilter label { display: block; font-weight: 650; margin-bottom: 6px; }
-.mobile #mobileFilterText { width: 100%; min-height: 44px; }
-.mobile #mobileQuickFilter .row2 select, .mobile #mobileQuickFilter .row2 button { min-height: 44px; }
+.mobile #mobileFilterText { width: 100%; min-height: 42px; }
 .mobile #mobileFilterHint { margin-top: 8px; }
-.mobile .mobileFilterActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
-.mobile .mobileFilterActions button { min-height: 44px; white-space: normal; }
+.mobile .mobileFilterActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.mobile .mobileFilterActions button { white-space: normal; }
 .mobile #mobileFilterAll { grid-column: span 2; }
-.mobile #mobileAdvancedSearch { width: 100%; margin-top: 8px; min-height: 40px; }
+.mobile #mobileAdvancedSearch { width: 100%; margin-top: 8px; }
 .mobile #searchTab .searchBox { display: none; }
 .mobile #searchTab.advancedSearch .searchBox { display: block; }
-.mobile #qActions .actions button { min-height: 40px; }
-.mobile #bar1 { flex-wrap: nowrap; min-height: 54px; height: 54px; overflow: hidden; padding: 2px 7px; }
-.mobile #bar1 .tg:not([aria-label="Modelo"]) { display: none; }
-.mobile #bar1 .brand { flex: 1; margin-right: 0; }
-.mobile #title { max-width: calc(100vw - 125px); }
-.mobile #bar1 #sideToggle { display: none; }
-.mobile #bar1 #openModelBtn { display: flex; min-width: 44px; min-height: 44px; }
-.mobile #bar1 #openModelBtn span { display: none; }
-.mobile #bar1 #loadMoreBtn { display: none; }
-.mobile #bar1 #exportMobileBtn { display: none; }
-.mobile #status { gap: 6px; }
-.mobile #status #bar { width: 52px; }
-.mobile #status #stats, .mobile #status #selInfo, .mobile #status #gpuChip { display: none; }
-.mobile #view canvas { touch-action: none; }
-.mobile #mobileBar { display: flex; position: absolute; z-index: 10; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom));
-  justify-content: space-around; gap: 3px; padding: 5px; border: 1px solid var(--border); border-radius: 14px;
-  background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: var(--shadow-lg); }
-.mobile #mobileBar button { flex: 1; min-width: 0; min-height: 48px; display: flex; flex-direction: column; gap: 0;
-  border: 0; background: none; font-size: 19px; line-height: 1; }
-.mobile #mobileBar button span { font-size: 10px; line-height: 1.4; }
-.mobile #view.mobileWalking #mobileBar { display: none; }
-.mobile #walkHint { display: none; }
-.mobile #mobileWalkControls:not([hidden]) { display: block; position: absolute; z-index: 12; left: 8px; right: 8px;
-  bottom: max(8px, env(safe-area-inset-bottom)); max-width: 390px; margin: auto; padding: 9px 12px 12px;
-  color: #fff; background: rgba(20, 24, 31, .9); border: 1px solid rgba(255,255,255,.2); border-radius: 14px;
-  box-shadow: var(--shadow-lg); touch-action: pan-y; user-select: none; max-height: calc(100dvh - 80px); overflow: auto; }
-.mobileWalkHead { display: flex; align-items: center; justify-content: space-between; }
-.mobileWalkHead button { min-height: 40px; }
-.mobile #mobileWalkControls p { margin: 2px 0 9px; font-size: 12px; color: #d7dce4; }
-.mobile #mobileWalkPlace { width: 100%; min-height: 40px; margin-bottom: 8px; }
-.mobile #mobileWalkPlace.on { background: var(--accent); color: #fff; }
-.mobileWalkMove { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.mobileWalkGroup { display: grid; justify-items: center; gap: 3px; font-size: 11px; font-weight: 650; }
-.mobileWalkPad, .mobileLookPad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(2, 44px); gap: 2px; }
-.mobileWalkPad [data-walk="w"], .mobileLookPad [data-look="up"] { grid-column: 2; grid-row: 1; }
-.mobileWalkPad [data-walk="a"], .mobileLookPad [data-look="left"] { grid-column: 1; grid-row: 2; }
-.mobileWalkPad [data-walk="s"], .mobileLookPad [data-look="down"] { grid-column: 2; grid-row: 2; }
-.mobileWalkPad [data-walk="d"], .mobileLookPad [data-look="right"] { grid-column: 3; grid-row: 2; }
-.mobileWalkExtra { display: grid; gap: 6px; margin-top: 8px; }
-.mobileWalkExtra > div { display: flex; align-items: center; gap: 4px; }
-.mobile #mobileWalkControls [data-walk], .mobile #mobileWalkControls [data-look] { min-width: 44px; min-height: 44px; font-size: 16px; padding: 0; touch-action: none; }
-.mobile #mobileWalkControls [data-walk].on, .mobile #mobileWalkControls [data-look].on { background: var(--accent); color: #fff; }
-.mobileWalkExtra [data-walk] { flex: 1; font-size: 12px !important; }
-.mobileWalkExtra #mobileWalkSlower, .mobileWalkExtra #mobileWalkFaster { min-width: 36px; min-height: 40px; padding: 0 4px; }
-.mobileWalkExtra #mobileWalkSpeed { flex: 1; text-align: center; font-size: 11px; }
-.mobile #mobileWalkAim:not([hidden]) { display: block; position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  color: #fff; font-size: 22px; line-height: 1; text-shadow: 0 0 3px #000, 0 0 6px #000; pointer-events: none; }
-.mobile #mobileCutPresets { display: flex; gap: 5px; margin-bottom: 10px; }
-.mobile #mobileCutPresets button { flex: 1; min-width: 0; min-height: 42px; padding: 4px; }
-.mobile #cutPanel .cutRow { min-height: 50px; }
-.mobile #mobileViewChoices:not([hidden]) { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; position: absolute;
-  z-index: 11; right: 8px; bottom: calc(72px + env(safe-area-inset-bottom)); width: min(270px, calc(100% - 16px));
-  padding: 9px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); }
-.mobile #mobileViewChoices button { min-height: 42px; }
+
+/* messages and loading progress (the status bar is not shown on a phone) */
+.mobile #toast { display: block; position: absolute; z-index: 13; top: calc(8px + env(safe-area-inset-top)); left: 72px; right: 8px; width: fit-content;
+  max-width: calc(100% - 80px); margin: 0 auto; padding: 5px 12px; border-radius: 13px; background: rgba(20, 24, 31, .86); color: #fff; font-size: 12px;
+  line-height: 1.3; text-align: center; pointer-events: none; }
+.mobile #view.walking #toast { top: calc(58px + env(safe-area-inset-top)); left: 8px; max-width: calc(100% - 16px); }
+.mobile #mProgress { display: block; position: absolute; z-index: 13; top: 0; left: 0; right: 0; height: 3px; }
+.mobile #mProgress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+.mobile #walkBar button { width: 38px; height: 38px; padding: 0; }
+.mobile #walkBar button > span { display: none; }
+.mobile #walkBar .walkSpeed button { width: 32px; }
+.mobile #walkBar .walkSpeed i { min-width: 46px; font-size: 11.5px; }
+.mobile #mobileCutPresets { display: flex; gap: 5px; margin-bottom: 6px; }
+.mobile #mobileCutPresets button { flex: 1; min-width: 0; padding: 4px; }
 .mobile #open { max-height: calc(100% - 20px); overflow: auto; padding: 16px; }
-.mobile #dropZone { padding: 15px 8px; }
-.mobile .panel { left: 8px !important; right: 8px; top: 8px !important; width: auto; max-height: calc(100% - 95px); }
-.mobile .modalBox { max-height: calc(100% - 100px); padding: 12px; }
+.mobile #dropZone { padding: 14px 8px; }
+.mobile .modalBox { max-height: calc(100% - 24px); padding: 12px; }
 .mobile .modalBox .row2 { flex-wrap: wrap; }
-.mobile .modalBox .row2 button { min-height: 40px; }
-.mobile #perf { max-width: calc(100% - 20px); bottom: 76px; }
-.mobile #bom { height: 55%; }
+.mobile #legend { top: calc(6px + env(safe-area-inset-top)); right: 6px; min-width: 0; max-width: 52vw; max-height: 32dvh; padding: 6px 8px; font-size: 11px; }
+.mobile #perf { left: 6px; bottom: 60px; width: auto; max-width: calc(100% - 12px); }
+.mobile #bom { height: 48dvh; }
+.mobile .treeContextMenu { max-width: calc(100vw - 16px); }

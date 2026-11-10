@@ -3,7 +3,7 @@ import { $, el, fmt } from "./util.js";
 
 export function initTree(app) {
   const treeEl = $("#tree");
-  const mobile = document.documentElement.classList.contains("mobile");
+  const mobile = document.documentElement.classList.contains("touch"); // no Ctrl key: a tap adds to the selection
   $("#mobileTreeIsolate").onclick = () => {
     if (!app.selNodes.size) return;
     app.isolate([...app.selNodes]);

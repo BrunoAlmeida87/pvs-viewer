@@ -6,53 +6,61 @@ Abre modelos Creo View (`.pvs` + `.ol`) no navegador, sem o productview.exe.
 
 ## Uso
 
-### Primeira versão para celular (Android)
+### No celular
 
-A versão web também se adapta a telas de toque. No Galaxy S25, abra o site no Chrome e escolha uma
-**pasta convertida** por
-`tools/build.py`, copiada inteira para o armazenamento do
-celular (incluindo `chunks.json`, `tree.json`, `items.bin`, `parts.bin` e a subpasta `c/`). O navegador lê os
-arquivos localmente. Se o seletor de pasta do navegador não funcionar, use outro navegador Chromium atualizado;
-o acesso a pastas no Android ainda precisa ser validado no aparelho.
+Abra o site no Chrome do celular. O modelo ocupa a tela inteira; o que fica por cima é pequeno e some enquanto
+você mexe no modelo.
 
-Na abertura, escolha uma ou mais seções para limitar a memória. O botão **Carregar** acrescenta seções depois.
-No celular, **Prévia geral** carrega primeiro até cerca de 2,5 milhões de triângulos dos blocos maiores;
-o restante continua disponível em **Carregar**. Isso acelera a primeira visualização, mas a prévia não mostra
-todas as peças. Para ver uma área completa, escolha a seção correspondente e carregue-a depois.
-Um dedo gira e toca para selecionar; dois dedos aproximam, afastam e deslocam. A barra inferior oferece
-enquadramento, **Peças**, **Filtrar** e vistas isométrica, frontal, lateral e superior. O painel **Peças** fecha
-no botão ✕ ou tocando fora dele. Na árvore, toque em vários sistemas ou peças e use **Mostrar seleção**.
-Em **Filtrar**, busque pelo nome, escolha sistemas ou peças e use **Mostrar só resultados**, **Ocultar resultados**
-ou **Mostrar tudo**. A busca avançada continua disponível no mesmo painel. Em **Vistas**, há projeção
-ortográfica, vistas salvas, enquadramento da seleção, isolamento e modo de arestas. No mesmo menu, **Corte**
-abre os planos X/Y/Z; os botões de corte rápido deixam metade do modelo visível, e os controles deslizantes
-ajustam os limites. **Explorar por dentro** usa perspectiva. Toque em **Definir posição no modelo** e depois
-numa superfície visível para colocar a câmera perto do ponto, a 1,6 m de altura. Arraste a imagem ou segure as
-setas **Olhar** para virar a visão a partir da posição da câmera. As setas **Andar** deslocam a câmera;
-**Subir/Descer** mudam a altura e **−/＋** ajustam a velocidade. **Sair** retorna aos controles normais.
-Esta navegação ainda não tem colisão com as peças. Esta versão usa qualidade rápida e menos carregamentos
-simultâneos por padrão; o tamanho máximo viável do modelo depende de teste no aparelho. Ainda não há APK nem
-instalação offline.
+- **Abrir**: o caminho mais simples é o **ZIP** gravado por **Exportar modelo** (veja abaixo): copie o arquivo para
+  o celular e toque em **Abrir arquivo ZIP…** — ele abre direto, sem extrair. Também abre uma pasta convertida.
+  Modelos pequenos carregam inteiros; nos grandes aparece a escolha de seções, e **Prévia geral** carrega primeiro
+  até cerca de 2,5 milhões de triângulos (o resto fica em **Ferramentas › Carregar mais**).
+- **Navegar**: um dedo gira (em torno do ponto tocado); dois dedos aproximam, afastam e deslocam. Toque seleciona;
+  **dois toques** numa peça a enquadram (no fundo, enquadram tudo); **segurar o dedo** numa peça abre o menu dela
+  (enquadrar, isolar, ocultar, vistas, copiar link…).
+- **Barra inferior** (cinco ícones): árvore de peças, buscar/filtrar, enquadrar, vistas (isométrica, frente, lado,
+  topo, ortográfica, vista anterior/seguinte, vistas salvas) e **Ferramentas**.
+- **Peça selecionada**: uma linha acima da barra mostra o nome e os botões enquadrar, isolar, ocultar e “…”; tocar no
+  nome abre as propriedades.
+- **Ferramentas**: mostrar tudo, isolar, ocultar, fantasma, desfazer, exibição (estilo, luz, fundo, qualidade),
+  cores, seleção, corte, medir, caminhar, camadas, bigramas, vizinhança, explodir, lista, análise, animação, abrir
+  outro modelo, exportar, tela cheia, tema e desempenho. Cada ferramenta abre numa folha baixa no rodapé (ao lado do
+  modelo, com o celular deitado); tocar no título da folha a recolhe para ver o modelo inteiro.
+- **Medir por toque**: toque marca o ponto. Para mirar com precisão, **segure o dedo e arraste**: aparece uma mira
+  um pouco acima do dedo e uma lupa; ao soltar, o ponto da mira é usado.
+- **Caminhar**: toque num piso do modelo para ficar em pé nele. O controle da esquerda anda, o da direita gira a
+  visão (arrastar a tela também). A barra do topo tem: posicionar de novo, **Chão** (mantém a câmera a 1,6 m do piso,
+  sobe degraus), **Colisão** (para em paredes e equipamentos), velocidade e sair. Com Chão desligado aparecem os
+  botões de subir e descer (voo livre).
+- **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
+  aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
+
+Tablets usam a mesma interface do PC, com botões maiores; os gestos de toque são os mesmos.
 
 Para exportar um modelo 3D no computador, clique com o botão direito na **árvore original**: no nó principal
 para exportar tudo, ou em uma seção/peça para exportar só esse trecho. Escolha **Exportar modelo 3D…**. O
 comando também está na barra superior como **Exportar modelo**; sem seleção, ele exporta tudo. Funciona com
 pastas convertidas e com o modelo original (`.pvs` + `.ol`): no segundo caso, converte as peças escolhidas
-durante a exportação. O resultado web é um ZIP; extraia-o para abrir a pasta no visualizador do PC ou celular.
-No celular, o comando fica no menu **Vistas**. Não é preciso criar um grupo. Em navegadores com seletor de
+durante a exportação. O resultado web é um ZIP, que abre direto em **Abrir arquivo ZIP…** no PC ou no celular
+(também pode ser extraído e aberto como pasta). Não é preciso criar um grupo. Em navegadores com seletor de
 salvamento compatível, o ZIP é gravado diretamente no disco; em outros, é baixado pelo navegador e pode exigir
 memória livre para modelos grandes.
 
 Para conferir a interface localmente, execute `python viewer/serve.py --host 0.0.0.0 --no-browser` na pasta `source` e abra no celular o
 endereço IP do computador com a porta `8080` (por exemplo, `http://192.168.1.10:8080/`). Para usar o seletor
 de pasta avançado (`showDirectoryPicker`), sirva por HTTPS; no endereço HTTP da rede local o navegador pode
-oferecer apenas o seletor alternativo de arquivos.
+oferecer apenas o seletor alternativo de arquivos. `?mobile` na URL força a interface de celular no PC.
 
 ### Direto no navegador (sem instalar nada)
 
 Abra o link acima, clique em **Abrir pasta do modelo…** e escolha a pasta que contém o `.pvs` e os `.ol`
 (por exemplo `Maquete SBR`). O navegador lê e converte o modelo na hora, usando vários núcleos
 (o SBR, com 58 mil peças, leva cerca de 1 a 2 minutos).
+
+O cartão de abertura lista os modelos **abertos recentemente**: um clique reabre a pasta ou o ZIP (o navegador pode
+pedir de novo a permissão de leitura). Um endereço com `?peca=CODIGO` (por exemplo `…/viewer/?peca=LPR-DT20003`)
+seleciona e enquadra o equipamento com esse código ou nome assim que o modelo abre; o botão direito numa peça tem
+**Copiar link desta peça**. Quem recebe o link precisa abrir o mesmo modelo.
 
 Os arquivos são lidos no seu computador e **não são enviados para nenhum servidor**. No Chrome e no Edge o
 navegador só pede permissão para ver a pasta; em outros navegadores aparece um aviso de “upload”, mas os
@@ -122,7 +130,9 @@ transparentes ou em cinza: “Visíveis agora” usa o que está na tela; “Per
   lenta, use menos peças fixas). Várias animações por modelo, salvas no navegador e exportáveis em JSON.
 
 Os modelos (`viewer/data/`) não vão para o repositório (`.gitignore`). Three.js e fflate ficam em
-`viewer/vendor/`, então o visualizador funciona sem internet depois de aberto.
+`viewer/vendor/`, e um *service worker* (`viewer/sw.js`) guarda uma cópia dos arquivos do visualizador: depois de
+aberto uma vez ele funciona sem internet. Com conexão, cada arquivo é sempre conferido com o servidor, então uma
+atualização do site vale na hora, sem misturar versões.
 
 Para modelos grandes, marque **Escolher as seções antes de carregar** no cartão de abertura (ou use `?regioes`
 na URL): só as seções escolhidas são lidas, e o botão **Carregar…** traz o resto depois.
@@ -155,7 +165,8 @@ Electron, rode `npm install-scripts approve electron` e depois `node node_module
 
 ## Desempenho
 
-O que mais pesa é a placa de vídeo: o SBR tem 55,6 milhões de triângulos. Em notebooks com duas placas, o Windows
+Os blocos são desenhados de frente para trás (os pixels escondidos são descartados antes de serem pintados), e um
+clique desenha só a região em volta do cursor, não o modelo inteiro. O que mais pesa é a placa de vídeo: o SBR tem 55,6 milhões de triângulos. Em notebooks com duas placas, o Windows
 costuma pôr o navegador na integrada (Intel). No SBR, girando o modelo inteiro: **Intel UHD ≈ 4 quadros/s**,
 **NVIDIA RTX 2060 ≈ 22 quadros/s** (35 na qualidade “rápida”). O painel **Exibição › Mostrar desempenho** (tecla P)
 mostra qual placa está em uso e avisa quando é a integrada. Para o navegador usar a dedicada: Configurações do
@@ -163,7 +174,8 @@ Windows › Sistema › Tela › Elementos gráficos › escolher o Chrome/Edge 
 A versão desktop já pede a dedicada sozinha.
 
 Também ajudam: **Qualidade** (Exibição) automática ou rápida, que deixa de desenhar peças pequenas enquanto a câmera
-se move; carregar só as seções necessárias; deixar SSAO e arestas desligados em máquinas fracas; e usar a pasta
+se move — a automática se ajusta sozinha à máquina: mede o tempo entre os quadros e desenha mais ou menos detalhe
+(e, em último caso, menos resolução) para manter o movimento fluido; carregar só as seções necessárias; deixar SSAO e arestas desligados em máquinas fracas; e usar a pasta
 convertida pelo `build.py`, que abre em segundos.
 
 ## Recursos
@@ -199,7 +211,11 @@ convertida pelo `build.py`, que abre em segundos.
   (conferidas pela geometria real) ou recortadas exatamente na forma; vizinhas semitransparentes; “Sair” volta à
   visibilidade de antes.
 - **Vista explodida** por seção, subsistema, nível 3 ou peça.
-- **Navegação**: gira em torno do ponto clicado, cubo de vistas, modo caminhada (primeira pessoa).
+- **Navegação**: gira em torno do ponto clicado, cubo de vistas, transições suaves ao enquadrar e trocar de vista,
+  teclado (setas, + e −, Home, 1 a 5), **vista anterior / seguinte** (Backspace) e modo caminhada em primeira pessoa
+  com **Posicionar** (ficar em pé num ponto do modelo), **Chão** (altura fixa de 1,6 m sobre o piso) e **Colisão**.
+- **Realce**: a peça sob o cursor fica mais clara e mostra o nome (Exibição › Realçar a peça sob o cursor).
+- **Desfazer / refazer** (Ctrl+Z, Ctrl+Y): ocultar, isolar, mostrar tudo, colorir e mudar a opacidade.
 - **Medir**: distância (com ΔX/ΔY/ΔZ), ângulo, coordenadas de um ponto, raio e diâmetro de arestas circulares,
   folga entre duas peças, dimensões e peso da seleção (Unit weight, que é a massa da peça em kg, mais volume ×
   densidade para as peças sem ele). Os pontos se ajustam a vértices e arestas.
@@ -209,16 +225,21 @@ convertida pelo `build.py`, que abre em segundos.
 - **Análise**: comparação com outra versão do `.pvs` (alteradas, removidas, novas) e verificação de interferências e
   contatos entre a seleção e as peças visíveis.
 
-Interface: barra única com ícones (rótulos somem em telas estreitas), tema claro/escuro (botão da lua), barra
-lateral recolhível, painéis flutuantes arrastáveis (um por vez; duplo clique no título volta à posição inicial),
+Interface: barra única, sempre em uma linha (quando a janela é estreita os rótulos somem e as ferramentas menos
+usadas vão para o menu **Mais**), tema claro/escuro (botão da lua), barra lateral recolhível, painéis flutuantes arrastáveis (um por vez; duplo clique no título volta à posição inicial),
 placa de vídeo em uso na barra de status e lista de atalhos no botão do teclado.
 
 Mouse: esquerdo gira em torno do ponto sob o cursor, direito/meio desloca, roda dá zoom no cursor. Clique seleciona,
-duplo clique enquadra a peça. Cubo de vistas: clique numa face, aresta ou canto.
+duplo clique enquadra a peça (no fundo, enquadra tudo), botão direito abre o menu da peça. Cubo de vistas: clique
+numa face, aresta ou canto.
 Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista ·
-E arestas · X raio-X · C corte · N vizinhança · K camadas · M medir · P desempenho · Esc limpar seleção.
-Caminhada (botão **Caminhar**): W/S frente e trás, A/D lados, Q/E desce e sobe, arraste para olhar, Shift corre,
-roda muda a velocidade, Esc sai.
+E arestas · X raio-X · C corte · N vizinhança · K camadas · M medir · P desempenho · Esc limpar seleção ·
+Ctrl+Z desfazer · Ctrl+Y refazer.
+Navegação pelo teclado: setas giram a vista (com Shift, deslocam) · + e − zoom · Home enquadra tudo · 1 frente ·
+2 lado · 3 topo · 4 isométrica · 5 ortográfica · Backspace vista anterior (com Shift, a seguinte).
+Caminhada (botão **Caminhar**): começa como voo livre a partir da vista atual. W/S frente e trás, A/D lados, Q/E desce
+e sobe, arraste para olhar, Shift corre, roda muda a velocidade, Esc sai. **P** (Posicionar) e um clique num piso
+colocam você em pé nesse ponto e ligam **G** (Chão) e **C** (Colisão), que também podem ser ligados e desligados à parte.
 
 Uma pasta convertida por uma versão anterior do `build.py` ainda abre, mas sem o que veio depois (arestas,
 sombreado suave, LOD, camadas); rode o `build.py` de novo para ter tudo.

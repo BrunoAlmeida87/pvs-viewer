@@ -2,7 +2,7 @@
 // exploded view panel. Display settings are remembered in this browser.
 import { $, store } from "./util.js";
 
-const KEY = document.documentElement.classList.contains("mobile") ? "pvs-viewer:display-mobile" : "pvs-viewer:display";
+const KEY = document.documentElement.classList.contains("touch") ? "pvs-viewer:display-touch" : "pvs-viewer:display";
 const STYLES = ["Sombreado", "Sombreado + arestas", "Linhas ocultas", "Só arestas", "Raio-X"];
 
 export function initDisplay(app) {
@@ -21,6 +21,7 @@ export function initDisplay(app) {
     $("#dCube").checked = d.cube;
     $("#dQuality").value = d.quality;
     $("#dPerf").checked = d.perf;
+    $("#dHover").checked = d.hover !== false;
   };
   app.on("display", () => {
     sync();
@@ -35,6 +36,7 @@ export function initDisplay(app) {
   $("#dLight").onchange = (e) => app.setDisplay({ light: e.target.value });
   $("#dBright").oninput = (e) => app.setDisplay({ bright: +e.target.value });
   $("#dCube").onchange = (e) => app.setDisplay({ cube: e.target.checked });
+  $("#dHover").onchange = (e) => app.setDisplay({ hover: e.target.checked });
   $("#dQuality").onchange = (e) => app.setDisplay({ quality: e.target.value });
   $("#dPerf").onchange = (e) => { app.setDisplay({ perf: e.target.checked }); if (!e.target.checked) app.hidePerf(); };
   app.togglePerf = () => { app.setDisplay({ perf: !app.display.perf }); if (!app.display.perf) app.hidePerf(); };

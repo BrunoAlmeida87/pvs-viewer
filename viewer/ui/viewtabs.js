@@ -134,7 +134,7 @@ export function initViewTabs(app) {
   // in a tab, "Mostrar tudo" shows everything of that tab, not the whole model
   const showAll = app.showAll;
   app.showAll = () => {
-    if (cur > 0) { app.partVisible.set(tabs[cur].mask); app.refresh(); }
+    if (cur > 0) { app.checkpoint(); app.partVisible.set(tabs[cur].mask); app.refresh(); }
     else showAll();
   };
 

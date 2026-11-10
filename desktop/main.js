@@ -22,7 +22,7 @@ const VIEWER = path.join(__dirname, "app", "viewer");
 const MIME = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
-  ".txt": "text/plain; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json",
 };
 let modelDir = null, win = null;
 let conversion = null;
@@ -60,6 +60,10 @@ app.whenReady().then(() => {
   ipcMain.handle("pick-folder", async () => {
     const r = await dialog.showOpenDialog(win, { title: "Pasta do modelo (.pvs + .ol, ou pasta convertida)", properties: ["openDirectory"] });
     return r.canceled || !r.filePaths.length ? null : describe(r.filePaths[0]);
+  });
+  // a folder opened before (the viewer's "Abertos recentemente" list); null when it is gone
+  ipcMain.handle("open-folder", async (_event, dir) => {
+    try { return (await fs.stat(String(dir))).isDirectory() ? describe(String(dir)) : null; } catch { return null; }
   });
   // a folder given on the command line (or dropped on the .exe) opens directly
   ipcMain.handle("initial-folder", async () => {
