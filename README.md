@@ -28,8 +28,8 @@ você mexe no modelo.
   modelo, com o celular deitado); tocar no título da folha a recolhe para ver o modelo inteiro.
 - **Medir por toque**: toque marca o ponto. Para mirar com precisão, **segure o dedo e arraste**: aparece uma mira
   um pouco acima do dedo e uma lupa; ao soltar, o ponto da mira é usado.
-- **Caminhar**: toque num piso do modelo para ficar em pé nele. O controle da esquerda anda, o da direita gira a
-  visão (arrastar a tela também). A barra do topo tem: posicionar de novo, **Chão** (mantém a câmera a 1,6 m do piso,
+- **Caminhar**: o controle da esquerda anda, o da direita gira a visão (arrastar a tela também) — funcionam desde
+  que a caminhada abre. Toque num piso do modelo para ficar em pé nele. A barra do topo tem: posicionar de novo, **Chão** (mantém a câmera a 1,6 m do piso,
   sobe degraus), **Colisão** (para em paredes e equipamentos), velocidade e sair. Com Chão desligado aparecem os
   botões de subir e descer (voo livre).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de

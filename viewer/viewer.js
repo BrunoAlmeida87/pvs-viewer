@@ -1669,7 +1669,11 @@ app.worldPerPixel = function (p) {
   const d = camera.position.distanceTo(_pv.set(p[0], p[1], p[2]));
   return 2 * d * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)) / view.clientHeight;
 };
-app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray(), target: controls.target.toArray(), half: orthoHalf, zoom: ortho.zoom });
+// While walking the orbit target is not updated: the view looks where the camera faces, so the
+// target is put a few metres ahead (saved views and links then open looking the same way).
+app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray(),
+  target: walk.on ? camera.position.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), Math.max(1, walk.speed * 3)).toArray() : controls.target.toArray(),
+  half: orthoHalf, zoom: ortho.zoom });
 app.setCamera = function (c) {
   if (!c || !c.pos?.every(Number.isFinite) || !c.target?.every(Number.isFinite)) return; // never take an invalid camera
   if (walk.on) setWalk(false);
@@ -1876,7 +1880,7 @@ window.addEventListener("pointermove", (e) => {
   if (box) updateBox(e);
   if (aim && aim.id === e.pointerId) { aim.x = e.clientX; aim.y = e.clientY; placeLoupe(); requestRender(); return; }
   if (hold && hold.id === e.pointerId && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 9) endHold();
-  if (rot && rot.id === e.pointerId && touches.size < 2 && !(walk.on && walk.placing)) dragRotate(e);
+  if (rot && rot.id === e.pointerId && touches.size < 2) dragRotate(e);
 });
 window.addEventListener("pointerup", (e) => {
   if (rot?.id === e.pointerId) { rot = null; pivotEl.hidden = true; }
@@ -2105,7 +2109,7 @@ function syncWalkUI() {
   $("#walkPlace").classList.toggle("on", walk.placing);
   $("#walkGround").classList.toggle("on", walk.ground);
   $("#walkCollide").classList.toggle("on", walk.collide);
-  $("#walkAim").hidden = !walk.on || walk.placing;
+  $("#walkAim").hidden = !walk.on;
   view.classList.toggle("walkGround", walk.on && walk.ground);
   const t = walk.speed.toFixed(1).replace(".", ",") + " m/s";
   $("#walkSpeed").textContent = t;
@@ -2114,7 +2118,9 @@ function syncWalkUI() {
 function setWalkPlacing(on, message) {
   walk.placing = on;
   syncWalkUI();
-  status(message || (on ? "Toque ou clique num piso do modelo para ficar em pé nesse ponto." : "Caminhada: arraste para olhar ao redor."));
+  status(message || (on
+    ? (touch ? "Toque num piso para ficar em pé nele, ou já ande com os controles." : "Clique num piso para ficar em pé nele, ou já ande com W A S D.")
+    : "Caminhada: arraste para olhar ao redor."));
 }
 function placeWalkAt(point) {
   const forward = new THREE.Vector3(Math.cos(walk.yaw), Math.sin(walk.yaw), 0);
@@ -2161,7 +2167,7 @@ function setWalk(on, place = false) {
     walk.yaw = Math.atan2(f.y, f.x);
     walk.pitch = Math.asin(Math.max(-1, Math.min(1, f.z)));
     // initial speed: cross the current camera distance in about 8 seconds
-    walk.speed = touch ? 1.5 : Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
+    walk.speed = Math.max(0.3, Math.min(50, camera.position.distanceTo(controls.target) / 8));
     controls.enabled = false;
     walkLook();
   } else {
@@ -2253,7 +2259,7 @@ function floorStep(now, dt) {
 function stepWalk(now) {
   const dt = Math.min(0.1, (now - walk.last) / 1000);
   walk.last = now;
-  if (!walk.on || walk.placing) return;
+  if (!walk.on) return; // "Posicionar" only waits for a tap: walking and looking keep working meanwhile
   let moved = false;
   if (walk.lx || walk.ly) {
     walk.yaw -= walk.lx * 1.9 * dt;
