@@ -13,6 +13,12 @@ você mexe no modelo.
 
 - **Abrir**: o caminho mais simples é o **ZIP** gravado por **Exportar modelo** (veja abaixo): copie o arquivo para
   o celular e toque em **Abrir arquivo ZIP…** — ele abre direto, sem extrair. Também abre uma pasta convertida.
+- **O modelo fica guardado**: depois de aberto, o ZIP é copiado para o armazenamento do site no próprio celular
+  (aparece “Guardando o modelo neste aparelho… %”). Ao sair do navegador e voltar, o último modelo **reabre
+  sozinho**, na mesma vista em que você parou — não é preciso escolher o arquivo de novo. Ficam guardados os três
+  últimos modelos; os outros aparecem em **Abrir › Abertos recentemente**, onde o ✕ apaga a cópia. A cópia só é
+  apagada por você ou se você limpar os dados do site no navegador (Configurações do Chrome › Configurações do
+  site); para o Chrome não apagá-la quando faltar espaço, instale o visualizador na tela inicial.
   Modelos pequenos carregam inteiros; nos grandes aparece a escolha de seções, e **Prévia geral** carrega primeiro
   até cerca de 2,5 milhões de triângulos (o resto fica em **Ferramentas › Carregar mais**).
 - **Navegar**: um dedo gira (em torno do ponto tocado); dois dedos aproximam, afastam e deslocam. Toque seleciona;

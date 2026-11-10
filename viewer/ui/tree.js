@@ -94,8 +94,10 @@ export function initTree(app) {
     }
   }
 
-  app.revealNode = (node) => {
-    app.showTab("treeTab");
+  // show: also bring the tree tab to the front ("Mostrar na árvore"). A plain selection only opens
+  // the branches, so that working in another tab (Minha estrutura, Busca, Vistas) is not interrupted.
+  app.revealNode = (node, show = true) => {
+    if (show) app.showTab("treeTab");
     for (const a of app.ancestors(node)) toggle(a, true);
     const r = rowOf.get(node);
     if (r) r.scrollIntoView({ block: "nearest" });
@@ -105,8 +107,8 @@ export function initTree(app) {
   app.on("selection", ({ reveal }) => {
     for (const [n, r] of rowOf) r.classList.toggle("sel", app.selNodes.has(n));
     const count = app.selNodes.size;
-    $("#mobileTreeSelection").textContent = count ? `${fmt(count)} sistema(s) ou peça(s) selecionado(s).` : "Toque em sistemas ou peças para selecionar.";
+    $("#mobileTreeSelection").textContent = count ? `${fmt(count)} sistema(s) ou peça(s) selecionado(s).` : "Toque para selecionar.";
     $("#mobileTreeIsolate").disabled = count === 0;
-    if (reveal && app.focus >= 0 && app.selNodes.size === 1) app.revealNode(app.focus);
+    if (reveal && app.focus >= 0 && app.selNodes.size === 1) app.revealNode(app.focus, false);
   });
 }

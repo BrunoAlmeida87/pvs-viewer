@@ -28,6 +28,19 @@ export function initMobile(app) {
   // tools started from the drawer that continue on the model: get out of the way
   for (const id of ["#noteNew", "#viewLink", "#shotBtn"]) $(id)?.addEventListener("click", () => setSide(false));
   $("#viewList").addEventListener("click", (e) => { if (e.target.closest("button")?.textContent === "Aplicar") setSide(false); });
+  // after the point of a new note is picked on the model, its text box is in the drawer: bring it back
+  // (only once the tap is over: its own click would land on the drawer's backdrop and close it, and
+  // would take the focus away from the text box)
+  new MutationObserver(() => {
+    if ($("#noteEditor").hidden) return;
+    setTimeout(() => {
+      if ($("#noteEditor").hidden) return;
+      setSide(true, "setsTab");
+      $("#noteEditor").scrollIntoView({ block: "center" });
+      setTimeout(() => $("#noteText").focus(), 250); // once the drawer has slid in (it cannot take focus while hidden)
+    }, 400);
+  }).observe($("#noteEditor"), { attributes: true, attributeFilter: ["hidden"] });
+  for (const id of ["#noteOk", "#noteCancel"]) $(id).addEventListener("click", () => setSide(false));
 
   // ------------------------------------------------------------ the PC menus become sheets
   // The same controls (same ids, same handlers) move from the top bar menus into panels.

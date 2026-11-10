@@ -32,7 +32,7 @@ import { exportMobileZip } from "./lib/browser-mobile-export.js";
 import { exportRawModelZip } from "./lib/raw-model-export.js";
 import { previewChunks, completedParts, MOBILE_PREVIEW_TRIANGLES } from "./lib/mobile-preview.js";
 import { zipConverted } from "./lib/zipsrc.js";
-import { addRecent, listRecent, removeRecent, allow } from "./lib/recent.js";
+import { addRecent, listRecent, removeRecent, allow, canKeep, keepZip, keptFile, dropKept, sizeText } from "./lib/recent.js";
 import { initMobile } from "./ui/mobile.js";
 import { initUndo } from "./ui/undo.js";
 
@@ -827,6 +827,18 @@ async function pickModel() {
   } else if (!params.has("abrir")) {
     try { await httpConverted.json("chunks.json"); return { kind: "converted", src: httpConverted }; } catch { /* none on server */ }
   }
+  // Coming back to the viewer (the browser closed the tab, or the app was reopened): the last model
+  // opens by itself when it can be read without asking anything — a copy kept on this device, a
+  // folder or ZIP the browser still lets the site read, or a folder of the desktop app.
+  if (!params.has("abrir")) {
+    const last = (await listRecent())[0];
+    if (last) {
+      try {
+        const m = await reopen(last, false);
+        if (m) { reopened = last; status("Reabrindo " + last.name + "… (Abrir para trocar de modelo)"); addRecent(last); return m; }
+      } catch (e) { console.warn("reabrir:", e); }
+    }
+  }
   status("Nenhum modelo carregado");
   const card = $("#open");
   card.hidden = false;
@@ -909,6 +921,7 @@ async function pickModel() {
       status("Lendo o ZIP…");
       const src = await zipConverted(file);
       if (handle) addRecent({ kind: "zip", name: file.name, handle });
+      else keepAfterLoad(file); // no lasting access to the file: keep a copy on the device
       card.hidden = true;
       resolve({ kind: "converted", src });
     }
@@ -935,21 +948,15 @@ async function pickModel() {
         go.className = "recentGo";
         go.title = r.path || r.name;
         go.append(Object.assign(document.createElement("b"), { textContent: r.name }),
-          Object.assign(document.createElement("span"), { className: "muted", textContent: (r.kind === "zip" ? "ZIP · " : "pasta · ") + new Date(r.when).toLocaleDateString("pt-BR") }));
+          Object.assign(document.createElement("span"), { className: "muted", textContent:
+            (r.kind === "kept" ? "neste aparelho · " + sizeText(r.size || 0) : r.kind === "zip" ? "ZIP" : "pasta") + " · " + new Date(r.when).toLocaleDateString("pt-BR") }));
         go.onclick = async () => {
           $("#openErr").textContent = "";
           try {
-            let m;
-            if (r.kind === "path") {
-              const d = await window.desktop.openFolder(r.path);
-              if (!d) throw new Error("A pasta não existe mais: " + r.path);
-              m = await fromDesktop(d);
-            } else {
-              if (!(await allow(r.handle))) throw new Error("Sem permissão para ler “" + r.name + "”.");
-              status("Abrindo " + r.name + "…");
-              m = r.kind === "dir" ? await fromDirectory(r.handle) : { kind: "converted", src: await zipConverted(await r.handle.getFile()) };
-            }
+            status("Abrindo " + r.name + "…");
+            const m = await reopen(r, true);
             addRecent(r);
+            reopened = r;
             card.hidden = true;
             resolve(m);
           } catch (e) { fail(e && e.name === "NotFoundError" ? new Error("“" + r.name + "” não está mais no mesmo lugar.") : e); }
@@ -957,8 +964,13 @@ async function pickModel() {
         const del = document.createElement("button");
         del.className = "recentDel";
         del.textContent = "✕";
-        del.title = "Tirar da lista";
-        del.onclick = async () => { await removeRecent(r.id); showRecent(); };
+        del.title = r.kind === "kept" ? "Apagar a cópia guardada neste aparelho" : "Tirar da lista";
+        del.onclick = async () => {
+          if (r.kind === "kept" && !confirm(`Apagar a cópia de “${r.name}” guardada neste aparelho? O arquivo original não é afetado.`)) return;
+          if (r.kind === "kept") await dropKept(r.path);
+          await removeRecent(r.id);
+          showRecent();
+        };
         const row = document.createElement("div");
         row.className = "recentRow";
         row.append(go, del);
@@ -968,6 +980,58 @@ async function pickModel() {
     showRecent();
   });
 }
+// Open a model from the recent list. ask: may ask the browser for permission (inside a click).
+// Returns null when it cannot be opened without asking.
+let reopened = null;
+async function reopen(r, ask) {
+  if (r.kind === "path") {
+    if (!window.desktop || !window.desktop.openFolder) return null;
+    const d = await window.desktop.openFolder(r.path);
+    if (!d) { if (ask) throw new Error("A pasta não existe mais: " + r.path); return null; }
+    return fromDesktop(d);
+  }
+  if (window.desktop) return null;
+  if (r.kind === "kept") {
+    let f;
+    try { f = await keptFile(r.path); } catch {
+      removeRecent(r.id); // the browser erased it (site data cleared, or short of space)
+      throw new Error(`A cópia de “${r.name}” guardada neste aparelho não existe mais. Abra o ZIP de novo.`);
+    }
+    return { kind: "converted", src: await zipConverted(f) };
+  }
+  if (!r.handle) return null;
+  if (ask) { if (!(await allow(r.handle))) throw new Error("Sem permissão para ler “" + r.name + "”."); }
+  else if (!r.handle.queryPermission || await r.handle.queryPermission({ mode: "read" }) !== "granted") return null;
+  return r.kind === "dir" ? fromDirectory(r.handle) : { kind: "converted", src: await zipConverted(await r.handle.getFile()) };
+}
+// After the model shows up, copy the ZIP to the device (reading it twice at the same time would
+// slow the first view down).
+function keepAfterLoad(file) {
+  if (!canKeep()) { app.on("loaded", () => status("Modelo aberto. Este navegador não deixa guardá-lo: ao fechar, abra o ZIP de novo.")); return; }
+  let started = false;
+  app.on("loaded", async () => {
+    if (started) return;
+    started = true;
+    let shown = -1;
+    try {
+      await keepZip(file, (f) => { const p = Math.floor(f * 10) * 10; if (p !== shown) { shown = p; status(`Guardando o modelo neste aparelho… ${p}%`); } });
+      status("Modelo guardado neste aparelho: ele reabre sozinho quando você voltar.");
+    } catch (e) {
+      console.warn("guardar:", e);
+      status("Não foi possível guardar o modelo neste aparelho: " + (e.message || e) + " Ao fechar, abra o ZIP de novo.");
+    }
+  });
+}
+// The camera is remembered when the page is left, and put back when the same model is reopened.
+const camKey = () => "pvs-viewer:lastcam:" + app.title + ":" + app.nParts;
+function saveLastCamera() { if (app.tree && userMoved) try { localStorage.setItem(camKey(), JSON.stringify(app.getCamera())); } catch { /* storage blocked */ } }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveLastCamera(); });
+window.addEventListener("pagehide", saveLastCamera);
+app.on("loaded", () => {
+  if (!reopened || wantedCode() || location.hash) return; // a link decides where to look
+  try { const c = JSON.parse(localStorage.getItem(camKey()) || "null"); if (c && c.pos) app.setCamera(c); } catch { /* none */ }
+});
+
 function rememberPath(r) {
   if (r && r.folder && window.desktop.openFolder) addRecent({ kind: "path", name: String(r.folder).split(/[\\/]/).filter(Boolean).pop() || r.folder, path: r.folder });
 }
@@ -1671,7 +1735,9 @@ app.worldPerPixel = function (p) {
 };
 // While walking the orbit target is not updated: the view looks where the camera faces, so the
 // target is put a few metres ahead (saved views and links then open looking the same way).
-app.getCamera = () => ({ ortho: camera === ortho, pos: camera.position.toArray(),
+// During a smooth transition the camera is reported where it is going (a view saved at that moment
+// must not keep a point half way).
+app.getCamera = () => fly ? { ortho: camera === ortho, pos: fly.to.pos.toArray(), target: fly.to.target.toArray(), half: fly.to.half, zoom: fly.to.zoom } : ({ ortho: camera === ortho, pos: camera.position.toArray(),
   target: walk.on ? camera.position.clone().addScaledVector(camera.getWorldDirection(new THREE.Vector3()), Math.max(1, walk.speed * 3)).toArray() : controls.target.toArray(),
   half: orthoHalf, zoom: ortho.zoom });
 app.setCamera = function (c) {
@@ -2487,6 +2553,7 @@ function animate(now = performance.now()) {
   if (wasMoving && !moving) { // the camera came to rest: refine, and remember where it stopped
     needRender = true;
     if (histJump) histJump = false; else if (!walk.on && app.tree) histPush();
+    saveLastCamera(); // a phone may close the browser without telling the page
   }
   wasMoving = moving;
   if (!needRender) { adapt.last = 0; return; }

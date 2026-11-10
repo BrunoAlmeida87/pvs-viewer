@@ -39,7 +39,17 @@ export async function exportOBJ(app, progress = () => {}) {
       return count;
     } catch (e) { await window.desktop.objCancel(); throw e; }
   }
-  if (!window.showSaveFilePicker) throw new Error("Use o Electron ou um navegador com suporte a salvar arquivos diretamente.");
+  if (!window.showSaveFilePicker) { // phones, Firefox, Safari: build the file in memory and download it
+    const chunks = [];
+    const count = await writeOBJ(app, parts, (text) => { chunks.push(text); }, progress);
+    if (!count) throw new Error("Nenhuma peça selecionada tem geometria disponível.");
+    const url = URL.createObjectURL(new Blob(chunks, { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 60000);
+    return count;
+  }
   const handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: "Wavefront OBJ", accept: { "text/plain": [".obj"] } }] });
   const file = await handle.createWritable();
   try {
