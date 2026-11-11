@@ -6,11 +6,12 @@
 // Two ways to look at it:
 // - on the table (Mesa, 1:20, 1:50, 1:100): one finger drags the model, two fingers scale and turn it;
 // - at real size: you stand inside it. A thumb stick walks (the model moves the other way), ▲ ▼ go
-//   up and down a deck, one finger pulls the floor, two fingers turn the model around you. You
-//   start where the walk mode stood (looking the same way), else next to the selection, else in
-//   the middle of the model.
+//   up and down a deck, one finger pulls the floor, two fingers turn the model around you. There
+//   is nothing to aim at: you are put in at once, the start point on the floor just in front of
+//   you. It is where the walk mode stood (looking the same way), else next to the selection, else
+//   the middle of the model. "Mover" aims again, to put it on a chosen spot of the floor.
 import * as THREE from "three";
-import { $, status } from "./util.js";
+import { $, status, VERSION } from "./util.js";
 
 const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown this long
 const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
@@ -22,7 +23,7 @@ const ISO_ANGLE = Math.atan2(1, 1);
 const HINT = {
   search: "Aponte para a mesa ou o piso e mova o celular devagar, até aparecer o anel",
   aim: "Toque na tela para pôr o modelo aqui",
-  aimReal: "Aponte para o piso e toque: você começa ali, em tamanho real",
+  aimReal: "Aponte para o piso e toque: você começa ali",
   placed: "Arraste para mover · dois dedos aumentam, diminuem e giram",
   placedReal: "Controle da esquerda anda · ▲ ▼ sobem e descem · dois dedos giram em volta de você",
 };
@@ -61,8 +62,10 @@ export function initAR(app) {
   let yaw = 0, scale = 1, preset = "table", turned = false, speed = 1;
   const M = new THREE.Matrix4(), T = new THREE.Matrix4(), hitM = new THREE.Matrix4();
   const lod = { px: 2, last: 0, ema: 0, n: 0 };
+  const fwd = new THREE.Vector3();
   const joy = { id: null, x: 0, y: 0, vert: 0 };
   let lastT = 0;
+  let floorY = null; // the floor seen by the phone (a surface well below it), room y
 
   const real = () => preset === "real";
   const anchor = () => (real() ? realAnchor : tableAnchor);
@@ -72,7 +75,11 @@ export function initAR(app) {
     preset = k;
     scale = k === "table" ? fitScale() : SCALES[k];
     // between the table and real size the model goes somewhere else: aim again
-    if (was !== real() && phase !== "search") { turned = false; setPhase("aim"); }
+    if (was !== real()) {
+      turned = false;
+      if (real()) enterReal(); // no aiming: in at once (or at the first frame)
+      else if (phase !== "search") setPhase("aim");
+    }
     ui.classList.toggle("real", real());
     showScale();
     setPhase(phase);
@@ -98,6 +105,20 @@ export function initAR(app) {
     M.premultiply(T.makeRotationY(yaw));
     M.premultiply(T.makeTranslation(pos.x, pos.y, pos.z));
     return M;
+  }
+  // real size: the start point on the floor 0.8 m in front of the phone, the model turned
+  function enterReal() {
+    const cam = app.renderer.xr.getCamera();
+    if (!session || !cam.cameras.length) { if (phase !== "search") setPhase("search"); return; } // no pose yet: onFrame does it
+    camPos.setFromMatrixPosition(cam.matrix);
+    const e = cam.matrix.elements;
+    fwd.set(-e[8], 0, -e[10]);
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    const y = floorY !== null && floorY < camPos.y - 0.9 ? floorY : camPos.y - 1.4;
+    pos.set(camPos.x + fwd.x * 0.8, y, camPos.z + fwd.z * 0.8);
+    faceCamera();
+    setPhase("placed");
   }
   // the angle of a room direction about the vertical (rotating by `yaw` adds to it)
   const angle = (x, z) => Math.atan2(x, z);
@@ -152,9 +173,11 @@ export function initAR(app) {
     if (!session.domOverlayState) session.addEventListener("select", onSelect); // no buttons: a tap places / picks up again
     turned = false;
     pos.set(0, 0, -1);
+    floorY = null;
     phase = "search";
     setPreset(opts.real ? "real" : "table");
     showSpeed();
+    $("#arVersion").textContent = "v" + VERSION;
     ui.hidden = false;
     lod.px = 2; lod.last = 0; lod.ema = 0; lastT = 0;
     r.setAnimationLoop(onFrame);
@@ -180,7 +203,7 @@ export function initAR(app) {
   }
 
   // ------------------------------------------------------------ each frame
-  const up = new THREE.Vector3(), fwd = new THREE.Vector3(), side = new THREE.Vector3();
+  const up = new THREE.Vector3(), side = new THREE.Vector3();
   function onFrame(t, frame) {
     if (!session || !frame) return;
     const r = app.renderer, cam = r.xr.getCamera();
@@ -200,6 +223,8 @@ export function initAR(app) {
         break;
       }
     }
+    if (found && hitPos.y < camPos.y - 0.9) floorY = floorY === null ? hitPos.y : Math.min(floorY, hitPos.y);
+    if (phase === "search" && real() && cam.cameras.length) enterReal();
     if (found && phase === "search") setPhase("aim");
     if (found && phase === "aim") {
       pos.copy(hitPos);

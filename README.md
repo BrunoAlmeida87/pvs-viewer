@@ -45,14 +45,16 @@ você mexe no modelo.
     com um dedo move o modelo; dois dedos aumentam, diminuem e giram.
   - **Real** (tamanho real): você fica dentro do modelo. O controle da esquerda anda (na direção para onde o celular
     aponta), **▲ ▼** sobem e descem (para trocar de pavimento), o botão de velocidade alterna entre 0,75, 1,5, 3 e
-    6 m/s; arrastar com um dedo puxa o piso; dois dedos giram o modelo em volta de você. Aponte para o piso e toque:
-    você começa ali — no ponto onde estava na **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois de
-    sair dela), olhando para o mesmo lado; senão, ao lado da peça selecionada; senão, no meio do modelo.
+    6 m/s; arrastar com um dedo puxa o piso; dois dedos giram o modelo em volta de você. Não é preciso mirar: ao tocar
+    em **Real** você já está dentro, com o ponto de partida no chão logo à sua frente — o ponto onde estava na
+    **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois de sair dela), olhando para o mesmo lado;
+    senão, ao lado da peça selecionada; senão, o meio do modelo. **Mover** escolhe outro ponto do piso (aponte e toque).
 
   Aparece o que está na tela: peças visíveis, cores, cortes e vista explodida — para ver só um sistema, isole-o
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
   só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
   pequenas deixam de ser desenhadas quando o celular não acompanha.
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.2.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 

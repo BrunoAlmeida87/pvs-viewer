@@ -18,7 +18,7 @@
   if (coarse || q.has("mobile") || q.has("touch")) c.add("touch");
   if (q.has("mobile") || (coarse && Math.min(screen.width, screen.height) < 600)) c.add("mobile");
 })();</script>
-<link rel="stylesheet" href="style.css?v=ar-2">
+<link rel="stylesheet" href="style.css?v=ar-3">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.min.js",
@@ -368,7 +368,7 @@
       </div>
     </div>
     <div id="mToolSheet" class="mSheet" hidden>
-      <div class="mSheetHead"><b id="mToolTitle">Ferramentas</b><button data-do="close" aria-label="Fechar">✕</button></div>
+      <div class="mSheetHead"><b id="mToolTitle">Ferramentas</b><small id="mVersion"></small><button data-do="close" aria-label="Fechar">✕</button></div>
       <h5>Mostrar</h5>
       <div class="tiles">
         <button data-do="showAll"><svg><use href="#i-eye"/></svg><span>Mostrar tudo</span></button>
@@ -681,6 +681,7 @@
     <div id="arRow">
       <button id="arMove" title="Levar o modelo para outro lugar: ele volta a seguir o anel">Mover</button>
       <b id="arScale"></b>
+      <small id="arVersion"></small>
     </div>
   </div>
 </div>
@@ -701,7 +702,7 @@ async function refreshModules() {
     for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
     await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
   };
-  await visit(new URL("viewer.js?v=ar-2", location.href).href);
+  await visit(new URL("viewer.js?v=ar-3", location.href).href);
 }
 // The service worker (sw.js) does the same revalidation for every file and keeps a copy, so the
 // viewer also opens without a connection and can be installed as an app on the phone. It is not
@@ -711,7 +712,7 @@ if (sw) navigator.serviceWorker.register("sw.js").catch(() => {});
 if (!(sw && navigator.serviceWorker.controller)) {
   try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
 }
-import("./viewer.js?v=ar-2").catch((err) => {
+import("./viewer.js?v=ar-3").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
     ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";

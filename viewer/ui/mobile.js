@@ -2,7 +2,7 @@
 // small: a slim button bar, a one-line card for the selected part, and tools that open as low
 // sheets which can be folded down to their title. Nothing here runs on a PC or a tablet (they keep
 // the PC layout), except the small helpers other modules call.
-import { $, fmt } from "./util.js";
+import { $, fmt, VERSION } from "./util.js";
 
 export function initMobile(app) {
   const root = document.documentElement, view = $("#view"), appEl = $("#app");
@@ -137,6 +137,7 @@ export function initMobile(app) {
     $("#mToolSheet [data-do=ghost]").classList.toggle("on", !!app.ghost);
     $("#mOrtho").classList.toggle("on", app.isOrtho());
     $("#mToolTitle").textContent = app.title || "Ferramentas";
+    $("#mVersion").textContent = "v" + VERSION;
   }
 
   // ------------------------------------------------------------ bottom bar

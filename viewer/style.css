@@ -483,6 +483,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mSheet .chips button { min-height: 40px; padding: 4px 2px; font-size: 12.5px; }
 .mSheetHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px 2px 6px; }
 .mSheetHead b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+#mVersion { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .mSheetHead button { width: 36px; height: 34px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 15px; }
 .mSheet h5 { margin: 8px 4px 4px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 650; }
 .mSheet .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
@@ -572,7 +573,8 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #arRow { display: flex; align-items: center; gap: 10px; }
 #arScale { padding: 4px 10px; border-radius: 999px; background: rgba(20, 24, 31, .55); font-size: 12.5px; font-weight: 600;
   font-variant-numeric: tabular-nums; }
-#arUi[data-phase="search"] #arBar { visibility: hidden; }
+#arUi[data-phase="search"] #arMove { display: none; }
+#arVersion { font-size: 11px; opacity: .75; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 #arUi[data-phase="aim"] #arMove { display: none; }
 /* real size: the scales go up (under the hint), the thumb stick and ▲ ▼ take the bottom */
 #arUi.real #arBar { bottom: auto; top: calc(64px + env(safe-area-inset-top)); }
