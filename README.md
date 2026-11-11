@@ -38,6 +38,15 @@ você mexe no modelo.
   que a caminhada abre. Toque num piso do modelo para ficar em pé nele. A barra do topo tem: posicionar de novo, **Chão** (mantém a câmera a 1,6 m do piso,
   sobe degraus), **Colisão** (para em paredes e equipamentos), velocidade e sair. Com Chão desligado aparecem os
   botões de subir e descer (voo livre).
+- **Na mesa (RA)** (realidade aumentada, em Ferramentas): o modelo aparece sobre a mesa ou o piso, pela câmera do
+  celular. Aponte para a superfície e mova o celular devagar até aparecer um anel; o modelo acompanha o anel, e um
+  toque o deixa ali. Depois, um dedo gira o modelo; dois dedos aumentam, diminuem e giram. Escalas: **Mesa** (o
+  modelo inteiro com cerca de 50 cm), **1:20**, **1:50**, **1:100** e **Real** (tamanho real); **Mover** leva o
+  modelo para outro lugar; ✕ (ou o botão Voltar) sai. Aparece o que está na tela: peças visíveis, cores, cortes e
+  vista explodida — para ver só um sistema, isole-o antes. Precisa do Chrome no Android, do app **Google Play
+  Services para RA** (ARCore) e do site em https; o botão só aparece onde funciona (o iPhone não tem a
+  realidade aumentada do navegador). Em modelos grandes, as peças pequenas deixam de ser desenhadas quando o
+  celular não acompanha.
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -220,6 +229,8 @@ convertida pelo `build.py`, que abre em segundos.
 - **Navegação**: gira em torno do ponto clicado, cubo de vistas, transições suaves ao enquadrar e trocar de vista,
   teclado (setas, + e −, Home, 1 a 5), **vista anterior / seguinte** (Backspace) e modo caminhada em primeira pessoa
   com **Posicionar** (ficar em pé num ponto do modelo), **Chão** (altura fixa de 1,6 m sobre o piso) e **Colisão**.
+- **Realidade aumentada** (Android): o modelo, como está na tela, sobre a mesa ou o piso, em escala de mesa, 1:20,
+  1:50, 1:100 ou real; toque para pôr, um dedo gira, dois dedos aumentam e giram (botão **Na mesa (RA)**).
 - **Realce**: a peça sob o cursor fica mais clara e mostra o nome (Exibição › Realçar a peça sob o cursor).
 - **Desfazer / refazer** (Ctrl+Z, Ctrl+Y): ocultar, isolar, mostrar tudo, colorir e mudar a opacidade.
 - **Medir**: distância (com ΔX/ΔY/ΔZ), ângulo, coordenadas de um ponto, raio e diâmetro de arestas circulares,

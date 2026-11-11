@@ -100,6 +100,7 @@ export function initMobile(app) {
     select: () => openPanel("#selPanel"),
     cut: () => press("#cutBtn"),
     measure: () => press("#measureBtn"),
+    ar: () => app.startAR?.(),
     walk: () => { for (const p of panels) if (!p.hidden) p.querySelector("[data-close]")?.click(); app.setWalk(true, true); },
     layers: () => press("#layerBtn"),
     bigramas: () => press("#bgBtn"),

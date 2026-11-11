@@ -35,6 +35,7 @@ import { zipConverted } from "./lib/zipsrc.js";
 import { addRecent, listRecent, removeRecent, allow, canKeep, keepZip, keptFile, dropKept, sizeText } from "./lib/recent.js";
 import { initMobile } from "./ui/mobile.js";
 import { initUndo } from "./ui/undo.js";
+import { initAR } from "./ui/ar.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -105,6 +106,7 @@ function requestRender() { needRender = true; }
 app.requestRender = requestRender;
 
 function resize() {
+  if (renderer.xr.isPresenting) return; // the AR session sets the size; app.xr.end() calls this again
   const w = view.clientWidth, h = view.clientHeight;
   renderer.setSize(w, h, false);
   const svg = document.querySelector("#overlay");
@@ -442,9 +444,10 @@ function updateVisibility() {
 // Level of detail: hide chunks whose largest part would cover fewer than `minPx` pixels.
 const _box = new THREE.Box3();
 let drawnTris = 0, drawnChunks = 0;
-function applyLod(minPx, noEdges = false) {
+// `eye` and `fpx` (focal length in pixels) replace the camera's (augmented reality).
+function applyLod(minPx, noEdges = false, eye = null, fpx = 0) {
   const H = view.clientHeight;
-  const f = H / (2 * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)));
+  const f = fpx || H / (2 * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)));
   const orthoH = (ortho.top - ortho.bottom) / ortho.zoom;
   const cull = minPx > 0 && !partOffset && !walk.on;
   drawnTris = 0; drawnChunks = 0;
@@ -452,7 +455,8 @@ function applyLod(minPx, noEdges = false) {
     const w = c.want || { m: true, t: false, e: false };
     let hide = false;
     if (cull && c.ps) {
-      const px = camera === persp ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(camera.position)) : c.ps * H / orthoH;
+      const px = eye ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(eye))
+        : camera === persp ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(camera.position)) : c.ps * H / orthoH;
       hide = px < minPx;
     }
     c.mesh.visible = w.m && !hide;
@@ -2545,6 +2549,7 @@ let wasMoving = false;
 const frameTimes = [];
 function animate(now = performance.now()) {
   requestAnimationFrame(animate);
+  if (xrOn) return; // the AR session draws its own frames (app.xr.render)
   stepTween(now);
   stepFly(now);
   stepWalk(now);
@@ -2592,6 +2597,72 @@ function animate(now = performance.now()) {
   while (frameTimes.length && now - frameTimes[0] > 1000) frameTimes.shift();
   if (app.display.perf) showPerf(now, performance.now() - t0, moving);
 }
+
+// ---------------------------------------------------------------- augmented reality (ui/ar.js)
+// While an AR session runs, the window loop above stops and the session's frames draw the model.
+// Its place in the room is the transform of the whole scene: every mesh is a child of it and the
+// shaders keep model coordinates for the cuts, so nothing else needs to know about AR.
+let xrOn = false, xrOrtho = 0;
+const xrCam = new THREE.PerspectiveCamera(60, 1, 0.01, 2000); // takes the phone's pose and lens each frame
+const _eye = new THREE.Vector3(), _xrInv = new THREE.Matrix4(), _xrMv = new THREE.Matrix4();
+app.renderer = renderer;
+app.xr = {
+  // What is shown now, in model coordinates: the visible loaded parts, inside the cut and the neighbourhood.
+  bounds() {
+    const parts = [];
+    for (let p = 0; p < app.nParts; p++) if (app.partVisible[p] && isLoaded(p)) parts.push(p);
+    const b = partsBox(parts);
+    if (b.isEmpty()) return modelBox();
+    if (shared.clipOn.value && !shared.clipInvert.value) b.intersect(new THREE.Box3(shared.clipMin.value.clone(), shared.clipMax.value.clone()));
+    if (shared.nbClip.value === 2) b.intersect(new THREE.Box3(shared.nbMin.value.clone(), shared.nbMax.value.clone()));
+    if (shared.nbClip.value === 1) {
+      const c = shared.nbC.value, r = shared.nbR.value;
+      b.intersect(new THREE.Box3(c.clone().subScalar(r), c.clone().addScalar(r)));
+    }
+    return b.isEmpty() ? modelBox() : b;
+  },
+  begin() {
+    if (walk.on) setWalk(false);
+    xrOn = true;
+    setHoverPart(-1);
+    xrOrtho = shared.ortho.value;
+    shared.ortho.value = 0;
+    scene.matrixAutoUpdate = false;
+    renderer.xr.enabled = true;
+  },
+  // m: Matrix4 from model coordinates to the room (metres, y up), or null to hide the model
+  place(m) {
+    scene.visible = !!m;
+    if (m) { scene.matrix.copy(m); scene.matrixWorldNeedsUpdate = true; }
+  },
+  // One AR frame: level of detail from where the phone is, light, then draw (and `extra`, a scene
+  // in room coordinates such as the aiming ring, over it). Returns the triangles drawn.
+  render(minPx, extra) {
+    drawnTris = 0;
+    if (scene.visible) {
+      scene.updateMatrixWorld();
+      const cam = renderer.xr.getCamera(), sub = cam.cameras[0] || cam; // the pose of this frame is in .matrix
+      _eye.setFromMatrixPosition(cam.matrix).applyMatrix4(_xrInv.copy(scene.matrixWorld).invert());
+      const h = sub.viewport && sub.viewport.w > 0 ? sub.viewport.w : renderer.domElement.height;
+      applyLod(minPx, false, _eye, h * sub.projectionMatrix.elements[5] / 2);
+      shared.skyDir.value.copy(SKY).transformDirection(_xrMv.multiplyMatrices(_xrInv.copy(cam.matrix).invert(), scene.matrixWorld));
+    }
+    renderer.render(scene, xrCam);
+    if (extra) { renderer.autoClear = false; renderer.render(extra, xrCam); renderer.autoClear = true; }
+    return drawnTris;
+  },
+  end() {
+    xrOn = false;
+    renderer.xr.enabled = false;
+    scene.matrix.identity();
+    scene.matrixAutoUpdate = true;
+    scene.visible = true;
+    scene.updateMatrixWorld(true);
+    shared.ortho.value = xrOrtho;
+    resize();
+    requestRender();
+  },
+};
 
 // ---------------------------------------------------------------- performance panel
 const gpuName = (() => {
@@ -2651,6 +2722,7 @@ initMeasure(app);
 initViews(app);
 initAnalysis(app);
 initMobile(app);
+initAR(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.

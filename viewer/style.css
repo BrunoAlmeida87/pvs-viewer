@@ -553,3 +553,24 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile #perf { left: 6px; bottom: 60px; width: auto; max-width: calc(100% - 12px); }
 .mobile #bom { height: 48dvh; }
 .mobile .treeContextMenu { max-width: calc(100vw - 16px); }
+
+/* augmented reality (ui/ar.js): over the camera picture, so always light on dark glass */
+#arUi { position: fixed; inset: 0; z-index: 100; background: transparent; color: #fff; touch-action: none; user-select: none;
+  -webkit-user-select: none; font-size: 14px; }
+#arTop { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 10px; right: 10px; display: flex; align-items: flex-start; gap: 8px; }
+#arHint { flex: 1; margin: 0 auto; max-width: 420px; padding: 8px 12px; border-radius: 12px; background: rgba(20, 24, 31, .72);
+  backdrop-filter: blur(8px); text-align: center; line-height: 1.35; pointer-events: none; }
+#arUi[data-phase="placed"] #arHint { animation: arFade 4s forwards; }
+@keyframes arFade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+#arUi button { height: 40px; min-width: 40px; padding: 0 12px; border: 0; border-radius: 10px; background: rgba(20, 24, 31, .72);
+  color: #fff; font: inherit; font-weight: 600; backdrop-filter: blur(8px); }
+#arUi button.on { background: #e8590c; }
+#arExit { flex: none; width: 40px; padding: 0 !important; font-size: 18px !important; }
+#arBar { position: absolute; left: 10px; right: 10px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column;
+  align-items: center; gap: 8px; }
+#arScales { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+#arRow { display: flex; align-items: center; gap: 10px; }
+#arScale { padding: 4px 10px; border-radius: 999px; background: rgba(20, 24, 31, .55); font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; }
+#arUi[data-phase="search"] #arBar { visibility: hidden; }
+#arUi[data-phase="aim"] #arMove { display: none; }

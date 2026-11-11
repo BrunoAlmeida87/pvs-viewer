@@ -79,6 +79,11 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Abrir o ZIP exportado sem extrair, modelos recentes, link direto para uma peça (`?peca=`)
 - [x] Instalável e offline (service worker + manifest)
 
+## Realidade aumentada ✅
+- [x] Modelo sobre a mesa ou o piso pela câmera do celular (WebXR com detecção de superfícies, Chrome no Android):
+  anel de mira, toque para pôr, giro com um dedo, escala e giro com dois dedos, escalas Mesa / 1:20 / 1:50 / 1:100 /
+  Real, nível de detalhe que se ajusta ao celular
+
 ## A fazer
 - [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas
   não as aplica. Falta um modelo de exemplo para confirmar a convenção da matriz antes de implementar.
