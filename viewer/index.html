@@ -18,7 +18,7 @@
   if (coarse || q.has("mobile") || q.has("touch")) c.add("touch");
   if (q.has("mobile") || (coarse && Math.min(screen.width, screen.height) < 600)) c.add("mobile");
 })();</script>
-<link rel="stylesheet" href="style.css?v=ar-5">
+<link rel="stylesheet" href="style.css?v=f-1">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.min.js",
@@ -72,6 +72,7 @@
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M10 6l-6 6 6 6M4 12h16"/></symbol>
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-ar" viewBox="0 0 24 24"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"/><path d="M12 7l4.5 2.5v5L12 17l-4.5-2.5v-5z"/><path d="M12 12l4.5-2.5M12 12v5M12 12L7.5 9.5"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M3.5 6.5l5-2.5 7 2.5 5-2.5v13.5l-5 2.5-7-2.5-5 2.5z"/><path d="M8.5 4v13.5M15.5 6.5V20"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -138,6 +139,7 @@
           <label class="menuRow"><input type="checkbox" id="dPerf"> Mostrar desempenho (P)</label>
           <label class="menuRow"><input type="checkbox" id="dCube" checked> Cubo de vistas</label>
           <label class="menuRow"><input type="checkbox" id="dHover" checked> Realçar a peça sob o cursor</label>
+          <label class="menuRow" title="O código de cada equipamento visível, sobre ele (R)"><input type="checkbox" id="dLabels"> Rótulos com os códigos (R)</label>
         </div>
       </div>
     </div>
@@ -379,6 +381,7 @@
         <button data-do="display"><svg><use href="#i-sun"/></svg><span>Exibição</span></button>
         <button data-do="colors"><svg><use href="#i-palette"/></svg><span>Cores</span></button>
         <button data-do="select"><svg><use href="#i-cursor"/></svg><span>Seleção</span></button>
+        <button data-do="labels" id="mLabels"><svg><use href="#i-tag"/></svg><span>Rótulos</span></button>
       </div>
       <h5>Ferramentas</h5>
       <div class="tiles">
@@ -410,6 +413,7 @@
       <button id="walkGround" title="Pés no chão: mantém a câmera a 1,6 m do piso (G)"><svg><use href="#i-ground"/></svg><span>Chão</span></button>
       <button id="walkCollide" title="Parar em paredes e equipamentos (C)"><svg><use href="#i-wall"/></svg><span>Colisão</span></button>
       <span class="walkSpeed"><button id="walkSlower" title="Mais devagar" aria-label="Mais devagar">−</button><i id="walkSpeedLbl"></i><button id="walkFaster" title="Mais rápido" aria-label="Mais rápido">＋</button></span>
+      <button id="walkMap" title="Mostrar ou ocultar o mapa (planta com “você está aqui”)"><svg><use href="#i-map"/></svg><span>Mapa</span></button>
       <button id="walkAr" hidden title="Ver este lugar em tamanho real, pela câmera (realidade aumentada)"><svg><use href="#i-ar"/></svg><span>RA</span></button>
       <button id="walkExit" title="Sair da caminhada (Esc)" aria-label="Sair da caminhada">✕</button>
     </div>
@@ -419,12 +423,14 @@
       <div class="joy" id="joyLook" aria-label="Olhar"><i></i></div>
     </div>
     <div id="walkAim" hidden aria-hidden="true"></div>
+    <canvas id="miniMap" hidden title="Você está aqui · toque para ir a outro ponto"></canvas>
     <div id="hoverTip" hidden></div>
     <canvas id="loupe" hidden aria-hidden="true"></canvas>
     <div id="aimDot" hidden aria-hidden="true"></div>
     <div id="viewTabs" aria-label="Abas de vista"></div>
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
+    <div id="labels" aria-label="Rótulos"></div>
     <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="pivot" hidden></div>
     <div id="perf" hidden></div>
@@ -582,6 +588,12 @@
           <label><input type="checkbox" id="cutCap" checked> Tampa nas peças cortadas</label>
           <label><input type="checkbox" id="cutShow" checked> Mostrar a caixa</label>
           <div class="row2"><button id="cutSel" title="Caixa em volta da seleção">Caixa da seleção</button><button id="cutReset">Limpar corte</button></div>
+          <hr>
+          <b class="cutHead">Plano em qualquer direção</b>
+          <div class="row2"><button id="cutFace" title="Clique numa face do modelo: o plano passa por ela, na mesma direção">Plano por uma face…</button><button id="cutFaceOff" disabled>Tirar o plano</button></div>
+          <div class="row2 cutFreeRow"><span>Profundidade</span><input type="range" id="cutDepth" min="-50" max="1000" value="0" disabled><i id="cutDepthLbl"></i></div>
+          <div class="row2 cutFreeRow"><button id="cutFlip" disabled title="Remove o outro lado do plano">Inverter lado</button><button id="cutLook" disabled title="Olha de frente para o plano (bom para ver o corte)">Olhar de frente</button></div>
+          <p class="hint" id="cutFreeHint">Clique numa face (uma parede, um piso, a lateral de um equipamento): o modelo é cortado nesse plano. A profundidade leva o plano para dentro.</p>
         </div>
       </div>
       <div id="explodePanel" class="panel" hidden>
@@ -711,7 +723,7 @@ async function refreshModules() {
     for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
     await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
   };
-  await visit(new URL("viewer.js?v=ar-5", location.href).href);
+  await visit(new URL("viewer.js?v=f-1", location.href).href);
 }
 // The service worker (sw.js) does the same revalidation for every file and keeps a copy, so the
 // viewer also opens without a connection and can be installed as an app on the phone. It is not
@@ -721,7 +733,7 @@ if (sw) navigator.serviceWorker.register("sw.js").catch(() => {});
 if (!(sw && navigator.serviceWorker.controller)) {
   try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
 }
-import("./viewer.js?v=ar-5").catch((err) => {
+import("./viewer.js?v=f-1").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
     ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";

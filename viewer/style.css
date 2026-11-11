@@ -556,6 +556,22 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile .treeContextMenu { max-width: calc(100vw - 16px); }
 
 /* augmented reality (ui/ar.js): over the camera picture, so always light on dark glass */
+/* walk mode mini map */
+#miniMap { position: absolute; z-index: 11; right: 12px; bottom: 54px; border-radius: 10px; background: rgba(20, 24, 31, .78);
+  box-shadow: var(--shadow-lg); border: 1px solid rgba(255, 255, 255, .25); cursor: crosshair; touch-action: none; }
+.touch #miniMap { bottom: auto; top: calc(58px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); }
+/* automatic labels (ui/labels.js) */
+#labels { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; transition: opacity .15s; }
+#labels.moving { opacity: 0; }
+#labels .lbl { position: absolute; transform: translate(-50%, -50%); height: 19px; padding: 0 6px; border: 0; border-radius: 6px;
+  background: rgba(20, 24, 31, .78); color: #fff; font: 600 11px/19px system-ui, sans-serif; white-space: nowrap; letter-spacing: .01em;
+  pointer-events: auto; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+#labels .lbl:hover { background: #2563eb; }
+#labels .lbl.sel { background: #e8590c; }
+.touch #labels .lbl { height: 22px; line-height: 22px; font-size: 12px; }
+.cutHead { display: block; margin: 2px 0 4px; font-size: 12.5px; }
+.cutFreeRow input[type=range] { flex: 1; min-width: 0; }
+.cutFreeRow i { min-width: 64px; text-align: right; font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 #arUi { position: fixed; inset: 0; z-index: 100; background: transparent; color: #fff; touch-action: none; user-select: none;
   -webkit-user-select: none; font-size: 14px; }
 #arTop { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 10px; right: 10px; display: flex; align-items: flex-start; gap: 8px; }

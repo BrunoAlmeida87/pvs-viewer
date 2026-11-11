@@ -71,7 +71,7 @@ export function initViews(app) {
     app.ghost = !!s.ghost;
     $("#ghost").classList.toggle("on", app.ghost);
     if (s.display) { const d = { ...s.display }; delete d.perf; app.setDisplay(d); }
-    if (s.clip) app.setClip(s.clip);
+    if (s.clip) app.setClip({ plane: null, ...s.clip }); // views saved before the free plane have none
     if (s.explode) {
       $("#exAmount").value = s.explode.amount || 0; $("#exLevel").value = s.explode.level ?? 1; $("#exSel").checked = !!s.explode.selOnly;
       app.setExplode(s.explode);

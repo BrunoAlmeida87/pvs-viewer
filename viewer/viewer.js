@@ -26,7 +26,7 @@ import { initSets } from "./ui/sets.js";
 import { initColors } from "./ui/colors.js";
 import { initTable } from "./ui/table.js";
 import { initDisplay } from "./ui/display.js";
-import { $, status } from "./ui/util.js";
+import { $, status, store } from "./ui/util.js";
 import { convertModel } from "./lib/convert.js";
 import { exportMobileZip } from "./lib/browser-mobile-export.js";
 import { exportRawModelZip } from "./lib/raw-model-export.js";
@@ -36,6 +36,7 @@ import { addRecent, listRecent, removeRecent, allow, canKeep, keepZip, keptFile,
 import { initMobile } from "./ui/mobile.js";
 import { initUndo } from "./ui/undo.js";
 import { initAR } from "./ui/ar.js";
+import { initLabels } from "./ui/labels.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -57,7 +58,8 @@ export const app = {
   // "fast" also drops edges/SSAO and resolution while moving
   display: { style: 0, smooth: true, ssao: false, bg: "grad", light: "cam", bright: 100, cube: true, quality: "auto", perf: false, hover: true },
   tool: null, // when set, clicks in the 3D view go to tool(pickInfo, event) instead of selecting
-  clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true },
+  // plane: free section plane {p: point, n: normal (towards the side removed), depth: m along -n, flip} or null
+  clip: { axes: [0, 1, 2].map(() => ({ on: false, lo: 0, hi: 1 })), invert: false, cap: true, show: true, plane: null },
   explode: { amount: 0, level: 1, selOnly: false },
 };
 
@@ -133,12 +135,15 @@ uniform int clipOn;
 uniform int clipInvert;
 uniform vec3 clipMin;
 uniform vec3 clipMax;
+uniform int planeOn;  // free section plane: removes where dot(w, plane.xyz) > plane.w
+uniform vec4 plane;
 uniform int nbClip;   // neighbourhood cut: 0 off, 1 sphere, 2 box
 uniform vec3 nbC;
 uniform float nbR;
 uniform vec3 nbMin;
 uniform vec3 nbMax;
 bool clipped(vec3 w) {
+  if (planeOn == 1 && dot(w, plane.xyz) > plane.w) return true;
   if (nbClip == 1 && distance(w, nbC) > nbR) return true;
   if (nbClip == 2 && (any(lessThan(w, nbMin)) || any(greaterThan(w, nbMax)))) return true;
   if (clipOn == 0) return false;
@@ -221,13 +226,13 @@ uniform float skyMix;
 uniform float bright;
 out vec4 outColor;
 void main() {
-  if ((clipOn == 1 || nbClip > 0) && clipped(vWorld)) discard;
+  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
   if (pickMode == 1) { outColor = packId(vId); return; }
   if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
   vec3 base = vCol.rgb;
   if (style == 2) base = vec3(1.0);
   if (vSel > 0.5) base = mix(base, vec3(1.0, 0.42, 0.05), style == 2 ? 0.35 : 0.7);
-  if (capOn == 1 && (clipOn == 1 || nbClip > 0) && !gl_FrontFacing) {
+  if (capOn == 1 && (clipOn == 1 || nbClip > 0 || planeOn == 1) && !gl_FrontFacing) {
     // inside of a cut solid: flat hatched cap
     vec3 c = base * 0.62 * bright;
     if (mod(gl_FragCoord.x - gl_FragCoord.y, 7.0) < 1.3) c *= 0.55;
@@ -275,7 +280,7 @@ flat in float vSel;
 flat in uint vId;
 out vec4 outColor;
 void main() {
-  if ((clipOn == 1 || nbClip > 0) && clipped(vWorld)) discard;
+  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
   if (pickMode == 1) { outColor = packId(vId); return; }
   if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
   vec3 c = style == 3 ? vCol.rgb * 0.9 : style == 2 ? vec3(0.08) : vCol.rgb * 0.22;
@@ -288,6 +293,7 @@ const shared = {
   style: { value: 0 }, smoothOn: { value: 1 }, exploded: { value: 0 },
   clipOn: { value: 0 }, clipInvert: { value: 0 }, capOn: { value: 1 },
   clipMin: { value: new THREE.Vector3() }, clipMax: { value: new THREE.Vector3() },
+  planeOn: { value: 0 }, plane: { value: new THREE.Vector4() },
   nbClip: { value: 0 }, nbC: { value: new THREE.Vector3() }, nbR: { value: 1 },
   nbMin: { value: new THREE.Vector3() }, nbMax: { value: new THREE.Vector3() },
   light: { value: new THREE.Vector3(0.32, 0.68, 0.1) }, skyDir: { value: new THREE.Vector3(0, 0, 1) },
@@ -692,6 +698,19 @@ clipBox.visible = false;
 clipBox.renderOrder = 10;
 scene.add(clipBox);
 
+// Helpers drawn with the model but never picked (plane outline, mannequin, removal route…).
+const helpers = new THREE.Group();
+helpers.renderOrder = 10;
+scene.add(helpers);
+app.helpers = helpers;
+// outline of the free section plane: a square on the plane, as big as the model
+const planeHelper = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-0.5, -0.5, 0), new THREE.Vector3(0.5, -0.5, 0), new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(-0.5, 0.5, 0)]),
+new THREE.LineBasicMaterial({ color: 0x0ca678, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }));
+planeHelper.visible = false;
+planeHelper.renderOrder = 10;
+helpers.add(planeHelper);
+
 function clipRange() {
   const b = modelBox(), size = b.getSize(new THREE.Vector3());
   return { lo: b.min.clone().addScaledVector(size, -0.01), ext: size.multiplyScalar(1.02) };
@@ -711,6 +730,22 @@ app.setClip = function (patch) {
     max.setComponent(a, ax.on ? lo.getComponent(a) + ext.getComponent(a) * h : 1e30);
   }
   shared.clipOn.value = any ? 1 : 0;
+  const pl = c.plane;
+  if (pl && pl.n && pl.p) {
+    const n = new THREE.Vector3(...pl.n).normalize();
+    const at = new THREE.Vector3(...pl.p).addScaledVector(n, -(pl.depth || 0)); // deeper: into the part, away from the viewer
+    if (pl.flip) n.negate();
+    shared.plane.value.set(n.x, n.y, n.z, n.dot(at));
+    shared.planeOn.value = 1;
+    const size = modelBox().getSize(new THREE.Vector3()).length() * 0.6;
+    planeHelper.position.copy(at);
+    planeHelper.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    planeHelper.scale.set(size, size, 1);
+    planeHelper.visible = c.show;
+  } else {
+    shared.planeOn.value = 0;
+    planeHelper.visible = false;
+  }
   shared.clipInvert.value = c.invert ? 1 : 0;
   shared.capOn.value = c.cap ? 1 : 0;
   const b0 = lo, b1 = lo.clone().add(ext);
@@ -1616,15 +1651,17 @@ let pickRT = null;
 // Draw the scene for picking into `rt` with `cam`: ids (mode 1) or view depth (mode 2).
 function renderPick(cam, mode, rt) {
   shared.pickMode.value = mode;
-  const boxVis = clipBox.visible, nbVis = nbHelper.visible;
+  const boxVis = clipBox.visible, nbVis = nbHelper.visible, hVis = helpers.visible;
   clipBox.visible = false;
   nbHelper.visible = false;
+  helpers.visible = false;
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, cam);
   renderer.setRenderTarget(null);
   clipBox.visible = boxVis;
   nbHelper.visible = nbVis;
+  helpers.visible = hVis;
   shared.pickMode.value = 0;
 }
 // Render ids (mode 1) or view depth (mode 2) of a screen rectangle; returns the raw RGBA bytes.
@@ -1693,6 +1730,23 @@ function pickNode(x, y, redraw = true) {
   }
   return best < 0 ? -1 : app.partNode[itemPart[best]];
 }
+// Which part is drawn at each pixel of the view, sampled every `step` CSS pixels (labels, 2D views):
+// {w, h, step, part: Int32Array, row by row from the top; -1 where nothing is drawn}.
+app.partsOnScreen = function (step = 4) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const { buf, rw, rh } = pickRender(1, r.left, r.top, r.right, r.bottom);
+  const w = Math.ceil(rw / step), h = Math.ceil(rh / step), part = new Int32Array(w * h).fill(-1);
+  for (let y = 0; y < h; y++) {
+    const row = rh - 1 - y * step; // the render target is bottom-up
+    for (let x = 0; x < w; x++) {
+      const i = (row * rw + x * step) * 4;
+      const id = buf[i] | (buf[i + 1] << 8) | (buf[i + 2] << 16) | (buf[i + 3] << 24);
+      if (id > 0) part[y * w + x] = itemPart[id - 1];
+    }
+  }
+  requestRender();
+  return { w, h, step, part };
+};
 // World point under the cursor, or null.
 function pickPoint(x, y) {
   const { buf } = pickRender(2, x, y, x + 1, y + 1);
@@ -2258,6 +2312,104 @@ function setWalk(on, place = false) {
   requestRender();
 }
 app.setWalk = setWalk;
+// ---------------------------------------------------------------- walk mode: mini map
+// A plan of the model seen from above, cut a little above the eyes (inside a ship or a building it
+// shows the deck you are on, not the roof), with "you are here" and the view cone on it. The plan
+// is drawn again when you change deck or the visibility changes; a tap on it takes you there.
+const MAP_CUT = 0.6; // metres above the eyes
+const map = { base: null, z: null, box: null, scale: 1, w: 0, h: 0, timer: 0, show: store.get("pvs-viewer:walkMap", true) };
+const mapCanvas = $("#miniMap"), mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+let mapRT = null;
+function mapSize() {
+  const max = touch ? 132 : 176, b = modelBox(), sx = b.max.x - b.min.x, sy = b.max.y - b.min.y;
+  const k = max / Math.max(sx, sy, 1e-6);
+  return [Math.max(40, Math.round(sx * k)), Math.max(40, Math.round(sy * k))];
+}
+function renderMapBase() {
+  if (!modelMin) return;
+  const b = modelBox(), [cw, ch] = mapSize(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = Math.round(cw * dpr), H = Math.round(ch * dpr);
+  map.w = cw; map.h = ch; map.box = b; map.z = camera.position.z;
+  mapCanvas.style.width = cw + "px"; mapCanvas.style.height = ch + "px";
+  mapCanvas.width = W; mapCanvas.height = H;
+  const c = b.getCenter(new THREE.Vector3()), hx = (b.max.x - b.min.x) / 2, hy = (b.max.y - b.min.y) / 2;
+  mapCam.left = -hx; mapCam.right = hx; mapCam.top = hy; mapCam.bottom = -hy;
+  mapCam.near = 0.01; mapCam.far = b.max.z - b.min.z + 2;
+  mapCam.position.set(c.x, c.y, b.max.z + 1);
+  mapCam.up.set(0, 1, 0);
+  mapCam.lookAt(c.x, c.y, b.min.z);
+  mapCam.updateProjectionMatrix();
+  mapCam.updateMatrixWorld();
+  if (!mapRT) mapRT = new THREE.WebGLRenderTarget(W, H);
+  else if (mapRT.width !== W || mapRT.height !== H) mapRT.setSize(W, H);
+  // cut above the eyes (the user's own plane is put back after)
+  const saved = { on: shared.planeOn.value, p: shared.plane.value.clone(), ortho: shared.ortho.value, sky: shared.skyDir.value.clone() };
+  shared.planeOn.value = 1;
+  shared.plane.value.set(0, 0, 1, camera.position.z + MAP_CUT);
+  shared.ortho.value = 1;
+  shared.skyDir.value.set(0.35, 0.45, 1).normalize();
+  const hv = helpers.visible, cb = clipBox.visible;
+  helpers.visible = false; clipBox.visible = false;
+  renderer.setRenderTarget(mapRT);
+  renderer.setClearColor(0x000000, 0);
+  renderer.clear();
+  renderer.render(scene, mapCam);
+  renderer.setRenderTarget(null);
+  helpers.visible = hv; clipBox.visible = cb;
+  shared.planeOn.value = saved.on; shared.plane.value.copy(saved.p); shared.ortho.value = saved.ortho; shared.skyDir.value.copy(saved.sky);
+  const px = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(mapRT, 0, 0, W, H, px);
+  const img = new ImageData(W, H);
+  for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4); // bottom-up → top-down
+  if (!map.base) map.base = document.createElement("canvas");
+  map.base.width = W; map.base.height = H;
+  map.base.getContext("2d").putImageData(img, 0, 0);
+  requestRender();
+}
+function drawMap() {
+  if (!walk.on || !map.show || !map.base) return;
+  const g = mapCanvas.getContext("2d"), W = mapCanvas.width, H = mapCanvas.height, b = map.box;
+  g.clearRect(0, 0, W, H);
+  g.drawImage(map.base, 0, 0);
+  const x = (camera.position.x - b.min.x) / (b.max.x - b.min.x) * W, y = (b.max.y - camera.position.y) / (b.max.y - b.min.y) * H;
+  const r = Math.max(W, H) * 0.16, a = -walk.yaw, half = THREE.MathUtils.degToRad(WALK_FOV / 2) * 1.2;
+  g.fillStyle = "rgba(37, 99, 235, .28)";
+  g.beginPath(); g.moveTo(x, y); g.arc(x, y, r, a - half, a + half); g.closePath(); g.fill();
+  g.fillStyle = "#e8590c"; g.strokeStyle = "#fff"; g.lineWidth = Math.max(1.5, W / 120);
+  g.beginPath(); g.arc(x, y, Math.max(4, W / 40), 0, Math.PI * 2); g.fill(); g.stroke();
+}
+// a new plan when the eyes change deck (more than 1.2 m up or down)
+function mapFollow() {
+  if (!walk.on || !map.show) return;
+  if (map.z === null || Math.abs(camera.position.z - map.z) > 1.2) renderMapBase();
+  drawMap();
+}
+function mapLater() { clearTimeout(map.timer); if (walk.on && map.show) map.timer = setTimeout(() => { map.z = null; mapFollow(); }, 300); }
+function showMap(on) {
+  map.show = on;
+  store.set("pvs-viewer:walkMap", on);
+  $("#walkMap").classList.toggle("on", on);
+  mapCanvas.hidden = !(walk.on && on);
+  if (walk.on && on) { map.z = null; mapFollow(); }
+}
+$("#walkMap").onclick = () => showMap(!map.show);
+app.on("frame", mapFollow);
+for (const ev of ["state", "clip", "layers", "geometry"]) app.on(ev, mapLater);
+app.on("walk", (on) => { mapCanvas.hidden = !(on && map.show); $("#walkMap").classList.toggle("on", map.show); if (on) { map.z = null; mapFollow(); } });
+// a tap on the map: go there (same height; with "Chão" on, the feet find the floor)
+mapCanvas.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (!walk.on || !map.box) return;
+  const r = mapCanvas.getBoundingClientRect(), b = map.box;
+  camera.position.x = b.min.x + (e.clientX - r.left) / r.width * (b.max.x - b.min.x);
+  camera.position.y = b.max.y - (e.clientY - r.top) / r.height * (b.max.y - b.min.y);
+  walk.floorT = 0; walk.floorZ = null;
+  walkLook();
+  lastMove = performance.now();
+  requestRender();
+});
+
 // where the walk mode stands: the floor under the camera and the way it looks (for AR at real size)
 let lastWalk = null;
 function walkSpot() {
@@ -2514,6 +2666,7 @@ window.addEventListener("keydown", (e) => {
   else if (k === "e") app.toggleStyle(1);
   else if (k === "x") app.toggleStyle(4);
   else if (k === "c") $("#cutBtn").click();
+  else if (k === "r") app.toggleLabels();
   else if (k === "m") $("#measureBtn").click();
   else if (k === "n") $("#nbBtn").click();
   else if (k === "k") $("#layerBtn").click();
@@ -2758,6 +2911,7 @@ initViews(app);
 initAnalysis(app);
 initMobile(app);
 initAR(app);
+initLabels(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.

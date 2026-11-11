@@ -101,6 +101,7 @@ export function initMobile(app) {
     cut: () => press("#cutBtn"),
     measure: () => press("#measureBtn"),
     ar: () => app.startAR?.(),
+    labels: () => app.toggleLabels(),
     walk: () => { for (const p of panels) if (!p.hidden) p.querySelector("[data-close]")?.click(); app.setWalk(true, true); },
     layers: () => press("#layerBtn"),
     bigramas: () => press("#bgBtn"),
@@ -135,6 +136,7 @@ export function initMobile(app) {
     $("#mExport span").textContent = sel ? "Exportar seleção" : "Exportar";
     $("#mFull").hidden = !root.requestFullscreen;
     $("#mToolSheet [data-do=ghost]").classList.toggle("on", !!app.ghost);
+    $("#mLabels").classList.toggle("on", app.labelsOn());
     $("#mOrtho").classList.toggle("on", app.isOrtho());
     $("#mToolTitle").textContent = app.title || "Ferramentas";
     $("#mVersion").textContent = "v" + VERSION;
