@@ -40,13 +40,19 @@ você mexe no modelo.
   botões de subir e descer (voo livre).
 - **Na mesa (RA)** (realidade aumentada, em Ferramentas): o modelo aparece sobre a mesa ou o piso, pela câmera do
   celular. Aponte para a superfície e mova o celular devagar até aparecer um anel; o modelo acompanha o anel, e um
-  toque o deixa ali. Depois, um dedo gira o modelo; dois dedos aumentam, diminuem e giram. Escalas: **Mesa** (o
-  modelo inteiro com cerca de 50 cm), **1:20**, **1:50**, **1:100** e **Real** (tamanho real); **Mover** leva o
-  modelo para outro lugar; ✕ (ou o botão Voltar) sai. Aparece o que está na tela: peças visíveis, cores, cortes e
-  vista explodida — para ver só um sistema, isole-o antes. Precisa do Chrome no Android, do app **Google Play
-  Services para RA** (ARCore) e do site em https; o botão só aparece onde funciona (o iPhone não tem a
-  realidade aumentada do navegador). Em modelos grandes, as peças pequenas deixam de ser desenhadas quando o
-  celular não acompanha.
+  toque o deixa ali. **Mover** leva o modelo para outro lugar; ✕ (ou o botão Voltar) sai.
+  - **Na mesa** (escalas **Mesa** — o modelo inteiro com cerca de 50 cm —, **1:20**, **1:50**, **1:100**): arrastar
+    com um dedo move o modelo; dois dedos aumentam, diminuem e giram.
+  - **Real** (tamanho real): você fica dentro do modelo. O controle da esquerda anda (na direção para onde o celular
+    aponta), **▲ ▼** sobem e descem (para trocar de pavimento), o botão de velocidade alterna entre 0,75, 1,5, 3 e
+    6 m/s; arrastar com um dedo puxa o piso; dois dedos giram o modelo em volta de você. Aponte para o piso e toque:
+    você começa ali — no ponto onde estava na **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois de
+    sair dela), olhando para o mesmo lado; senão, ao lado da peça selecionada; senão, no meio do modelo.
+
+  Aparece o que está na tela: peças visíveis, cores, cortes e vista explodida — para ver só um sistema, isole-o
+  antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
+  só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
+  pequenas deixam de ser desenhadas quando o celular não acompanha.
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -230,7 +236,8 @@ convertida pelo `build.py`, que abre em segundos.
   teclado (setas, + e −, Home, 1 a 5), **vista anterior / seguinte** (Backspace) e modo caminhada em primeira pessoa
   com **Posicionar** (ficar em pé num ponto do modelo), **Chão** (altura fixa de 1,6 m sobre o piso) e **Colisão**.
 - **Realidade aumentada** (Android): o modelo, como está na tela, sobre a mesa ou o piso, em escala de mesa, 1:20,
-  1:50, 1:100 ou real; toque para pôr, um dedo gira, dois dedos aumentam e giram (botão **Na mesa (RA)**).
+  1:50, 1:100 ou real; na mesa um dedo move e dois dedos aumentam e giram; em tamanho real um controle anda, ▲ ▼
+  trocam de pavimento e você começa onde estava na caminhada ou ao lado da seleção (botão **Na mesa (RA)**).
 - **Realce**: a peça sob o cursor fica mais clara e mostra o nome (Exibição › Realçar a peça sob o cursor).
 - **Desfazer / refazer** (Ctrl+Z, Ctrl+Y): ocultar, isolar, mostrar tudo, colorir e mudar a opacidade.
 - **Medir**: distância (com ΔX/ΔY/ΔZ), ângulo, coordenadas de um ponto, raio e diâmetro de arestas circulares,

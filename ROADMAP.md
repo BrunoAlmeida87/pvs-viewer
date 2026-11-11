@@ -81,8 +81,10 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 
 ## Realidade aumentada ✅
 - [x] Modelo sobre a mesa ou o piso pela câmera do celular (WebXR com detecção de superfícies, Chrome no Android):
-  anel de mira, toque para pôr, giro com um dedo, escala e giro com dois dedos, escalas Mesa / 1:20 / 1:50 / 1:100 /
+  anel de mira, toque para pôr, arrastar move, escala e giro com dois dedos, escalas Mesa / 1:20 / 1:50 / 1:100 /
   Real, nível de detalhe que se ajusta ao celular
+- [x] Tamanho real: controle para andar, ▲ ▼ entre pavimentos, velocidade, giro em volta de quem olha; começa no
+  ponto da caminhada (botão RA na barra dela) ou ao lado da seleção
 
 ## A fazer
 - [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas

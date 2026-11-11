@@ -2241,6 +2241,7 @@ function setWalk(on, place = false) {
     controls.enabled = false;
     walkLook();
   } else {
+    lastWalk = walkSpot();
     const f = camera.getWorldDirection(new THREE.Vector3());
     controls.target.copy(camera.position).addScaledVector(f, Math.max(1, walk.speed * 3));
     controls.enabled = true;
@@ -2257,6 +2258,12 @@ function setWalk(on, place = false) {
   requestRender();
 }
 app.setWalk = setWalk;
+// where the walk mode stands: the floor under the camera and the way it looks (for AR at real size)
+let lastWalk = null;
+function walkSpot() {
+  const g = probe(camera.position, DOWN, 60, 5);
+  return { point: camera.position.clone().addScaledVector(Z, -(isFinite(g) ? g : EYE)), yaw: walk.yaw, cam: camera.position.clone() };
+}
 app.walking = () => walk.on;
 $("#walkPlace").onclick = () => setWalkPlacing(!walk.placing);
 $("#walkGround").onclick = () => { walk.ground = !walk.ground; walk.floorT = 0; walk.floorZ = null; syncWalkUI(); status(walk.ground ? "Pés no chão: a câmera fica a 1,6 m do piso." : "Voo livre: suba e desça à vontade."); };
@@ -2621,7 +2628,18 @@ app.xr = {
     }
     return b.isEmpty() ? modelBox() : b;
   },
+  // Returns where to start at real size, in model coordinates: the floor under the walk camera
+  // (and the way it looked, `yaw` in the model's xy plane) or the base of the selection; or null.
+  // (Also just after leaving the walk mode, while the view has not moved: on a phone its bar is
+  // hidden while walking, so the tools are reached by leaving it.)
   begin() {
+    let start = null;
+    if (walk.on) start = walkSpot();
+    else if (lastWalk && lastWalk.cam.distanceToSquared(camera.position) < 1e-8) start = lastWalk;
+    else if (app.selNodes.size) {
+      const b = app.nodesBox([...app.selNodes]);
+      if (!b.isEmpty()) start = { point: new THREE.Vector3((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, b.min.z), yaw: null };
+    }
     if (walk.on) setWalk(false);
     xrOn = true;
     setHoverPart(-1);
@@ -2629,6 +2647,7 @@ app.xr = {
     shared.ortho.value = 0;
     scene.matrixAutoUpdate = false;
     renderer.xr.enabled = true;
+    return start;
   },
   // m: Matrix4 from model coordinates to the room (metres, y up), or null to hide the model
   place(m) {

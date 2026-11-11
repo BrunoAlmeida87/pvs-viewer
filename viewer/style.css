@@ -574,3 +574,12 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
   font-variant-numeric: tabular-nums; }
 #arUi[data-phase="search"] #arBar { visibility: hidden; }
 #arUi[data-phase="aim"] #arMove { display: none; }
+/* real size: the scales go up (under the hint), the thumb stick and ▲ ▼ take the bottom */
+#arUi.real #arBar { bottom: auto; top: calc(64px + env(safe-area-inset-top)); }
+#arWalk { display: none; }
+#arUi.real[data-phase="placed"] #arWalk { display: block; }
+#arJoy { left: calc(18px + env(safe-area-inset-left)); }
+#arVert { position: absolute; right: calc(14px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+#arVert [data-v] { height: 52px; font-size: 18px; }
+#arSpeed { font-size: 12.5px !important; font-variant-numeric: tabular-nums; }

@@ -1,27 +1,36 @@
 // Augmented reality: the model on a table (or on the floor), seen through the phone's camera.
 // WebXR "immersive-ar" with hit testing: Chrome on Android, with "Google Play Services for AR".
 // The phone looks for flat surfaces; a ring shows where the model would stand and the model follows
-// it; a tap puts it there. Then one finger turns it, two fingers scale and turn it, and the chips
-// choose a scale (the whole of it on the table, 1:20, 1:50, 1:100 or real size).
-// What is shown is what the viewer shows now: visibility, colours, cuts, exploded view.
+// it; a tap puts it there. What is shown is what the viewer shows now: visibility, colours, cuts.
+//
+// Two ways to look at it:
+// - on the table (Mesa, 1:20, 1:50, 1:100): one finger drags the model, two fingers scale and turn it;
+// - at real size: you stand inside it. A thumb stick walks (the model moves the other way), ▲ ▼ go
+//   up and down a deck, one finger pulls the floor, two fingers turn the model around you. You
+//   start where the walk mode stood (looking the same way), else next to the selection, else in
+//   the middle of the model.
 import * as THREE from "three";
 import { $, status } from "./util.js";
 
 const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown this long
-const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, 1: 1 };
-// the side of the model the viewer's isometric view looks at faces the phone when it is placed:
+const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
+const MAX_TABLE = 1 / 5; // pinching on the table stops here (bigger is the real-size mode)
+const SPEEDS = [0.75, 1.5, 3, 6]; // m/s at full thumb stick
+// on the table the side of the model the isometric view looks at faces the phone:
 // model (1, -1, 0) is room (1, 0, 1) once z-up becomes y-up
 const ISO_ANGLE = Math.atan2(1, 1);
 const HINT = {
   search: "Aponte para a mesa ou o piso e mova o celular devagar, até aparecer o anel",
   aim: "Toque na tela para pôr o modelo aqui",
-  placed: "Um dedo gira · dois dedos aumentam, diminuem e giram",
+  aimReal: "Aponte para o piso e toque: você começa ali, em tamanho real",
+  placed: "Arraste para mover · dois dedos aumentam, diminuem e giram",
+  placedReal: "Controle da esquerda anda · ▲ ▼ sobem e descem · dois dedos giram em volta de você",
 };
 
 export function initAR(app) {
   const ui = $("#arUi"), hint = $("#arHint"), scaleLbl = $("#arScale");
-  const buttons = [$("#arBtn"), $("#mAr")].filter(Boolean);
-  for (const b of buttons) b.onclick = () => start();
+  const buttons = [$("#arBtn"), $("#mAr"), $("#walkAr")].filter(Boolean);
+  for (const b of buttons) b.onclick = () => start({ real: b.id === "walkAr" }); // from the walk mode: real size, right there
   app.startAR = start;
 
   // shown only where the browser can do it (an Android phone or tablet with ARCore, over https)
@@ -42,19 +51,31 @@ export function initAR(app) {
   marks.add(ring);
 
   // ------------------------------------------------------------ state
-  let session = null, hitSource = null, refSpace = null, overlay = false;
+  let session = null, hitSource = null, refSpace = null;
   let phase = "search"; // search: no surface found yet · aim: the model follows the ring · placed
-  let anchor = new THREE.Vector3(), size = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  const tableAnchor = new THREE.Vector3(); // model point on the table: the base centre
+  const realAnchor = new THREE.Vector3();  // model point at the ring at real size: where you start
+  let realYaw = null; // the way the walk mode looked (model xy angle), or null
   const pos = new THREE.Vector3(), hitPos = new THREE.Vector3(), camPos = new THREE.Vector3();
-  let yaw = 0, scale = 1, preset = "table", turned = false;
+  let yaw = 0, scale = 1, preset = "table", turned = false, speed = 1;
   const M = new THREE.Matrix4(), T = new THREE.Matrix4(), hitM = new THREE.Matrix4();
   const lod = { px: 2, last: 0, ema: 0, n: 0 };
+  const joy = { id: null, x: 0, y: 0, vert: 0 };
+  let lastT = 0;
 
-  const fitScale = () => Math.min(20, TABLE / Math.max(1e-6, size.x, size.y, size.z));
+  const real = () => preset === "real";
+  const anchor = () => (real() ? realAnchor : tableAnchor);
+  const fitScale = () => Math.min(MAX_TABLE, TABLE / Math.max(1e-6, size.x, size.y, size.z));
   function setPreset(k) {
+    const was = real();
     preset = k;
     scale = k === "table" ? fitScale() : SCALES[k];
+    // between the table and real size the model goes somewhere else: aim again
+    if (was !== real() && phase !== "search") { turned = false; setPhase("aim"); }
+    ui.classList.toggle("real", real());
     showScale();
+    setPhase(phase);
   }
   function showScale() {
     const r = 1 / scale, dec = (x) => (x < 10 ? x.toFixed(1).replace(".", ",").replace(",0", "") : String(Math.round(x)));
@@ -63,32 +84,42 @@ export function initAR(app) {
   }
   function setPhase(p) {
     phase = p;
-    hint.textContent = HINT[p];
+    hint.textContent = HINT[p === "search" ? p : p + (real() ? "Real" : "")];
     ui.dataset.phase = p;
   }
+  const showSpeed = () => { $("#arSpeed").textContent = String(SPEEDS[speed]).replace(".", ",") + " m/s"; };
 
-  // model → room: base centre at `pos`, turned by `yaw` about the vertical, scaled, z-up → y-up
+  // model → room: the anchor at `pos`, turned by `yaw` about the vertical, scaled, z-up → y-up
   function modelMatrix() {
-    M.makeTranslation(-anchor.x, -anchor.y, -anchor.z);
+    const a = anchor();
+    M.makeTranslation(-a.x, -a.y, -a.z);
     M.premultiply(T.makeRotationX(-Math.PI / 2));
     M.premultiply(T.makeScale(scale, scale, scale));
     M.premultiply(T.makeRotationY(yaw));
     M.premultiply(T.makeTranslation(pos.x, pos.y, pos.z));
     return M;
   }
-  // turn the model so that its isometric side faces the phone
+  // the angle of a room direction about the vertical (rotating by `yaw` adds to it)
+  const angle = (x, z) => Math.atan2(x, z);
   function faceCamera() {
     const dx = camPos.x - pos.x, dz = camPos.z - pos.z;
-    if (dx * dx + dz * dz > 1e-6) yaw = Math.atan2(dx, dz) - ISO_ANGLE;
+    if (dx * dx + dz * dz < 1e-6) return;
+    if (real() && realYaw !== null) {
+      // look the way the walk mode looked: that model direction along the phone's view
+      const e = app.renderer.xr.getCamera().matrix.elements;
+      yaw = angle(-e[8], -e[10]) - angle(Math.cos(realYaw), -Math.sin(realYaw));
+    } else {
+      yaw = angle(dx, dz) - ISO_ANGLE;
+    }
   }
 
   // ------------------------------------------------------------ start and end
-  async function start() {
+  async function start(opts = {}) {
     if (session || !app.tree) return;
     if (!navigator.xr) { status("Este navegador não tem realidade aumentada (use o Chrome no Android)."); return; }
     const box = app.xr.bounds();
     box.getSize(size);
-    anchor.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, box.min.z);
+    tableAnchor.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, box.min.z);
     let s;
     try {
       s = await navigator.xr.requestSession("immersive-ar", {
@@ -105,7 +136,9 @@ export function initAR(app) {
     try {
       app.closeMobileSide?.();
       for (const p of document.querySelectorAll("#floaters .panel")) if (!p.hidden) p.querySelector("[data-close]")?.click();
-      app.xr.begin();
+      const from = app.xr.begin();
+      realAnchor.copy(from ? from.point : tableAnchor);
+      realYaw = from ? from.yaw : null;
       r.xr.setReferenceSpaceType("local");
       await r.xr.setSession(session);
       refSpace = r.xr.getReferenceSpace();
@@ -116,14 +149,14 @@ export function initAR(app) {
       session.end().catch(() => {});
       return;
     }
-    overlay = !!session.domOverlayState;
-    if (!overlay) session.addEventListener("select", onSelect); // no buttons: a tap places / picks up again
+    if (!session.domOverlayState) session.addEventListener("select", onSelect); // no buttons: a tap places / picks up again
     turned = false;
     pos.set(0, 0, -1);
-    setPreset("table");
-    setPhase("search");
+    phase = "search";
+    setPreset(opts.real ? "real" : "table");
+    showSpeed();
     ui.hidden = false;
-    lod.px = 2; lod.last = 0; lod.ema = 0;
+    lod.px = 2; lod.last = 0; lod.ema = 0; lastT = 0;
     r.setAnimationLoop(onFrame);
   }
 
@@ -136,6 +169,7 @@ export function initAR(app) {
     refSpace = null;
     ui.hidden = true;
     ring.visible = false;
+    stopJoy();
     app.xr.end();
   }
   $("#arExit").onclick = () => session?.end().catch(() => {});
@@ -146,11 +180,13 @@ export function initAR(app) {
   }
 
   // ------------------------------------------------------------ each frame
-  const up = new THREE.Vector3();
+  const up = new THREE.Vector3(), fwd = new THREE.Vector3(), side = new THREE.Vector3();
   function onFrame(t, frame) {
     if (!session || !frame) return;
-    const r = app.renderer;
-    camPos.setFromMatrixPosition(r.xr.getCamera().matrix);
+    const r = app.renderer, cam = r.xr.getCamera();
+    const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0;
+    lastT = t;
+    camPos.setFromMatrixPosition(cam.matrix);
     let found = false;
     if (hitSource) {
       for (const h of frame.getHitTestResults(hitSource)) {
@@ -168,6 +204,14 @@ export function initAR(app) {
     if (found && phase === "aim") {
       pos.copy(hitPos);
       if (!turned) faceCamera();
+    }
+    // walking at real size: the model moves the other way
+    if (phase === "placed" && real() && dt && (joy.x || joy.y || joy.vert)) {
+      const e = cam.matrix.elements, v = SPEEDS[speed] * dt;
+      fwd.set(-e[8], 0, -e[10]).normalize();
+      side.set(e[0], 0, e[2]).normalize();
+      pos.addScaledVector(fwd, -joy.y * v).addScaledVector(side, -joy.x * v);
+      pos.y -= joy.vert * Math.min(v, 1.2 * dt);
     }
     ring.visible = found && phase !== "placed";
     if (ring.visible) ring.matrix.makeTranslation(hitPos.x, hitPos.y, hitPos.z);
@@ -187,37 +231,96 @@ export function initAR(app) {
     else if (lod.ema < 36) lod.px = Math.max(1, lod.px / 1.2);
   }
 
-  // ------------------------------------------------------------ buttons and gestures (over the camera picture)
-  $("#arMove").onclick = () => { turned = false; setPhase(phase === "search" ? "search" : "aim"); };
-  for (const b of ui.querySelectorAll("[data-s]")) b.onclick = () => setPreset(b.dataset.s);
+  // ------------------------------------------------------------ where a finger points, on a level plane
+  const ro = new THREE.Vector3(), rd = new THREE.Vector3();
+  function onPlane(x, y, h, out) {
+    const sub = app.renderer.xr.getCamera().cameras[0];
+    if (!sub) return null;
+    ro.setFromMatrixPosition(sub.matrix);
+    rd.set((x / window.innerWidth) * 2 - 1, 1 - (y / window.innerHeight) * 2, 0.5)
+      .applyMatrix4(sub.projectionMatrixInverse).applyMatrix4(sub.matrix).sub(ro).normalize();
+    if (Math.abs(rd.y) < 0.02) return null;
+    const k = (h - ro.y) / rd.y;
+    if (k <= 0 || k > 40) return null; // above the horizon, or too far to drag sensibly
+    return out.copy(ro).addScaledVector(rd, k);
+  }
 
+  // ------------------------------------------------------------ buttons
+  $("#arMove").onclick = () => { turned = false; if (phase !== "search") setPhase("aim"); };
+  for (const b of ui.querySelectorAll("[data-s]")) b.onclick = () => setPreset(b.dataset.s);
+  $("#arSpeed").onclick = () => { speed = (speed + 1) % SPEEDS.length; showSpeed(); };
+  for (const b of ui.querySelectorAll("[data-v]")) {
+    const v = Number(b.dataset.v);
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); joy.vert = v; b.classList.add("on"); });
+    const off = () => { if (joy.vert === v) joy.vert = 0; b.classList.remove("on"); };
+    b.addEventListener("pointerup", off);
+    b.addEventListener("pointercancel", off);
+  }
+
+  // thumb stick (real size)
+  const stick = $("#arJoy"), knob = stick.querySelector("i");
+  function moveJoy(e) {
+    const r = stick.getBoundingClientRect(), R = r.width / 2 - 10;
+    let x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    const l = Math.hypot(x, y);
+    if (l > R) { x *= R / l; y *= R / l; }
+    knob.style.transform = `translate(${x}px, ${y}px)`;
+    // a small dead zone, then a curve that is gentle near the centre
+    const f = (u) => { const a = Math.max(0, Math.abs(u) - 0.12) / 0.88; return Math.sign(u) * a * a; };
+    joy.x = f(x / R); joy.y = f(-y / R);
+  }
+  function stopJoy() { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ""; }
+  stick.addEventListener("pointerdown", (e) => { e.preventDefault(); stick.setPointerCapture(e.pointerId); joy.id = e.pointerId; moveJoy(e); });
+  stick.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) moveJoy(e); });
+  stick.addEventListener("pointerup", (e) => { if (e.pointerId === joy.id) stopJoy(); });
+  stick.addEventListener("pointercancel", (e) => { if (e.pointerId === joy.id) stopJoy(); });
+
+  // ------------------------------------------------------------ gestures on the picture
+  // one finger: drag the model (on the table) or pull the floor (real size)
+  // two fingers: turn (about the model on the table, about you at real size); on the table also scale
   const touches = new Map(); // pointerId -> {x, y}
   let g = null; // the gesture going on
   const pair = () => {
     const [a, b] = [...touches.values()];
     return { d: Math.hypot(b.x - a.x, b.y - a.y), a: Math.atan2(b.y - a.y, b.x - a.x) };
   };
+  const grabAt = (x, y) => {
+    Object.assign(g, { x0: x, y0: y, pos0: pos.clone(), grab: onPlane(x, y, pos.y, new THREE.Vector3()) });
+  };
   ui.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button")) return;
+    if (e.target.closest("button, .joy")) return;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size === 1) g = { x0: e.clientX, y0: e.clientY, t0: performance.now(), moved: false, multi: false, yaw, scale };
-    else if (touches.size === 2 && g) { const p = pair(); Object.assign(g, { multi: true, d0: p.d, a0: p.a, yaw, scale }); }
+    if (touches.size === 1) {
+      g = { t0: performance.now(), moved: false, multi: false };
+      grabAt(e.clientX, e.clientY);
+    } else if (touches.size === 2 && g) {
+      const p = pair();
+      Object.assign(g, { multi: true, d0: p.d, a0: p.a, yaw0: yaw, scale0: scale, pos0: pos.clone(), pivot: (real() ? camPos : pos).clone() });
+    }
   });
+  const _p = new THREE.Vector3(), _r = new THREE.Vector3();
   ui.addEventListener("pointermove", (e) => {
     const p0 = touches.get(e.pointerId);
     if (!p0 || !g) return;
     p0.x = e.clientX; p0.y = e.clientY;
+    if (!g.moved && Math.hypot(e.clientX - g.x0, e.clientY - g.y0) > 12) g.moved = true;
+    if (phase !== "placed") return; // while aiming the model follows the ring
     if (touches.size >= 2) {
-      const p = pair();
-      scale = Math.max(1e-4, Math.min(20, g.scale * p.d / Math.max(1, g.d0)));
-      yaw = g.yaw - (p.a - g.a0);
-      preset = "";
+      const p = pair(), turn = -(p.a - g.a0);
+      // turn about the pivot: the pivot stays put
+      _r.copy(g.pos0).sub(g.pivot).applyAxisAngle(_p.set(0, 1, 0), turn);
+      pos.copy(g.pivot).add(_r);
+      yaw = g.yaw0 + turn;
       turned = true;
-      showScale();
+      if (!real()) {
+        scale = Math.max(1e-4, Math.min(MAX_TABLE, g.scale0 * p.d / Math.max(1, g.d0)));
+        preset = "";
+        showScale();
+      }
     } else if (!g.multi) {
-      const dx = e.clientX - g.x0;
-      if (!g.moved && Math.hypot(dx, e.clientY - g.y0) > 12) g.moved = true;
-      if (g.moved) { yaw = g.yaw + dx * 0.012; turned = true; }
+      if (g.moved && g.grab && onPlane(e.clientX, e.clientY, g.pos0.y, _p)) {
+        pos.set(g.pos0.x + _p.x - g.grab.x, g.pos0.y, g.pos0.z + _p.z - g.grab.z);
+      }
     }
   });
   const lift = (e) => {
@@ -226,9 +329,8 @@ export function initAR(app) {
       const tap = !g.moved && !g.multi && performance.now() - g.t0 < 500;
       g = null;
       if (tap && phase === "aim") setPhase("placed");
-    } else if (touches.size === 1) { // one finger left: go on turning from here
-      const [p] = [...touches.values()];
-      Object.assign(g, { x0: p.x, y0: p.y, yaw, scale, moved: true });
+    } else if (touches.size === 1) { // one finger left: the turn / scale is over, nothing until it lifts
+      g.moved = true;
     }
   };
   ui.addEventListener("pointerup", lift);
