@@ -570,10 +570,28 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #arBar { position: absolute; left: 10px; right: 10px; bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; flex-direction: column;
   align-items: center; gap: 8px; }
 #arScales { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
-#arRow { display: flex; align-items: center; gap: 10px; }
+#arRow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 10px; }
 #arScale { padding: 4px 10px; border-radius: 999px; background: rgba(20, 24, 31, .55); font-size: 12.5px; font-weight: 600;
   font-variant-numeric: tabular-nums; }
 #arUi[data-phase="search"] #arMove { display: none; }
+#arFind { display: inline-flex; align-items: center; gap: 5px; }
+#arFind svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; }
+#arUi[data-phase="search"] #arFind { display: none; }
+#arUi #arFocus { max-width: calc(100vw - 40px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #e8590c; }
+#arSearch { position: absolute; z-index: 2; left: 10px; right: 10px; top: calc(60px + env(safe-area-inset-top)); max-width: 460px; margin: 0 auto;
+  max-height: 58vh; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 14px; background: rgba(20, 24, 31, .88);
+  backdrop-filter: blur(10px); touch-action: pan-y; }
+.arSearchRow { display: flex; gap: 6px; }
+#arQ { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 10px;
+  background: rgba(255, 255, 255, .1); color: #fff; font: inherit; font-size: 16px; }
+#arQ::placeholder { color: rgba(255, 255, 255, .55); }
+#arQClose { flex: none; width: 42px; padding: 0 !important; }
+#arResults { overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; }
+#arResults p { margin: 6px 4px; color: rgba(255, 255, 255, .7); font-size: 13px; }
+#arUi .arHit { height: auto; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px;
+  background: rgba(255, 255, 255, .06); text-align: left; }
+.arHit b { font-weight: 600; overflow-wrap: anywhere; }
+.arHit small { color: rgba(255, 255, 255, .6); font-weight: 400; font-size: 12px; overflow-wrap: anywhere; }
 #arVersion { font-size: 11px; opacity: .75; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 #arUi[data-phase="aim"] #arMove { display: none; }
 /* real size: the scales go up (under the hint), the thumb stick and ▲ ▼ take the bottom */

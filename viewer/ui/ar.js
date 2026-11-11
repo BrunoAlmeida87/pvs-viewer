@@ -10,6 +10,10 @@
 //   is nothing to aim at: you are put in at once, the start point on the floor just in front of
 //   you. It is where the walk mode stood (looking the same way), else next to the selection, else
 //   the middle of the model. "Mover" aims again, to put it on a chosen spot of the floor.
+//
+// "Buscar" finds an item by name or code: it turns orange and everything else transparent; on the
+// table the view zooms in on it (only what is around it is drawn), at real size it comes in front
+// of you. "✕ name" takes the highlight away.
 import * as THREE from "three";
 import { $, status, VERSION } from "./util.js";
 
@@ -17,6 +21,11 @@ const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown thi
 const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
 const MAX_TABLE = 1 / 5; // pinching on the table stops here (bigger is the real-size mode)
 const SPEEDS = [0.75, 1.5, 3, 6]; // m/s at full thumb stick
+const FOCUS_TABLE = 0.25; // metres: on the table the found item is zoomed to about this size
+const FOCUS_AROUND = 0.3; // metres: radius of what is still drawn around it on the table
+const MAX_RESULTS = 50;
+// as in the Search tab: lower case, no accents, no separators ("LPREX" finds "LPR-EX20003")
+const norm = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.\/]+/g, "");
 // on the table the side of the model the isometric view looks at faces the phone:
 // model (1, -1, 0) is room (1, 0, 1) once z-up becomes y-up
 const ISO_ANGLE = Math.atan2(1, 1);
@@ -66,19 +75,26 @@ export function initAR(app) {
   const joy = { id: null, x: 0, y: 0, vert: 0 };
   let lastT = 0;
   let floorY = null; // the floor seen by the phone (a surface well below it), room y
+  let focus = null; // the found item: {nodes, box, name, ghost, sel} (ghost and selection from before)
+  let zoom = null;  // the view zoomed on it: {anchor, clip}; the anchor replaces the preset's
+  let tween = null; // a smooth move of the model: {t0, dur, p0, p1, s0, s1}
 
   const real = () => preset === "real";
-  const anchor = () => (real() ? realAnchor : tableAnchor);
+  const anchor = () => (zoom ? zoom.anchor : real() ? realAnchor : tableAnchor);
   const fitScale = () => Math.min(MAX_TABLE, TABLE / Math.max(1e-6, size.x, size.y, size.z));
   function setPreset(k) {
-    const was = real();
+    const was = real(), zoomed = !!zoom;
     preset = k;
     scale = k === "table" ? fitScale() : SCALES[k];
+    tween = null;
+    if (zoom) { zoom = null; app.xr.clipSphere(null); } // a scale chip goes back to the whole model
     // between the table and real size the model goes somewhere else: aim again
-    if (was !== real()) {
+    if (was !== real() || (zoomed && real())) {
       turned = false;
-      if (real()) enterReal(); // no aiming: in at once (or at the first frame)
-      else if (phase !== "search") setPhase("aim");
+      if (real()) {
+        enterReal(); // no aiming: in at once (or at the first frame)
+        if (focus && phase === "placed") zoomTo(focus.box); // with an item found: in front of it
+      } else if (phase !== "search") setPhase("aim");
     }
     ui.classList.toggle("real", real());
     showScale();
@@ -193,6 +209,11 @@ export function initAR(app) {
     ui.hidden = true;
     ring.visible = false;
     stopJoy();
+    // the found item stays selected in the viewer; the transparency goes back to what it was
+    if (focus) { app.setGhost(focus.ghost); focus = null; }
+    zoom = null; tween = null;
+    showFocus();
+    closeSearch();
     app.xr.end();
   }
   $("#arExit").onclick = () => session?.end().catch(() => {});
@@ -229,6 +250,12 @@ export function initAR(app) {
     if (found && phase === "aim") {
       pos.copy(hitPos);
       if (!turned) faceCamera();
+    }
+    if (tween) {
+      const k = Math.min(1, (t - (tween.t0 ??= t)) / tween.dur), e = k * k * (3 - 2 * k);
+      pos.lerpVectors(tween.p0, tween.p1, e);
+      scale = tween.s0 * Math.pow(tween.s1 / tween.s0, e);
+      if (k >= 1) tween = null;
     }
     // walking at real size: the model moves the other way
     if (phase === "placed" && real() && dt && (joy.x || joy.y || joy.vert)) {
@@ -271,7 +298,12 @@ export function initAR(app) {
   }
 
   // ------------------------------------------------------------ buttons
-  $("#arMove").onclick = () => { turned = false; if (phase !== "search") setPhase("aim"); };
+  $("#arMove").onclick = () => {
+    turned = false;
+    tween = null;
+    if (zoom && real()) zoom = null; // at real size the start point goes to the floor, not the item
+    if (phase !== "search") setPhase("aim");
+  };
   for (const b of ui.querySelectorAll("[data-s]")) b.onclick = () => setPreset(b.dataset.s);
   $("#arSpeed").onclick = () => { speed = (speed + 1) % SPEEDS.length; showSpeed(); };
   for (const b of ui.querySelectorAll("[data-v]")) {
@@ -313,7 +345,8 @@ export function initAR(app) {
     Object.assign(g, { x0: x, y0: y, pos0: pos.clone(), grab: onPlane(x, y, pos.y, new THREE.Vector3()) });
   };
   ui.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button, .joy")) return;
+    if (e.target.closest("button, .joy, #arSearch")) return;
+    tween = null;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (touches.size === 1) {
       g = { t0: performance.now(), moved: false, multi: false };
@@ -353,11 +386,152 @@ export function initAR(app) {
     if (touches.size === 0) {
       const tap = !g.moved && !g.multi && performance.now() - g.t0 < 500;
       g = null;
-      if (tap && phase === "aim") setPhase("placed");
+      if (tap && phase === "aim") { setPhase("placed"); if (focus) zoomTo(focus.box); }
     } else if (touches.size === 1) { // one finger left: the turn / scale is over, nothing until it lifts
       g.moved = true;
     }
   };
   ui.addEventListener("pointerup", lift);
   ui.addEventListener("pointercancel", lift);
+
+  // ------------------------------------------------------------ find an item, highlight it and zoom on it
+  const panel = $("#arSearch"), q = $("#arQ"), list = $("#arResults"), chip = $("#arFocus");
+  let index = null; // normalized "name|code" of every node, built at the first search
+  app.on("model", () => { index = null; });
+  function buildIndex() {
+    const t = app.tree, ki = app.keyIndex("part_objectid");
+    index = new Array(app.nNodes);
+    for (let n = 0; n < app.nNodes; n++) index[n] = norm(t.names[n]) + "|" + (ki >= 0 ? norm(app.prop(n, ki) ?? "") : "");
+  }
+  // every word must appear; an assembly and its own parts: the assembly only
+  function find(text) {
+    const words = text.split(/\s+/).map(norm).filter(Boolean);
+    if (!words.length) return [];
+    if (!index) buildIndex();
+    const hits = [];
+    for (let n = 1; n < app.nNodes && hits.length < 2000; n++) if (words.every((w) => index[n].includes(w))) hits.push(n);
+    const set = new Set(hits), parent = app.tree.parent;
+    const top = hits.filter((n) => { for (let p = parent[n]; p >= 0; p = parent[p]) if (set.has(p)) return false; return true; });
+    return top;
+  }
+  function row(label, sub, onClick) {
+    const b = document.createElement("button");
+    b.className = "arHit";
+    const name = document.createElement("b"), small = document.createElement("small");
+    name.textContent = label;
+    small.textContent = sub;
+    b.append(name, small);
+    b.onclick = onClick;
+    return b;
+  }
+  const partsText = (n) => { const k = app.partCount(n); return k === 1 ? "1 peça" : k.toLocaleString("pt-BR") + " peças"; };
+  function showResults() {
+    list.innerHTML = "";
+    const text = q.value.trim();
+    if (!text) {
+      // nothing typed yet: what is selected in the viewer is one tap away
+      if (app.selNodes.size && !focus) {
+        const nodes = [...app.selNodes];
+        list.append(row(nodes.length === 1 ? app.tree.names[nodes[0]] : `Seleção atual (${nodes.length} itens)`, "selecionado no visualizador", () => pick(nodes)));
+      }
+      const p = document.createElement("p");
+      p.textContent = "Digite o nome ou o código (por exemplo DT20003).";
+      list.append(p);
+      return;
+    }
+    const hits = find(text);
+    if (!hits.length) { const p = document.createElement("p"); p.textContent = "Nada encontrado."; list.append(p); return; }
+    const parent = app.tree.parent;
+    for (const n of hits.slice(0, MAX_RESULTS)) {
+      const up = parent[n] > 0 ? app.tree.names[parent[n]] + " · " : "";
+      list.append(row(app.tree.names[n], up + partsText(n), () => pick([n])));
+    }
+    if (hits.length > MAX_RESULTS) {
+      const p = document.createElement("p");
+      p.textContent = `Mais ${(hits.length - MAX_RESULTS).toLocaleString("pt-BR")} resultados: escreva mais do nome.`;
+      list.append(p);
+    }
+  }
+  let searchT = 0;
+  q.addEventListener("input", () => { clearTimeout(searchT); searchT = setTimeout(showResults, 200); });
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(searchT); showResults(); q.blur(); } });
+  function openSearch() {
+    panel.hidden = false;
+    showResults();
+    q.focus();
+  }
+  function closeSearch() { panel.hidden = true; q.blur(); }
+  $("#arFind").onclick = () => (panel.hidden ? openSearch() : closeSearch());
+  $("#arQClose").onclick = closeSearch;
+
+  async function pick(nodes) {
+    closeSearch();
+    const parts = [];
+    app.forParts(nodes, (p) => parts.push(p));
+    const need = parts.filter((p) => !app.isLoaded(p) && app.availableParts[p]);
+    if (need.length) { hint.textContent = "Carregando o item…"; await app.loadParts(need); }
+    if (!session) return;
+    if (parts.some((p) => !app.partVisible[p])) app.setVisible(nodes, true);
+    if (!focus) focus = { ghost: app.ghost, sel: [...app.selNodes] };
+    focus.nodes = nodes;
+    focus.name = nodes.length === 1 ? app.tree.names[nodes[0]] : `${nodes.length} itens`;
+    focus.box = app.nodesBox(nodes);
+    app.select(nodes, "replace");
+    app.setGhost(true);
+    showFocus();
+    if (phase === "placed" && !focus.box.isEmpty()) zoomTo(focus.box);
+    setPhase(phase);
+    hint.textContent = focus.name + (phase === "placed" ? " em destaque" : " em destaque: ponha o modelo para ver");
+  }
+  function clearFocus() {
+    if (!focus) return;
+    app.select(focus.sel, "replace");
+    app.setGhost(focus.ghost);
+    focus = null;
+    showFocus();
+    if (zoom && zoom.clip) setPreset("table"); // the zoomed-in table view: back to the whole model
+    setPhase(phase);
+  }
+  function showFocus() {
+    chip.hidden = !focus;
+    if (focus) chip.textContent = "✕ " + focus.name;
+  }
+  chip.onclick = clearFocus;
+
+  // move the model so that the item is easy to see (smoothly, from where it is now)
+  const _a = new THREE.Vector3(), _c = new THREE.Vector3(), _sz = new THREE.Vector3();
+  function zoomTo(box) {
+    box.getCenter(_c);
+    const big = Math.max(1e-3, ...box.getSize(_sz).toArray());
+    const now = modelMatrix().clone();
+    tween = null;
+    if (real()) {
+      // in front of you, at a distance that fits it; at the same height unless it is out of reach
+      const a = _c.clone(), from = a.clone().applyMatrix4(now);
+      const e = app.renderer.xr.getCamera().matrix.elements;
+      fwd.set(-e[8], 0, -e[10]);
+      if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+      fwd.normalize();
+      const d = Math.max(1.2, big * 0.6 + 0.8);
+      const to = camPos.clone().addScaledVector(fwd, d);
+      to.y = Math.abs(from.y - camPos.y) < 2 ? from.y : camPos.y - 0.2;
+      zoom = { anchor: a, clip: false };
+      pos.copy(from);
+      tween = { t0: null, dur: 900, p0: from, p1: to, s0: scale, s1: scale };
+    } else {
+      // on the table: the item's base where the model stands, zoomed in, only its surroundings drawn
+      const a = _a.set(_c.x, _c.y, box.min.z).clone(), from = a.clone().applyMatrix4(now);
+      const spot = pos.clone(); // the anchor's place on the table
+      const s1 = Math.max(scale, Math.min(1, FOCUS_TABLE / big));
+      zoom = { anchor: a, clip: true };
+      app.xr.clipSphere(_c, Math.max(FOCUS_AROUND / s1, big * 0.75));
+      pos.copy(from);
+      tween = { t0: null, dur: 900, p0: from, p1: spot, s0: scale, s1 };
+      preset = "";
+      scale = tween.s0;
+      const r = 1 / s1;
+      showScale();
+      scaleLbl.textContent = Math.abs(r - 1) < 0.05 ? "tamanho real" : "escala 1:" + (r < 10 ? r.toFixed(1).replace(".", ",").replace(",0", "") : Math.round(r));
+    }
+  }
 }

@@ -2609,7 +2609,7 @@ function animate(now = performance.now()) {
 // While an AR session runs, the window loop above stops and the session's frames draw the model.
 // Its place in the room is the transform of the whole scene: every mesh is a child of it and the
 // shaders keep model coordinates for the cuts, so nothing else needs to know about AR.
-let xrOn = false, xrOrtho = 0;
+let xrOn = false, xrOrtho = 0, xrNb = null;
 const xrCam = new THREE.PerspectiveCamera(60, 1, 0.01, 2000); // takes the phone's pose and lens each frame
 const _eye = new THREE.Vector3(), _xrInv = new THREE.Matrix4(), _xrMv = new THREE.Matrix4();
 app.renderer = renderer;
@@ -2649,6 +2649,21 @@ app.xr = {
     renderer.xr.enabled = true;
     return start;
   },
+  // A sphere (model coordinates) outside which nothing is drawn — the found item on the table —
+  // or null; the neighbourhood tool's own cut comes back after.
+  clipSphere(c, r) {
+    if (c) {
+      if (!xrNb) xrNb = { clip: shared.nbClip.value, c: shared.nbC.value.clone(), r: shared.nbR.value };
+      shared.nbClip.value = 1;
+      shared.nbC.value.copy(c);
+      shared.nbR.value = r;
+    } else if (xrNb) {
+      shared.nbClip.value = xrNb.clip;
+      shared.nbC.value.copy(xrNb.c);
+      shared.nbR.value = xrNb.r;
+      xrNb = null;
+    }
+  },
   // m: Matrix4 from model coordinates to the room (metres, y up), or null to hide the model
   place(m) {
     scene.visible = !!m;
@@ -2671,6 +2686,7 @@ app.xr = {
     return drawnTris;
   },
   end() {
+    app.xr.clipSphere(null);
     xrOn = false;
     renderer.xr.enabled = false;
     scene.matrix.identity();

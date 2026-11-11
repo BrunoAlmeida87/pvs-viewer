@@ -85,6 +85,8 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
   Real, nível de detalhe que se ajusta ao celular
 - [x] Tamanho real: controle para andar, ▲ ▼ entre pavimentos, velocidade, giro em volta de quem olha; começa no
   ponto da caminhada (botão RA na barra dela) ou ao lado da seleção
+- [x] Buscar dentro da RA: a peça encontrada em destaque (laranja, o resto transparente), com zoom nela na mesa
+  (só a vizinhança desenhada) ou trazida para a frente em tamanho real
 
 ## A fazer
 - [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas
