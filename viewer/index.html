@@ -75,6 +75,7 @@
     <symbol id="i-map" viewBox="0 0 24 24"><path d="M3.5 6.5l5-2.5 7 2.5 5-2.5v13.5l-5 2.5-7-2.5-5 2.5z"/><path d="M8.5 4v13.5M15.5 6.5V20"/></symbol>
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4M4 20h16"/></symbol>
     <symbol id="i-man" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v7M8 10.5l4-1.5 4 1.5M9.5 21l2.5-6.5 2.5 6.5"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><rect x="3.5" y="13.5" width="6" height="6" rx="1"/><path d="M9.5 16.5h4a3 3 0 0 0 3-3V7.5"/><path d="M13.5 10l3-3 3 3"/><circle cx="16.5" cy="4.5" r="1"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -153,6 +154,7 @@
       <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
       <button id="markBtn" class="tb" title="Marcações à mão: desenhar e escrever sobre a vista (ficam com a vista salva)"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
       <button id="manBtn" class="tb" title="Manequim de 1,75 m para checar acesso e espaço de manutenção"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
+      <button id="routeBtn" class="tb" title="Rota de retirada: levar um equipamento por um caminho e ver onde ele bate"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
       <button id="arBtn" class="tb" hidden title="Realidade aumentada: o modelo sobre a mesa ou o piso, pela câmera do aparelho"><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
       <button id="analysisBtn" class="tb" title="Comparar versões e verificar interferências"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
@@ -393,6 +395,7 @@
         <button data-do="measure"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
         <button data-do="mark"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
         <button data-do="man"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
+        <button data-do="route"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
         <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
         <button data-do="ar" id="mAr" hidden><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
         <button data-do="layers"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
@@ -581,6 +584,19 @@
           <div class="row2"><button id="intRun" class="primary">Verificar</button><button id="intStop">Parar</button></div>
           <div id="intStatus" class="hint"></div>
           <div id="intList"></div>
+        </div>
+      </div>
+      <div id="routePanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-route"/></svg>Rota de retirada <button class="x" data-close="routePanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="row2"><button id="rtItem" class="primary" title="O equipamento selecionado é o que vai sair">Usar a seleção</button><span id="rtItemName" class="muted rtName"></span></div>
+          <div class="row2"><button id="rtAdd" disabled title="Depois clique no modelo: o equipamento vai até esse ponto">Ponto no modelo…</button><label title="Leva também a altura do ponto clicado (senão a altura fica a mesma)"><input type="checkbox" id="rtZ"> com a altura</label></div>
+          <div class="row2"><button id="rtUp" disabled>▲ Subir</button><button id="rtDown" disabled>▼ Descer</button><select id="rtStep" title="Quanto sobe ou desce"><option value="0.25">0,25 m</option><option value="0.5" selected>0,5 m</option><option value="1">1 m</option></select></div>
+          <div class="row2"><button id="rtUndo" disabled>Desfazer ponto</button><button id="rtClear" disabled>Limpar caminho</button></div>
+          <div class="row2 rtPosRow"><button id="rtPlay" disabled title="Percorrer o caminho">▶</button><input type="range" id="rtPos" min="0" max="1000" value="0" disabled><i id="rtPosLbl"></i></div>
+          <button id="rtCheck" class="primary rtCheck" disabled>Verificar a rota</button>
+          <div id="rtResult"></div>
+          <p class="hint" id="rtHint">Selecione o equipamento a retirar e toque em “Usar a seleção”. Depois marque o caminho: pontos clicados no modelo e Subir / Descer.</p>
         </div>
       </div>
       <div id="manPanel" class="panel" hidden>

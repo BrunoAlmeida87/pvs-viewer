@@ -39,6 +39,7 @@ import { initAR } from "./ui/ar.js";
 import { initLabels } from "./ui/labels.js";
 import { initMarkup } from "./ui/markup.js";
 import { initMannequin } from "./ui/mannequin.js";
+import { initRoute } from "./ui/route.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -2916,6 +2917,7 @@ initAR(app);
 initLabels(app);
 initMarkup(app);
 initMannequin(app);
+initRoute(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.

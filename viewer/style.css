@@ -556,6 +556,17 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile .treeContextMenu { max-width: calc(100vw - 16px); }
 
 /* augmented reality (ui/ar.js): over the camera picture, so always light on dark glass */
+/* removal route (ui/route.js) */
+.rtName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.rtPosRow input[type=range] { flex: 1; min-width: 0; }
+.rtPosRow i { min-width: 58px; text-align: right; font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rtCheck { width: 100%; margin-top: 4px; }
+#rtResult { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+#rtResult p { margin: 2px 0; }
+.rtOk { color: #2f9e44; font-weight: 600; }
+.rtBad { color: #e03131; font-weight: 600; }
+.rtHit { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; height: auto; padding: 5px 8px; }
+.rtHit span { color: var(--muted); font-size: 12px; }
 /* hand markups (ui/markup.js) */
 #markPad { position: absolute; inset: 0; z-index: 5; cursor: crosshair; touch-action: none; }
 .markTools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-bottom: 6px; }
