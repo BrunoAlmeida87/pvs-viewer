@@ -591,6 +591,8 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #arUi .arHit { height: auto; min-height: 44px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px;
   background: rgba(255, 255, 255, .06); text-align: left; }
 .arHit b { font-weight: 600; overflow-wrap: anywhere; }
+#arUi .arBack { min-height: 38px; background: none; }
+#arUi .arAll { background: rgba(232, 89, 12, .35); }
 .arHit small { color: rgba(255, 255, 255, .6); font-weight: 400; font-size: 12px; overflow-wrap: anywhere; }
 #arVersion { font-size: 11px; opacity: .75; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 #arUi[data-phase="aim"] #arMove { display: none; }

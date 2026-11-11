@@ -50,7 +50,8 @@ você mexe no modelo.
     **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois de sair dela), olhando para o mesmo lado;
     senão, ao lado da peça selecionada; senão, o meio do modelo. **Mover** escolhe outro ponto do piso (aponte e toque).
   - **Buscar** (nas duas escalas): digite o nome ou o código (como na Busca: `dt20003` acha `LPR-DT20003`) e toque no
-    resultado. A peça fica em laranja e o resto transparente; **na mesa** a vista dá zoom nela (ela vai para onde o
+    resultado — ou, sem digitar, escolha o sistema (bigrama) e depois o equipamento, ou **Todo o sistema** para
+    destacar todos os equipamentos dele; a seleção atual do visualizador também aparece no topo da lista. A peça fica em laranja e o resto transparente; **na mesa** a vista dá zoom nela (ela vai para onde o
     modelo estava, com uns 25 cm, e só o que está em volta continua desenhado); **em tamanho real** ela vem para a sua
     frente. O botão laranja **✕ nome** tira o destaque (na mesa, volta ao modelo inteiro); as escalas também voltam ao
     modelo inteiro. Ao sair da RA a peça continua selecionada no visualizador.
@@ -59,7 +60,7 @@ você mexe no modelo.
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
   só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
   pequenas deixam de ser desenhadas quando o celular não acompanha.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.2.1`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.2.2`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 

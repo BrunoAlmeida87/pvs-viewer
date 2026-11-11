@@ -13,9 +13,11 @@
 //
 // "Buscar" finds an item by name or code: it turns orange and everything else transparent; on the
 // table the view zooms in on it (only what is around it is drawn), at real size it comes in front
-// of you. "✕ name" takes the highlight away.
+// of you. "✕ name" takes the highlight away. Without typing (the keyboard may not open over the
+// camera picture), the list offers the systems (bigramas), then the equipment of the one chosen.
 import * as THREE from "three";
 import { $, status, VERSION } from "./util.js";
+import { BIGRAMA_KEY } from "../lib/bigrama.js";
 
 const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown this long
 const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
@@ -397,7 +399,8 @@ export function initAR(app) {
   // ------------------------------------------------------------ find an item, highlight it and zoom on it
   const panel = $("#arSearch"), q = $("#arQ"), list = $("#arResults"), chip = $("#arFocus");
   let index = null; // normalized "name|code" of every node, built at the first search
-  app.on("model", () => { index = null; });
+  let browse = null; // the bigrama whose equipment is listed (nothing typed), or null for the list of systems
+  app.on("model", () => { index = null; browse = null; });
   function buildIndex() {
     const t = app.tree, ki = app.keyIndex("part_objectid");
     index = new Array(app.nNodes);
@@ -425,46 +428,71 @@ export function initAR(app) {
     return b;
   }
   const partsText = (n) => { const k = app.partCount(n); return k === 1 ? "1 peça" : k.toLocaleString("pt-BR") + " peças"; };
+  const note = (text) => { const p = document.createElement("p"); p.textContent = text; list.append(p); };
+  // equipment of a bigrama: the nodes with that code of their own that are not inside another one
+  function equipmentOf(code) {
+    const ki = app.keyIndex(BIGRAMA_KEY), eff = app.bigramaEff, parent = app.tree.parent, out = [];
+    if (ki < 0 || !eff) return out;
+    for (let n = 1; n < app.nNodes; n++) if (app.prop(n, ki) === code && eff[parent[n]] !== code) out.push(n);
+    return out.sort((a, b) => app.tree.names[a].localeCompare(app.tree.names[b], "pt-BR", { numeric: true }));
+  }
+  function showBrowse() {
+    // what is selected in the viewer is one tap away
+    if (app.selNodes.size && !focus && !browse) {
+      const nodes = [...app.selNodes];
+      list.append(row(nodes.length === 1 ? app.tree.names[nodes[0]] : `Seleção atual (${nodes.length} itens)`, "selecionado no visualizador", () => pick(nodes)));
+    }
+    const systems = (app.bigramaList || []).filter((g) => g.code !== "");
+    if (!browse) {
+      note(systems.length ? "Digite o nome ou o código, ou escolha um sistema:" : "Digite o nome ou o código (por exemplo DT20003).");
+      for (const g of systems) {
+        list.append(row(g.code, `${g.equip.toLocaleString("pt-BR")} equipamento${g.equip === 1 ? "" : "s"} · ${g.parts.toLocaleString("pt-BR")} peças`, () => {
+          browse = g.code;
+          showResults();
+          list.scrollTop = 0;
+        }));
+      }
+      return;
+    }
+    const back = row("◂ Sistemas", "voltar à lista de bigramas", () => { browse = null; showResults(); list.scrollTop = 0; });
+    back.classList.add("arBack");
+    list.append(back);
+    const eq = equipmentOf(browse);
+    if (eq.length > 1) {
+      const all = row(`Todo o sistema ${browse}`, `${eq.length.toLocaleString("pt-BR")} equipamentos em destaque`, () => pick(eq, `Sistema ${browse}`));
+      all.classList.add("arAll");
+      list.append(all);
+    }
+    const parent = app.tree.parent;
+    for (const n of eq) list.append(row(app.tree.names[n], (parent[n] > 0 ? app.tree.names[parent[n]] + " · " : "") + partsText(n), () => pick([n])));
+    if (!eq.length) note("Nenhum equipamento com este bigrama.");
+  }
   function showResults() {
     list.innerHTML = "";
     const text = q.value.trim();
-    if (!text) {
-      // nothing typed yet: what is selected in the viewer is one tap away
-      if (app.selNodes.size && !focus) {
-        const nodes = [...app.selNodes];
-        list.append(row(nodes.length === 1 ? app.tree.names[nodes[0]] : `Seleção atual (${nodes.length} itens)`, "selecionado no visualizador", () => pick(nodes)));
-      }
-      const p = document.createElement("p");
-      p.textContent = "Digite o nome ou o código (por exemplo DT20003).";
-      list.append(p);
-      return;
-    }
+    if (!text) { showBrowse(); return; }
     const hits = find(text);
-    if (!hits.length) { const p = document.createElement("p"); p.textContent = "Nada encontrado."; list.append(p); return; }
+    if (!hits.length) { note("Nada encontrado."); return; }
     const parent = app.tree.parent;
     for (const n of hits.slice(0, MAX_RESULTS)) {
       const up = parent[n] > 0 ? app.tree.names[parent[n]] + " · " : "";
       list.append(row(app.tree.names[n], up + partsText(n), () => pick([n])));
     }
-    if (hits.length > MAX_RESULTS) {
-      const p = document.createElement("p");
-      p.textContent = `Mais ${(hits.length - MAX_RESULTS).toLocaleString("pt-BR")} resultados: escreva mais do nome.`;
-      list.append(p);
-    }
+    if (hits.length > MAX_RESULTS) note(`Mais ${(hits.length - MAX_RESULTS).toLocaleString("pt-BR")} resultados: escreva mais do nome.`);
   }
   let searchT = 0;
   q.addEventListener("input", () => { clearTimeout(searchT); searchT = setTimeout(showResults, 200); });
   q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(searchT); showResults(); q.blur(); } });
+  // the box gets the focus only when tapped: on the phone that would open the keyboard over the list
   function openSearch() {
     panel.hidden = false;
     showResults();
-    q.focus();
   }
   function closeSearch() { panel.hidden = true; q.blur(); }
   $("#arFind").onclick = () => (panel.hidden ? openSearch() : closeSearch());
   $("#arQClose").onclick = closeSearch;
 
-  async function pick(nodes) {
+  async function pick(nodes, title) {
     closeSearch();
     const parts = [];
     app.forParts(nodes, (p) => parts.push(p));
@@ -474,7 +502,7 @@ export function initAR(app) {
     if (parts.some((p) => !app.partVisible[p])) app.setVisible(nodes, true);
     if (!focus) focus = { ghost: app.ghost, sel: [...app.selNodes] };
     focus.nodes = nodes;
-    focus.name = nodes.length === 1 ? app.tree.names[nodes[0]] : `${nodes.length} itens`;
+    focus.name = title || (nodes.length === 1 ? app.tree.names[nodes[0]] : `${nodes.length} itens`);
     focus.box = app.nodesBox(nodes);
     app.select(nodes, "replace");
     app.setGhost(true);
@@ -489,7 +517,7 @@ export function initAR(app) {
     app.setGhost(focus.ghost);
     focus = null;
     showFocus();
-    if (zoom && zoom.clip) setPreset("table"); // the zoomed-in table view: back to the whole model
+    if (zoom && !real()) setPreset("table"); // the zoomed-in table view: back to the whole model
     setPhase(phase);
   }
   function showFocus() {
@@ -523,8 +551,10 @@ export function initAR(app) {
       const a = _a.set(_c.x, _c.y, box.min.z).clone(), from = a.clone().applyMatrix4(now);
       const spot = pos.clone(); // the anchor's place on the table
       const s1 = Math.max(scale, Math.min(1, FOCUS_TABLE / big));
-      zoom = { anchor: a, clip: true };
-      app.xr.clipSphere(_c, Math.max(FOCUS_AROUND / s1, big * 0.75));
+      // only a real zoom-in needs the cut (a whole system is about as big as the model)
+      const clip = s1 > scale * 1.5;
+      zoom = { anchor: a, clip };
+      app.xr.clipSphere(clip ? _c : null, Math.max(FOCUS_AROUND / s1, big * 0.75));
       pos.copy(from);
       tween = { t0: null, dur: 900, p0: from, p1: spot, s0: scale, s1 };
       preset = "";

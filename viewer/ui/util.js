@@ -1,7 +1,7 @@
 // Small DOM and data helpers shared by the UI modules.
 export const $ = (s) => document.querySelector(s);
 // shown on the phone (tools sheet, AR) so that it is easy to tell which version is running
-export const VERSION = "1.2.1";
+export const VERSION = "1.2.2";
 
 export function status(t) { $("#load").textContent = t; }
 
