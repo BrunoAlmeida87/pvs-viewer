@@ -556,6 +556,12 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile .treeContextMenu { max-width: calc(100vw - 16px); }
 
 /* augmented reality (ui/ar.js): over the camera picture, so always light on dark glass */
+/* 2D drawing (ui/drawing.js) */
+.drawMake { width: 100%; margin-top: 4px; }
+#drawPreview { margin: 6px 0; border: 1px solid var(--border); border-radius: 6px; background: #fff; line-height: 0; }
+#drawPreview:empty { display: none; }
+#drawPreview svg { width: 100%; height: auto; }
+#drawPanel { width: min(420px, calc(100vw - 24px)); }
 /* removal route (ui/route.js) */
 .rtName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .rtPosRow input[type=range] { flex: 1; min-width: 0; }

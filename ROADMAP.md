@@ -88,6 +88,17 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Buscar dentro da RA: a peça encontrada em destaque (laranja, o resto transparente), com zoom nela na mesa
   (só a vizinhança desenhada) ou trazida para a frente em tamanho real
 
+## Engenharia, manutenção e BIM ✅
+- [x] Corte em qualquer direção: plano por uma face clicada, profundidade, inverter, olhar de frente
+- [x] Rótulos automáticos com os códigos dos equipamentos visíveis (sem sobreposição, só o que se vê)
+- [x] Minimapa na caminhada: planta cortada acima dos olhos, “você está aqui”, tocar para ir
+- [x] Marcações à mão (caneta, seta, caixa, texto) presas à vista, salvas com ela e no PNG
+- [x] Manequim de 1,60 / 1,75 / 1,90 m (em pé, agachado, alcance) com verificação de contato e folga
+- [x] Rota de retirada: caminho por pontos e subir/descer, verificação contra a malha real, trechos em que bate
+- [x] Exportar em glTF (.glb) e IFC4, com árvore, cores e propriedades
+- [x] Vista 2D com cotas (planta, frente, lateral, vista atual; linhas ocultas removidas; seção nos cortes) em
+  PDF, SVG e DXF
+
 ## A fazer
 - [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas
   não as aplica. Falta um modelo de exemplo para confirmar a convenção da matriz antes de implementar.

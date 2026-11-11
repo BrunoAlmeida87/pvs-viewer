@@ -18,7 +18,7 @@
   if (coarse || q.has("mobile") || q.has("touch")) c.add("touch");
   if (q.has("mobile") || (coarse && Math.min(screen.width, screen.height) < 600)) c.add("mobile");
 })();</script>
-<link rel="stylesheet" href="style.css?v=f-1">
+<link rel="stylesheet" href="style.css?v=f-2">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three.module.min.js",
@@ -76,6 +76,7 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4M4 20h16"/></symbol>
     <symbol id="i-man" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v7M8 10.5l4-1.5 4 1.5M9.5 21l2.5-6.5 2.5 6.5"/></symbol>
     <symbol id="i-route" viewBox="0 0 24 24"><rect x="3.5" y="13.5" width="6" height="6" rx="1"/><path d="M9.5 16.5h4a3 3 0 0 0 3-3V7.5"/><path d="M13.5 10l3-3 3 3"/><circle cx="16.5" cy="4.5" r="1"/></symbol>
+    <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M7 15.5h6.5V9H7zM7 7v1M13.5 7v1M16 9v6.5M15 9h2M15 15.5h2"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -154,6 +155,7 @@
       <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
       <button id="markBtn" class="tb" title="Marcações à mão: desenhar e escrever sobre a vista (ficam com a vista salva)"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
       <button id="manBtn" class="tb" title="Manequim de 1,75 m para checar acesso e espaço de manutenção"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
+      <button id="drawBtn" class="tb" title="Vista 2D: planta, frente ou lateral com cotas, em SVG, PDF ou DXF"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
       <button id="routeBtn" class="tb" title="Rota de retirada: levar um equipamento por um caminho e ver onde ele bate"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
       <button id="arBtn" class="tb" hidden title="Realidade aumentada: o modelo sobre a mesa ou o piso, pela câmera do aparelho"><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
@@ -215,7 +217,7 @@
           <div><kbd>I</kbd> isolar</div><div><kbd>H</kbd> ocultar</div><div><kbd>A</kbd> mostrar tudo</div>
           <div><kbd>G</kbd> fantasma</div><div><kbd>E</kbd> arestas</div><div><kbd>X</kbd> raio-X</div>
           <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>K</kbd> camadas</div><div><kbd>M</kbd> medir</div>
-          <div><kbd>L</kbd> lista de peças</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
+          <div><kbd>L</kbd> lista de peças</div><div><kbd>R</kbd> rótulos</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
           <div><kbd>Ctrl</kbd><kbd>Z</kbd> desfazer</div><div><kbd>Ctrl</kbd><kbd>Y</kbd> refazer</div>
           <hr>
           <div><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> girar a vista · com <kbd>Shift</kbd> desloca</div>
@@ -397,6 +399,7 @@
         <button data-do="mark"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
         <button data-do="man"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
         <button data-do="route"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
+        <button data-do="draw"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
         <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
         <button data-do="ar" id="mAr" hidden><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
         <button data-do="layers"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
@@ -587,6 +590,21 @@
           <div id="intList"></div>
         </div>
       </div>
+      <div id="drawPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-sheet"/></svg>Vista 2D com cotas <button class="x" data-close="drawPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="row2"><span>Vista</span><select id="drawView"><option value="top">Planta (de cima)</option><option value="front">Frente</option><option value="side">Lateral</option><option value="current">Vista atual</option></select></div>
+          <div class="row2"><span>Folha</span><select id="drawSheet"><option>A4</option><option selected>A3</option><option>A2</option><option>A1</option></select>
+            <select id="drawScale" title="Escala"><option value="0">Ajustar à folha</option><option value="10">1:10</option><option value="20">1:20</option><option value="25">1:25</option><option value="50">1:50</option><option value="100">1:100</option><option value="200">1:200</option><option value="500">1:500</option></select></div>
+          <label><input type="checkbox" id="drawOverall" checked> Cotas gerais (largura e altura)</label>
+          <label title="As distâncias e folgas do painel Medir viram cotas"><input type="checkbox" id="drawMeasures" checked> Medições como cotas</label>
+          <label><input type="checkbox" id="drawCodes"> Códigos dos equipamentos</label>
+          <button id="drawMake" class="primary drawMake">Desenhar</button>
+          <div id="drawPreview"></div>
+          <div class="row2"><button id="drawPdf" disabled>PDF</button><button id="drawSvg" disabled>SVG</button><button id="drawDxf" disabled title="Em milímetros, 1:1, por camadas">DXF</button></div>
+          <p class="hint" id="drawHint">Desenha o que está visível agora, com os cortes: para uma planta de um pavimento, corte em Z (ou com o plano por uma face) e escolha Planta.</p>
+        </div>
+      </div>
       <div id="routePanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-route"/></svg>Rota de retirada <button class="x" data-close="routePanel" title="Fechar">✕</button></div>
         <div class="pb">
@@ -771,7 +789,7 @@ async function refreshModules() {
     for (const m of src.matchAll(/(?:from\s*|import\s*\(\s*|new URL\(\s*)["'](\.{1,2}\/[^"']+\.js)["']/g)) next.add(new URL(m[1], url).href);
     await Promise.all([...next].filter((u) => !u.includes("/vendor/")).map(visit));
   };
-  await visit(new URL("viewer.js?v=f-1", location.href).href);
+  await visit(new URL("viewer.js?v=f-2", location.href).href);
 }
 // The service worker (sw.js) does the same revalidation for every file and keeps a copy, so the
 // viewer also opens without a connection and can be installed as an app on the phone. It is not
@@ -781,7 +799,7 @@ if (sw) navigator.serviceWorker.register("sw.js").catch(() => {});
 if (!(sw && navigator.serviceWorker.controller)) {
   try { await Promise.race([refreshModules(), new Promise((ok) => setTimeout(ok, 5000))]); } catch { /* offline or file:// — start anyway */ }
 }
-import("./viewer.js?v=f-1").catch((err) => {
+import("./viewer.js?v=f-2").catch((err) => {
   console.error(err);
   document.querySelector("#load").textContent = "Não foi possível iniciar: " + err.message +
     ". Se o site acabou de ser atualizado, recarregue com Ctrl+F5.";

@@ -41,6 +41,7 @@ import { initMarkup } from "./ui/markup.js";
 import { initMannequin } from "./ui/mannequin.js";
 import { initRoute } from "./ui/route.js";
 import { initExports } from "./ui/exports.js";
+import { initDrawing } from "./ui/drawing.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -1751,6 +1752,57 @@ app.partsOnScreen = function (step = 4) {
   requestRender();
   return { w, h, step, part };
 };
+// Depth image of the model seen along `fwd` with an orthographic camera (2D drawings): v.right,
+// v.up, v.fwd unit vectors, v.center, v.halfW, v.halfH, v.dist in metres: the camera is at
+// center - fwd × dist. Returns a Float32Array of W × H distances from the camera plane, row by row
+// from the top (Infinity where nothing is drawn). Cuts, hidden parts and layers count, as on
+// screen; small parts too.
+app.depthImage = function (v, W, H) {
+  const cam = new THREE.OrthographicCamera(-v.halfW, v.halfW, v.halfH, -v.halfH, 0, v.dist * 2);
+  const c = new THREE.Vector3(...v.center), f = new THREE.Vector3(...v.fwd);
+  cam.up.set(...v.up);
+  cam.position.copy(c).addScaledVector(f, -v.dist);
+  cam.lookAt(c);
+  cam.updateMatrixWorld();
+  const rt = new THREE.WebGLRenderTarget(W, H);
+  applyLod(0);
+  renderPick(cam, 2, rt);
+  const buf = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(rt, 0, 0, W, H, buf);
+  rt.dispose();
+  requestRender();
+  const bits = new Uint32Array(buf.buffer), fl = new Float32Array(buf.buffer), out = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const row = (H - 1 - y) * W;
+    for (let x = 0; x < W; x++) { const i = row + x; out[y * W + x] = bits[i] === 0 ? Infinity : fl[i]; }
+  }
+  return out;
+};
+// Is a model point removed by the cuts (planes, box, neighbourhood)? Same test as the shader.
+app.isClipped = function (x, y, z) {
+  if (shared.planeOn.value) { const P = shared.plane.value; if (x * P.x + y * P.y + z * P.z > P.w) return true; }
+  const nb = shared.nbClip.value;
+  if (nb === 1) { const c = shared.nbC.value; if (Math.hypot(x - c.x, y - c.y, z - c.z) > shared.nbR.value) return true; }
+  if (nb === 2) { const a = shared.nbMin.value, b = shared.nbMax.value; if (x < a.x || y < a.y || z < a.z || x > b.x || y > b.y || z > b.z) return true; }
+  if (!shared.clipOn.value) return false;
+  const a = shared.clipMin.value, b = shared.clipMax.value;
+  const inside = x >= a.x && y >= a.y && z >= a.z && x <= b.x && y <= b.y && z <= b.z;
+  return shared.clipInvert.value ? inside : !inside;
+};
+// The cutting planes now on, as {n: [x, y, z], d}: what is removed is where n·p > d.
+app.cutPlanes = function () {
+  const out = [];
+  if (shared.planeOn.value) { const P = shared.plane.value; out.push({ n: [P.x, P.y, P.z], d: P.w }); }
+  if (shared.clipOn.value && !shared.clipInvert.value) {
+    const a = shared.clipMin.value, b = shared.clipMax.value;
+    for (let k = 0; k < 3; k++) {
+      const n = [0, 0, 0];
+      if (a.getComponent(k) > -1e29) { n[k] = -1; out.push({ n: n.slice(), d: -a.getComponent(k) }); }
+      if (b.getComponent(k) < 1e29) { n[k] = 1; out.push({ n: n.slice(), d: b.getComponent(k) }); }
+    }
+  }
+  return out;
+};
 // World point under the cursor, or null.
 function pickPoint(x, y) {
   const { buf } = pickRender(2, x, y, x + 1, y + 1);
@@ -2920,6 +2972,7 @@ initMarkup(app);
 initMannequin(app);
 initRoute(app);
 initExports(app);
+initDrawing(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.

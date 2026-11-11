@@ -60,7 +60,7 @@ você mexe no modelo.
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
   só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
   pequenas deixam de ser desenhadas quando o celular não acompanha.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.2.2`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.3.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -219,11 +219,39 @@ convertida pelo `build.py`, que abre em segundos.
 - **Cores**: colorir e mudar a opacidade da seleção, modo fantasma, colorir por regra (material, espessura, seção,
   subsistema…) com legenda clicável, restaurar cores.
 - **Conjuntos** de seleção e **esquemas de cores** com nome, salvos no navegador.
+- **Exportar para outros programas**: botão direito num item (ou na seleção) › **Exportar em glTF (.glb)…** ou
+  **Exportar em IFC…**, e os botões em Minha estrutura (a seleção, ou tudo o que está visível). glTF: qualquer
+  visualizador 3D na web ou o Blender, com a árvore da montagem, as cores e as propriedades. IFC4: ferramentas BIM
+  (Navisworks, Solibri, BIMcollab…), cada peça um elemento com a malha, a cor e as propriedades (inclusive o
+  bigrama e o caminho na árvore). A geometria é a mesma malha triangulada do visualizador, em metros.
 - **Lista de peças** com filtro, ordenação e exportação CSV; **estatísticas** por grupo (contagem e soma de Unit weight).
 - **Exibição**: sombreado (suave ou plano), sombreado + arestas do CAD, linhas ocultas, só arestas, raio-X;
   oclusão ambiente (SSAO); fundo e iluminação configuráveis (ficam salvos no navegador).
 - **Corte**: planos X/Y/Z com dois limites cada, caixa de corte (inclusive em volta da seleção), inverter,
-  tampa hachurada nas peças cortadas.
+  tampa hachurada nas peças cortadas. **Plano em qualquer direção**: “Plano por uma face…” e um clique numa face
+  (parede, piso, lateral de um equipamento) cria um plano que passa por ela, na direção dela; a profundidade leva o
+  plano para dentro, “Inverter lado” e “Olhar de frente” (bom para ver o corte). Fica nas vistas salvas.
+- **Rótulos** (Exibição › Rótulos, tecla **R**, “Rótulos” no celular): o código de cada equipamento visível flutua
+  sobre ele — sobre a parte que aparece, sem rótulos para o que está escondido nem rótulos sobrepostos (os maiores
+  primeiro). Somem enquanto a câmera se move e voltam quando ela para. Clicar num rótulo seleciona o equipamento.
+- **Marcações à mão** (botão **Marcar**): caneta, seta, caixa e texto sobre a vista, em seis cores e três espessuras,
+  com desfazer. Ficam presas à vista em que foram feitas (ao girar o modelo somem; “Voltar à vista das marcações”);
+  “Salvar como vista” guarda junto da vista salva (e do link e do arquivo da vista) e elas entram no PNG.
+- **Manequim** (botão **Manequim**): pessoa de 1,60, 1,75 ou 1,90 m em pé, agachada ou com os braços para cima,
+  posta com um clique num piso, de frente para a câmera; gira de 15 em 15°. “Verificar contato” compara o corpo com
+  as peças em volta: lista as peças em que encosta (ele fica vermelho) ou a folga mínima até a mais próxima (o piso
+  em que está não conta). Fica nas vistas salvas.
+- **Rota de retirada** (botão **Retirada**): selecione o equipamento e toque em “Usar a seleção”; marque o caminho
+  com pontos clicados no modelo (ele vai até eles mantendo a altura, ou com a altura) e Subir / Descer; o equipamento
+  percorre o caminho na tela. “Verificar a rota” testa o caminho em passos pequenos contra a malha real das peças:
+  lista os trechos onde ele bate e com o quê (tocar num trecho leva o equipamento até lá), marca esses pontos em
+  vermelho e dá a folga mínima quando passa. O que já encosta nele onde está (base, piso) conta como apoio.
+- **Vista 2D com cotas** (botão **Vista 2D**): planta, frente, lateral ou a vista atual, como desenho de linhas —
+  arestas do CAD e contornos das superfícies curvas, só o que se vê (linhas ocultas removidas) —, com os cortes:
+  onde um plano de corte está de frente para a vista, o contorno das peças cortadas sai em linha grossa. Cotas
+  gerais, as distâncias do painel Medir como cotas e, se quiser, os códigos dos equipamentos; folha A4 a A1 em
+  escala escolhida ou ajustada, com carimbo. Salva em **PDF**, **SVG** ou **DXF** (milímetros, 1:1, por camadas).
+  Para a planta de um pavimento: corte em Z (ou plano por uma face no piso) e escolha Planta.
 - **Camadas** (tecla K): as camadas do Creo, lidas dos `.ol`, com quantas peças cada uma tem; ligar/desligar,
   selecionar as peças de uma camada. A **camada 99** (espaço que um equipamento pode ocupar, como o giro de uma
   porta) começa desligada; a escolha fica salva por modelo e entra nas vistas salvas. Medição, folga e
@@ -242,7 +270,9 @@ convertida pelo `build.py`, que abre em segundos.
 - **Vista explodida** por seção, subsistema, nível 3 ou peça.
 - **Navegação**: gira em torno do ponto clicado, cubo de vistas, transições suaves ao enquadrar e trocar de vista,
   teclado (setas, + e −, Home, 1 a 5), **vista anterior / seguinte** (Backspace) e modo caminhada em primeira pessoa
-  com **Posicionar** (ficar em pé num ponto do modelo), **Chão** (altura fixa de 1,6 m sobre o piso) e **Colisão**.
+  com **Posicionar** (ficar em pé num ponto do modelo), **Chão** (altura fixa de 1,6 m sobre o piso) e **Colisão**,
+  e **minimapa** (botão **Mapa** na barra da caminhada): planta vista de cima, cortada pouco acima dos olhos (mostra o
+  pavimento em que se está), com “você está aqui” e o cone de visão; tocar no mapa leva até o ponto.
 - **Realidade aumentada** (Android): o modelo, como está na tela, sobre a mesa ou o piso, em escala de mesa, 1:20,
   1:50, 1:100 ou real; na mesa um dedo move e dois dedos aumentam e giram; em tamanho real um controle anda, ▲ ▼
   trocam de pavimento e você começa onde estava na caminhada ou ao lado da seleção (botão **Na mesa (RA)**).
@@ -264,7 +294,7 @@ placa de vídeo em uso na barra de status e lista de atalhos no botão do teclad
 Mouse: esquerdo gira em torno do ponto sob o cursor, direito/meio desloca, roda dá zoom no cursor. Clique seleciona,
 duplo clique enquadra a peça (no fundo, enquadra tudo), botão direito abre o menu da peça. Cubo de vistas: clique
 numa face, aresta ou canto.
-Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista ·
+Teclas: F enquadrar · Z zoom na seleção · I isolar · H ocultar · A mostrar tudo · G fantasma · L lista · R rótulos ·
 E arestas · X raio-X · C corte · N vizinhança · K camadas · M medir · P desempenho · Esc limpar seleção ·
 Ctrl+Z desfazer · Ctrl+Y refazer.
 Navegação pelo teclado: setas giram a vista (com Shift, deslocam) · + e − zoom · Home enquadra tudo · 1 frente ·
