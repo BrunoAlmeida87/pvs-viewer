@@ -556,6 +556,17 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile .treeContextMenu { max-width: calc(100vw - 16px); }
 
 /* augmented reality (ui/ar.js): over the camera picture, so always light on dark glass */
+/* hand markups (ui/markup.js) */
+#markPad { position: absolute; inset: 0; z-index: 5; cursor: crosshair; touch-action: none; }
+.markTools { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-bottom: 6px; }
+.markTools button { padding: 5px 2px; font-size: 12px; }
+.markTools button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+#markColors { display: flex; gap: 5px; flex: 1; }
+#markColors .sw { width: 24px; height: 24px; min-width: 0; padding: 0; border-radius: 50%; border: 2px solid var(--border); }
+#markColors .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+#markBack { width: 100%; margin-top: 4px; }
+.markText { position: absolute; z-index: 6; transform: translateY(-80%); min-width: 120px; padding: 4px 6px; border: 2px solid currentColor;
+  border-radius: 6px; background: rgba(255, 255, 255, .92); font: 600 15px system-ui, sans-serif; }
 /* walk mode mini map */
 #miniMap { position: absolute; z-index: 11; right: 12px; bottom: 54px; border-radius: 10px; background: rgba(20, 24, 31, .78);
   box-shadow: var(--shadow-lg); border: 1px solid rgba(255, 255, 255, .25); cursor: crosshair; touch-action: none; }

@@ -3,6 +3,8 @@
 //
 // In:  {type:"mesh", key, pos, idx}
 //      {type:"pair", id, a, b, limit}   -> {type:"pair", id, crossings, d, pa, pb}
+//      {type:"pairAt", id, a, b, off, limit}: the same with mesh a moved by off [dx, dy, dz]
+//      (the moved copy of the last one is kept: a removal route checks many parts per step)
 //      {type:"forget"}                  (drop the cache)
 import { buildBVH, minDistance, intersections } from "./geom.js";
 
@@ -17,6 +19,15 @@ function get(key) {
   return m;
 }
 
+let moved = null; // {key, pos, idx, bvh}: mesh a moved by an offset
+function check(id, A, B, limit) {
+  if (!A || !B || !A.idx.length || !B.idx.length) { self.postMessage({ type: "pair", id, crossings: 0, d: Infinity }); return; }
+  const crossings = intersections(A.bvh, B.bvh, 20);
+  if (crossings) { self.postMessage({ type: "pair", id, crossings, d: 0 }); return; }
+  const r = minDistance(A, B, A.bvh, B.bvh, limit ?? Infinity);
+  self.postMessage({ type: "pair", id, crossings: 0, d: r.d, pa: r.pa, pb: r.pb });
+}
+
 self.onmessage = (e) => {
   const m = e.data;
   if (m.type === "mesh") {
@@ -24,14 +35,21 @@ self.onmessage = (e) => {
     while (cache.size > MAX) cache.delete(cache.keys().next().value);
   } else if (m.type === "forget") {
     cache.clear();
-  } else if (m.type === "pair") {
+  } else if (m.type === "pair" || m.type === "pairAt") {
     try {
-      const A = get(m.a), B = get(m.b);
-      if (!A || !B || !A.idx.length || !B.idx.length) { self.postMessage({ type: "pair", id: m.id, crossings: 0, d: Infinity }); return; }
-      const crossings = intersections(A.bvh, B.bvh, 20);
-      if (crossings) { self.postMessage({ type: "pair", id: m.id, crossings, d: 0 }); return; }
-      const r = minDistance(A, B, A.bvh, B.bvh, m.limit ?? Infinity);
-      self.postMessage({ type: "pair", id: m.id, crossings: 0, d: r.d, pa: r.pa, pb: r.pb });
+      let A = get(m.a);
+      const B = get(m.b), off = m.type === "pairAt" ? m.off : null;
+      if (A && off && (off[0] || off[1] || off[2])) {
+        const key = m.a + "@" + off.join(",");
+        if (!moved || moved.key !== key) {
+          const pos = new Float32Array(A.pos.length);
+          for (let i = 0; i < pos.length; i += 3) { pos[i] = A.pos[i] + off[0]; pos[i + 1] = A.pos[i + 1] + off[1]; pos[i + 2] = A.pos[i + 2] + off[2]; }
+          moved = { key, pos, idx: A.idx, bvh: null };
+          moved.bvh = buildBVH(moved);
+        }
+        A = moved;
+      }
+      check(m.id, A, B, m.limit);
     } catch (err) {
       self.postMessage({ type: "pair", id: m.id, error: String(err && err.message || err) });
     }

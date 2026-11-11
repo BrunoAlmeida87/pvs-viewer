@@ -58,6 +58,8 @@ export function initViews(app) {
       visible: runs(base ? base.visible : app.partVisible, 1), color: runs(app.partColor, -1), opacity: runs(base ? base.opacity : app.partOpacity, 255),
       rule: app.ruleSpec || "", ghost: app.ghost, sel: [...app.selNodes].slice(0, 20000),
       notes, measurements: app.measurements ? app.measurements() : [],
+      markup: app.getMarkup ? app.getMarkup() : null,
+      mannequins: app.getMannequins ? app.getMannequins() : [],
     };
   }
   function apply(s) {
@@ -81,7 +83,10 @@ export function initViews(app) {
     if (s.notes) { notes = s.notes; renderNotes(); }
     if (s.measurements && app.setMeasurements) app.setMeasurements(s.measurements);
     if (s.nb && app.nbApply) app.nbApply(s.nb);
+    if (app.setMannequins) app.setMannequins(s.mannequins || []);
     app.setCamera(s.camera);
+    // hand markups belong to this camera (views saved before them have none)
+    if (app.setMarkup) app.setMarkup(s.markup ? { cam: s.camera, items: s.markup.items } : null);
   }
   app.captureView = capture;
   app.applyView = apply;

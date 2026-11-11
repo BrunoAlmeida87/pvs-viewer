@@ -43,6 +43,13 @@ export function geomClient(app) {
     const id = ++seq;
     return new Promise((resolve) => { pending.set(id, resolve); start().postMessage({ type: "pair", id, a, b, limit }); });
   }
+  // The same with mesh a moved by off [dx, dy, dz] (removal route).
+  function pairAt(a, b, off, limit = Infinity) {
+    const id = ++seq;
+    return new Promise((resolve) => { pending.set(id, resolve); start().postMessage({ type: "pairAt", id, a, b, off, limit }); });
+  }
+  // A mesh that is not a part (the mannequin), sent under its own key (sent again each time).
+  function custom(key, g) { sentSet.delete(key); post(key, g); return key; }
   function forget() { sent.length = 0; sentSet.clear(); if (worker) worker.postMessage({ type: "forget" }); }
-  return { part, merged, pair, forget };
+  return { part, merged, pair, pairAt, custom, forget };
 }

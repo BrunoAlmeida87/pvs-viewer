@@ -102,6 +102,8 @@ export function initMobile(app) {
     measure: () => press("#measureBtn"),
     ar: () => app.startAR?.(),
     labels: () => app.toggleLabels(),
+    mark: () => press("#markBtn"),
+    man: () => press("#manBtn"),
     walk: () => { for (const p of panels) if (!p.hidden) p.querySelector("[data-close]")?.click(); app.setWalk(true, true); },
     layers: () => press("#layerBtn"),
     bigramas: () => press("#bgBtn"),

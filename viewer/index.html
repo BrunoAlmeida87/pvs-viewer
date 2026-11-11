@@ -73,6 +73,8 @@
     <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
     <symbol id="i-ar" viewBox="0 0 24 24"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"/><path d="M12 7l4.5 2.5v5L12 17l-4.5-2.5v-5z"/><path d="M12 12l4.5-2.5M12 12v5M12 12L7.5 9.5"/></symbol>
     <symbol id="i-map" viewBox="0 0 24 24"><path d="M3.5 6.5l5-2.5 7 2.5 5-2.5v13.5l-5 2.5-7-2.5-5 2.5z"/><path d="M8.5 4v13.5M15.5 6.5V20"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4M4 20h16"/></symbol>
+    <symbol id="i-man" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v7M8 10.5l4-1.5 4 1.5M9.5 21l2.5-6.5 2.5 6.5"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
 </svg>
@@ -149,6 +151,8 @@
       <button id="nbBtn" class="tb" title="Ver só a seleção e o que está em volta, numa esfera ou cubo (N)"><svg><use href="#i-sphere"/></svg><span>Vizinhança</span></button>
       <button id="explodeBtn" class="tb" title="Vista explodida"><svg><use href="#i-explode"/></svg><span>Explodir</span></button>
       <button id="measureBtn" class="tb" title="Medir distâncias, ângulos, raios, folgas, dimensões e peso (M)"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
+      <button id="markBtn" class="tb" title="Marcações à mão: desenhar e escrever sobre a vista (ficam com a vista salva)"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
+      <button id="manBtn" class="tb" title="Manequim de 1,75 m para checar acesso e espaço de manutenção"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
       <button id="arBtn" class="tb" hidden title="Realidade aumentada: o modelo sobre a mesa ou o piso, pela câmera do aparelho"><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
       <button id="analysisBtn" class="tb" title="Comparar versões e verificar interferências"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
@@ -387,6 +391,8 @@
       <div class="tiles">
         <button data-do="cut"><svg><use href="#i-cut"/></svg><span>Corte</span></button>
         <button data-do="measure"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
+        <button data-do="mark"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
+        <button data-do="man"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
         <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
         <button data-do="ar" id="mAr" hidden><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
         <button data-do="layers"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
@@ -431,6 +437,7 @@
     <div id="legend" hidden></div>
     <div id="boxSel" hidden></div>
     <div id="labels" aria-label="Rótulos"></div>
+    <div id="markPad" hidden aria-label="Área de desenho"></div>
     <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
     <div id="pivot" hidden></div>
     <div id="perf" hidden></div>
@@ -574,6 +581,30 @@
           <div class="row2"><button id="intRun" class="primary">Verificar</button><button id="intStop">Parar</button></div>
           <div id="intStatus" class="hint"></div>
           <div id="intList"></div>
+        </div>
+      </div>
+      <div id="manPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-man"/></svg>Manequim <button class="x" data-close="manPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="row2"><button id="manPlace" class="primary" title="Depois clique num piso do modelo">Pôr manequim…</button><button id="manRemove" disabled>Tirar</button></div>
+          <div class="row2"><span>Altura</span><select id="manHeight"><option value="1.60">1,60 m</option><option value="1.75" selected>1,75 m</option><option value="1.90">1,90 m</option></select></div>
+          <div class="row2"><span>Postura</span><select id="manPose"><option value="stand">Em pé</option><option value="crouch">Agachado</option><option value="reach">Alcance (braços para cima)</option></select></div>
+          <div class="row2"><span>Girar</span><button id="manLeft" disabled title="15° para a esquerda">⟲ 15°</button><button id="manRight" disabled title="15° para a direita">15° ⟳</button></div>
+          <div class="row2"><button id="manCheck" disabled title="Compara o manequim com as peças em volta">Verificar contato</button><button id="manSelect" disabled title="Seleciona as peças em que ele encosta">Selecionar peças</button></div>
+          <p class="hint" id="manHint">Ponha o manequim num piso para ver se há espaço para chegar a um equipamento e trabalhar nele. Fica laranja; vermelho quando encosta em alguma peça.</p>
+        </div>
+      </div>
+      <div id="markPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-pen"/></svg>Marcações <button class="x" data-close="markPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="markTools">
+            <button data-mt="pen" class="on">Caneta</button><button data-mt="arrow">Seta</button><button data-mt="box">Caixa</button><button data-mt="text">Texto</button><button data-mt="nav" title="Girar e aproximar o modelo sem desenhar">Mover</button>
+          </div>
+          <div class="row2"><div id="markColors"></div><select id="markWidth" title="Espessura"><option value="2">Fina</option><option value="4" selected>Média</option><option value="8">Grossa</option></select></div>
+          <div class="row2"><button id="markUndo">Desfazer</button><button id="markClear">Limpar</button></div>
+          <div class="row2"><button id="markSave" class="primary" title="Salva a vista atual com as marcações (Vistas, na barra lateral)">Salvar como vista</button><button id="markPng">Salvar PNG</button></div>
+          <button id="markBack" hidden>Voltar à vista das marcações</button>
+          <p class="hint" id="markHint"></p>
         </div>
       </div>
       <div id="cutPanel" class="panel" hidden>
