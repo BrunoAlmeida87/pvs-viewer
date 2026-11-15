@@ -60,7 +60,23 @@ você mexe no modelo.
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
   só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
   pequenas deixam de ser desenhadas quando o celular não acompanha.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.3.0`).
+- **Tag NFC** (em Ferramentas; Android com NFC): grava numa tag adesiva a peça escolhida e a vista de agora, e depois
+  leva até ela só de encostar o celular na tag.
+  - **Gravar**: escolha a peça (na árvore, na busca ou tocando no modelo), deixe a vista como quer vê-la (ângulo e
+    zoom) e toque em **Tag NFC › Gravar na tag…** — ou segure o dedo na peça e escolha **Gravar na tag NFC…**.
+    Encoste a tag atrás do celular e segure parada até aparecer “Tag gravada”. A tag guarda um link curto com o
+    código da peça, o nome do modelo e a câmera (cabe na menor tag comum, a NTAG213; a NTAG215/216 também serve).
+  - **Ler com o visualizador fechado**: encostar o celular na tag abre o visualizador no link; o modelo guardado no
+    aparelho com aquele nome reabre sozinho, na vista gravada, com a peça selecionada e piscando em laranja por
+    alguns segundos.
+  - **Ler com o visualizador aberto**: com **Ler tags com o visualizador aberto** ligado (vale depois de abrir o
+    painel a primeira vez e permitir o NFC), encostar uma tag leva direto à peça, sem recarregar. Se a tag for de
+    outro modelo guardado no aparelho, ele é aberto; se não estiver no aparelho, a peça é procurada no modelo aberto,
+    com um aviso.
+  - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
+    link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
+    esse mesmo endereço.
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.4.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -276,6 +292,8 @@ convertida pelo `build.py`, que abre em segundos.
 - **Realidade aumentada** (Android): o modelo, como está na tela, sobre a mesa ou o piso, em escala de mesa, 1:20,
   1:50, 1:100 ou real; na mesa um dedo move e dois dedos aumentam e giram; em tamanho real um controle anda, ▲ ▼
   trocam de pavimento e você começa onde estava na caminhada ou ao lado da seleção (botão **Na mesa (RA)**).
+- **Tags NFC** (Android): gravar a peça e a vista de agora numa tag adesiva; encostar o celular na tag (com o
+  visualizador aberto ou fechado) abre o modelo nessa vista, com a peça selecionada e piscando.
 - **Realce**: a peça sob o cursor fica mais clara e mostra o nome (Exibição › Realçar a peça sob o cursor).
 - **Desfazer / refazer** (Ctrl+Z, Ctrl+Y): ocultar, isolar, mostrar tudo, colorir e mudar a opacidade.
 - **Medir**: distância (com ΔX/ΔY/ΔZ), ângulo, coordenadas de um ponto, raio e diâmetro de arestas circulares,

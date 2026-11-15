@@ -60,6 +60,7 @@
     <symbol id="i-keys" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01M7 14h10"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
     <symbol id="i-stack" viewBox="0 0 24 24"><rect x="7.5" y="3.5" width="13" height="10" rx="1.5"/><path d="M5 7v8.5A1.5 1.5 0 0 0 6.5 17H16"/><path d="M2.5 10.5v8a2 2 0 0 0 2 2H13"/></symbol>
+    <symbol id="i-nfc" viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M9.2 9.3a4 4 0 0 1 0 5.4"/><path d="M11.8 7.3a7 7 0 0 1 0 9.4"/><path d="M14.4 5.4a10 10 0 0 1 0 13.2"/></symbol>
     <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.7 6.7a1.4 1.4 0 0 1-2 0z"/><circle cx="8.3" cy="8.3" r="1.4"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
     <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/></symbol>
@@ -158,6 +159,7 @@
       <button id="drawBtn" class="tb" title="Vista 2D: planta, frente ou lateral com cotas, em SVG, PDF ou DXF"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
       <button id="routeBtn" class="tb" title="Rota de retirada: levar um equipamento por um caminho e ver onde ele bate"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
+      <button id="nfcBtn" class="tb" hidden title="Tag NFC: gravar a peça selecionada, com esta vista, numa tag adesiva; e ler tags"><svg><use href="#i-nfc"/></svg><span>NFC</span></button>
       <button id="arBtn" class="tb" hidden title="Realidade aumentada: o modelo sobre a mesa ou o piso, pela câmera do aparelho"><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
       <button id="analysisBtn" class="tb" title="Comparar versões e verificar interferências"><svg><use href="#i-layers"/></svg><span>Análise</span></button>
       <button id="animBtn" class="tb" title="Animação de montagem: peças que aparecem ou deslizam até o lugar, etapa por etapa, com câmeras (V)"><svg><use href="#i-play"/></svg><span>Animação</span></button>
@@ -401,6 +403,7 @@
         <button data-do="route"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
         <button data-do="draw"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
         <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
+        <button data-do="nfc" id="mNfc" hidden><svg><use href="#i-nfc"/></svg><span>Tag NFC</span></button>
         <button data-do="ar" id="mAr" hidden><svg><use href="#i-ar"/></svg><span>Na mesa (RA)</span></button>
         <button data-do="layers"><svg><use href="#i-stack"/></svg><span>Camadas</span></button>
         <button data-do="bigramas"><svg><use href="#i-tag"/></svg><span>Bigramas</span></button>
@@ -603,6 +606,17 @@
           <div id="drawPreview"></div>
           <div class="row2"><button id="drawPdf" disabled>PDF</button><button id="drawSvg" disabled>SVG</button><button id="drawDxf" disabled title="Em milímetros, 1:1, por camadas">DXF</button></div>
           <p class="hint" id="drawHint">Desenha o que está visível agora, com os cortes: para uma planta de um pavimento, corte em Z (ou com o plano por uma face) e escolha Planta.</p>
+        </div>
+      </div>
+      <div id="nfcPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-nfc"/></svg>Tag NFC <button class="x" data-close="nfcPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="row2"><span class="muted">Peça</span><b id="nfcItem" class="rtName">Selecione uma peça</b></div>
+          <button id="nfcWrite" class="primary nfcWide" disabled title="Grava a peça e a vista de agora (ângulo e zoom da câmera) na tag">Gravar na tag…</button>
+          <div id="nfcWait" class="nfcWait" hidden><svg><use href="#i-nfc"/></svg><span id="nfcWaitText">Encoste a tag atrás do celular</span><button id="nfcCancel">Cancelar</button></div>
+          <label class="row2" title="Enquanto o visualizador estiver aberto, encostar uma tag leva até a peça dela"><input type="checkbox" id="nfcRead"> Ler tags com o visualizador aberto</label>
+          <div id="nfcMsg" class="hint"></div>
+          <p class="hint">Escolha a peça (na árvore ou no modelo), deixe a vista como quer vê-la e toque em “Gravar na tag…”. Depois, encostar o celular na tag abre o visualizador (mesmo fechado) nessa peça e nessa vista, com ela piscando.</p>
         </div>
       </div>
       <div id="routePanel" class="panel" hidden>

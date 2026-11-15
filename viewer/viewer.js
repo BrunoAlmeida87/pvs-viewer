@@ -32,7 +32,8 @@ import { exportMobileZip } from "./lib/browser-mobile-export.js";
 import { exportRawModelZip } from "./lib/raw-model-export.js";
 import { previewChunks, completedParts, MOBILE_PREVIEW_TRIANGLES } from "./lib/mobile-preview.js";
 import { zipConverted } from "./lib/zipsrc.js";
-import { addRecent, listRecent, removeRecent, allow, canKeep, keepZip, keptFile, dropKept, sizeText } from "./lib/recent.js";
+import { addRecent, listRecent, removeRecent, allow, canKeep, keepZip, keptFile, dropKept, sizeText, nameRecent, recentId } from "./lib/recent.js";
+import { parseTag, sameModel, modelKey } from "./lib/nfctag.js";
 import { initMobile } from "./ui/mobile.js";
 import { initUndo } from "./ui/undo.js";
 import { initAR } from "./ui/ar.js";
@@ -42,6 +43,7 @@ import { initMannequin } from "./ui/mannequin.js";
 import { initRoute } from "./ui/route.js";
 import { initExports } from "./ui/exports.js";
 import { initDrawing } from "./ui/drawing.js";
+import { initNFC } from "./ui/nfc.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -436,6 +438,39 @@ function setHoverPart(p) {
   requestRender();
 }
 
+// A short orange pulse on some parts (the part an NFC tag points to): their items are tinted a
+// little each frame, then written back as they are.
+let flash = null; // {items: Uint32Array, t0, ms}
+const FLASH_RGB = [255, 140, 0], FLASH_PULSES = 3;
+function paintFlash() {
+  if (!flash) return;
+  const t = (performance.now() - flash.t0) / flash.ms;
+  if (t >= 1) return;
+  const k = 0.65 * (0.5 - 0.5 * Math.cos(t * FLASH_PULSES * 2 * Math.PI));
+  for (const i of flash.items) {
+    if (i >= nItems) continue;
+    const o = i * 4;
+    for (let c = 0; c < 3; c++) itemTexData[o + c] += (FLASH_RGB[c] - itemTexData[o + c]) * k;
+  }
+}
+function flashTick() {
+  if (!flash) return;
+  for (const i of flash.items) if (i < nItems) writeItems(i, i + 1);
+  if (performance.now() - flash.t0 >= flash.ms) flash = null;
+  else { paintFlash(); requestAnimationFrame(flashTick); }
+  paintHover();
+  itemTex.needsUpdate = true;
+  requestRender();
+}
+app.flashNodes = function (nodes, ms = 3600) {
+  if (!itemTex || !nodes.length) return;
+  const { start, list } = itemsIndex(), items = [];
+  app.forParts(nodes, (p) => { for (let k = start[p]; k < start[p + 1]; k++) items.push(list[k]); });
+  const running = !!flash;
+  flash = { items: Uint32Array.from(items), t0: performance.now(), ms };
+  if (!running) requestAnimationFrame(flashTick);
+};
+
 // Which meshes take part in the frame, from the item states and the display style. The result
 // is stored in c.want; applyLod() then drops chunks whose parts are too small on screen.
 function updateVisibility() {
@@ -480,6 +515,7 @@ function applyLod(minPx, noEdges = false, eye = null, fpx = 0) {
 // Re-derive the GPU state after any change of visibility, selection or colour.
 app.refresh = function () {
   writeItems(0, nItems);
+  paintFlash();
   paintHover();
   itemTex.needsUpdate = true;
   updateVisibility();
@@ -640,6 +676,7 @@ app.setPartOffsets = function (off) {
 // "state" event (the tree and panels would re-render on every frame).
 app.refreshQuiet = function () {
   writeItems(0, nItems);
+  paintFlash();
   paintHover();
   itemTex.needsUpdate = true;
   updateVisibility();
@@ -874,12 +911,22 @@ async function pickModel() {
   // Coming back to the viewer (the browser closed the tab, or the app was reopened): the last model
   // opens by itself when it can be read without asking anything — a copy kept on this device, a
   // folder or ZIP the browser still lets the site read, or a folder of the desktop app.
+  // A link from an NFC tag names its model: open that one among the models of this device.
   if (!params.has("abrir")) {
-    const last = (await listRecent())[0];
-    if (last) {
+    const recent = await listRecent(), tag = parseTag(location.href);
+    const wanted = tag && tag.model ? recent.find((r) => r.model && sameModel(r.model, tag.model)) : null;
+    const last = wanted || recent[0];
+    if (wanted && wanted !== recent[0]) {
+      try {
+        const m = await reopen(wanted, false);
+        if (m) { reopened = wanted; status("Abrindo " + wanted.name + " (da tag NFC)…"); remember(wanted); return m; }
+      } catch (e) { console.warn("reabrir:", e); }
+      // it needs a tap (permission to read the folder again): show the list instead of another model
+      $("#openErr").textContent = `A tag é do modelo “${modelKey(tag.model)}”: toque em “${wanted.name}” abaixo para abri-lo.`;
+    } else if (last) {
       try {
         const m = await reopen(last, false);
-        if (m) { reopened = last; status("Reabrindo " + last.name + "… (Abrir para trocar de modelo)"); addRecent(last); return m; }
+        if (m) { reopened = last; status("Reabrindo " + last.name + "… (Abrir para trocar de modelo)"); remember(last); return m; }
       } catch (e) { console.warn("reabrir:", e); }
     }
   }
@@ -919,7 +966,7 @@ async function pickModel() {
           const dir = await window.showDirectoryPicker({ id: "pvs-model", mode: "read" });
           status("Procurando o modelo na pasta…");
           const m = await fromDirectory(dir);
-          addRecent({ kind: "dir", name: dir.name, handle: dir });
+          remember({ kind: "dir", name: dir.name, handle: dir });
           card.hidden = true;
           resolve(m);
         } catch (e) { fail(e); }
@@ -948,7 +995,7 @@ async function pickModel() {
         if (!h || h.kind !== "directory") throw new Error("Solte uma pasta (a que contém o .pvs e os .ol) ou um arquivo ZIP exportado. Neste navegador, use os botões.");
         status("Procurando o modelo na pasta…");
         const m = await fromDirectory(h);
-        addRecent({ kind: "dir", name: h.name, handle: h });
+        remember({ kind: "dir", name: h.name, handle: h });
         card.hidden = true;
         resolve(m);
       } catch (err) { fail(err); }
@@ -964,7 +1011,7 @@ async function pickModel() {
     async function openZip(file, handle) {
       status("Lendo o ZIP…");
       const src = await zipConverted(file);
-      if (handle) addRecent({ kind: "zip", name: file.name, handle });
+      if (handle) remember({ kind: "zip", name: file.name, handle });
       else keepAfterLoad(file); // no lasting access to the file: keep a copy on the device
       card.hidden = true;
       resolve({ kind: "converted", src });
@@ -999,7 +1046,7 @@ async function pickModel() {
           try {
             status("Abrindo " + r.name + "…");
             const m = await reopen(r, true);
-            addRecent(r);
+            remember(r);
             reopened = r;
             card.hidden = true;
             resolve(m);
@@ -1027,6 +1074,8 @@ async function pickModel() {
 // Open a model from the recent list. ask: may ask the browser for permission (inside a click).
 // Returns null when it cannot be opened without asking.
 let reopened = null;
+let openedRecent = null; // id of the recent entry the model came from (to note which model it holds)
+const remember = (entry) => { openedRecent = recentId(entry); return addRecent(entry); };
 async function reopen(r, ask) {
   if (r.kind === "path") {
     if (!window.desktop || !window.desktop.openFolder) return null;
@@ -1058,8 +1107,10 @@ function keepAfterLoad(file) {
     started = true;
     let shown = -1;
     try {
-      await keepZip(file, (f) => { const p = Math.floor(f * 10) * 10; if (p !== shown) { shown = p; status(`Guardando o modelo neste aparelho… ${p}%`); } });
+      const kept = await keepZip(file, (f) => { const p = Math.floor(f * 10) * 10; if (p !== shown) { shown = p; status(`Guardando o modelo neste aparelho… ${p}%`); } });
       status("Modelo guardado neste aparelho: ele reabre sozinho quando você voltar.");
+      openedRecent = recentId({ kind: "kept", path: kept });
+      nameRecent(openedRecent, app.title);
     } catch (e) {
       console.warn("guardar:", e);
       status("Não foi possível guardar o modelo neste aparelho: " + (e.message || e) + " Ao fechar, abra o ZIP de novo.");
@@ -2973,6 +3024,7 @@ initMannequin(app);
 initRoute(app);
 initExports(app);
 initDrawing(app);
+initNFC(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.
@@ -2996,17 +3048,41 @@ app.findByCode = function (code) {
   const set = new Set(hits); // an assembly and its own parts: keep the assembly only
   return hits.filter((n) => !set.has(t.parent[n]));
 };
-app.on("loaded", async () => {
-  const code = wantedCode();
-  if (!code) return;
+// Select a part by its code (or name), load it if needed, look at it — from `cam` when given, else
+// framed — and make it pulse for a moment. Returns the nodes found.
+app.goToPart = async function (code, cam = null, label = "") {
   const nodes = app.findByCode(code);
-  if (!nodes.length) { status(`Nenhuma peça com o código “${code}” neste modelo.`); return; }
+  if (!nodes.length) { status(`Nenhuma peça com o código “${code}” neste modelo.`); return nodes; }
   const need = [];
   app.forParts(nodes, (p) => { if (!isLoaded(p) && app.availableParts[p]) need.push(p); });
   if (need.length) await app.loadParts(need);
+  // a hidden part (isolated away, a hidden view tab…) is shown again: it is what was asked for
+  const hidden = [];
+  app.forParts(nodes, (p) => { if (!app.partVisible[p]) hidden.push(p); });
+  if (hidden.length) { for (const p of hidden) app.partVisible[p] = 1; app.refresh(); }
   app.select(nodes, "replace");
-  app.frameNodes(nodes);
-  status(`${code}: ${nodes.length === 1 ? app.tree.names[nodes[0]] : nodes.length + " itens"}`);
+  if (cam) app.setCamera(cam); else app.frameNodes(nodes);
+  app.flashNodes(nodes);
+  const what = nodes.length === 1 ? app.tree.names[nodes[0]] : nodes.length + " itens";
+  status((label ? label + " · " : "") + (what === code ? code : `${code}: ${what}`));
+  return nodes;
+};
+// ...?peca=CODE[&m=MODEL&c=CAMERA] (a part link, or a link read from an NFC tag)
+let linkDone = false;
+app.on("loaded", async () => {
+  if (openedRecent) nameRecent(openedRecent, app.title);
+  if (linkDone) return;
+  linkDone = true;
+  const tag = parseTag(location.href);
+  if (!tag) return;
+  const other = tag.model && !sameModel(tag.model, app.title);
+  await app.goToPart(tag.code, other ? null : tag.cam, other ? `Tag do modelo “${modelKey(tag.model)}”, mostrando em ${modelKey(app.title)}` : "");
+  // done: reopening the viewer later goes back to where you were, not to this part again
+  if (tag.cam || tag.model) {
+    const u = new URL(location.href);
+    for (const k of ["peca", "m", "c"]) u.searchParams.delete(k);
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
+  }
 });
 app.partLink = function (node) {
   const ki = app.keyIndex("part_objectid");

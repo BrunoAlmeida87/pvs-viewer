@@ -101,6 +101,7 @@ export function initMobile(app) {
     cut: () => press("#cutBtn"),
     measure: () => press("#measureBtn"),
     ar: () => app.startAR?.(),
+    nfc: () => app.openNFC?.(),
     labels: () => app.toggleLabels(),
     mark: () => press("#markBtn"),
     man: () => press("#manBtn"),
