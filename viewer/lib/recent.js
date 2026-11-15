@@ -20,12 +20,14 @@ function tx(mode, fn) {
   }));
 }
 
-// entry: { kind: "dir" | "zip" | "path" | "kept", name, handle?, path?, size? }
-// ("kept": a copy of a ZIP stored on this device, see keepZip below; path = its stored name)
+// entry: { kind: "dir" | "zip" | "path" | "kept", name, handle?, path?, size?, model? }
+// ("kept": a copy of a ZIP stored on this device, see keepZip below; path = its stored name;
+// model: the name of the model inside, once it has been opened — NFC tags name the model)
 export async function addRecent(entry) {
   try {
-    const id = entry.kind + ":" + (entry.path || entry.name);
-    await tx("readwrite", (s) => s.put({ ...entry, id, when: Date.now() }));
+    const id = recentId(entry);
+    const old = entry.model ? null : (await listRecent()).find((r) => r.id === id);
+    await tx("readwrite", (s) => s.put({ ...entry, ...(old && old.model ? { model: old.model } : {}), id, when: Date.now() }));
     const all = await listRecent();
     for (const old of all.slice(MAX)) await removeRecent(old.id);
   } catch { /* private window or storage blocked: no list */ }
@@ -36,6 +38,15 @@ export async function listRecent() {
     const all = await tx("readonly", (s) => s.getAll());
     return (all || []).sort((a, b) => b.when - a.when);
   } catch { return []; }
+}
+
+// Note which model an entry holds (its id is kind + ":" + (path || name), as in addRecent).
+export const recentId = (entry) => entry.kind + ":" + (entry.path || entry.name);
+export async function nameRecent(id, model) {
+  try {
+    const r = (await listRecent()).find((x) => x.id === id);
+    if (r && r.model !== model) await tx("readwrite", (s) => s.put({ ...r, model }));
+  } catch { /* storage blocked */ }
 }
 
 export async function removeRecent(id) {
