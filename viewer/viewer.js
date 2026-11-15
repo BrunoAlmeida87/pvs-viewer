@@ -1225,6 +1225,73 @@ async function firstParts(ask) {
   return touch && selected === undefined ? new Uint8Array(app.nParts) : selected;
 }
 
+// The first load: what the user picks, or — opened by an NFC tag of this model — what was loaded
+// when the tag was written (the general preview and / or some sections, or everything).
+async function loadFirst(ask, preview) {
+  const tag = parseTag(location.href);
+  const r = tag && tag.regions && (!tag.model || sameModel(tag.model, app.title)) ? tag.regions : null;
+  if (!r) return loadParts(await firstParts(ask), preview);
+  if (r.all) return loadParts(null, false);
+  const f = app.regionFlags(r.ids);
+  if (r.preview) { await loadParts(null, preview); if (f) await loadParts(f); }
+  else await loadParts(f || new Uint8Array(app.nParts)); // the part itself comes with app.goToPart
+}
+
+// ---------------------------------------------------------------- sections (what an NFC tag remembers)
+// The sections are numbered as in the "Escolha o que carregar" dialog: each level-1 assembly
+// followed by its level-2 ones.
+function eachRegion(fn) {
+  let k = 0;
+  for (const n of app.kids(0)) { fn(n, k++, 1); for (const c of app.kids(n)) fn(c, k++, 2); }
+}
+app.regionFlags = function (ids) {
+  if (!ids || !ids.length) return null;
+  const want = new Set(ids), f = new Uint8Array(app.nParts), t = app.tree;
+  let any = false;
+  eachRegion((n, k) => { if (want.has(k)) { f.fill(1, t.p0[n], t.p1[n]); any = true; } });
+  if (!any) return null;
+  for (let p = 0; p < f.length; p++) f[p] &= app.availableParts[p];
+  return f;
+};
+// Parts drawn by the general preview of a large converted model (null when there is none).
+function previewParts() {
+  if (!source || source.kind !== "converted") return null;
+  const cs = source.meta.chunks, all = cs.map((_, k) => k), pv = previewChunks(cs, all);
+  if (pv.length >= all.length) return null;
+  const f = new Uint8Array(app.nParts);
+  for (const k of pv) for (let i = cs[k].io; i < cs[k].io + cs[k].ic; i++) f[itemPart[i]] = 1;
+  return { chunks: pv, parts: f };
+}
+// What is loaded now, for a tag: {all} or {preview, ids (fully loaded sections)}.
+app.loadedRegions = function () {
+  const t = app.tree, av = app.availableParts, L = app.partLoaded;
+  let missing = false;
+  for (let p = 0; p < app.nParts && !missing; p++) if (av[p] && !L[p]) missing = true;
+  if (!missing) return { all: true };
+  const pv = previewParts();
+  const preview = !!pv && pv.chunks.every((k) => source.loaded[k]);
+  const full = (n) => { let any = false; for (let p = t.p0[n]; p < t.p1[n]; p++) if (av[p]) { if (!L[p]) return false; any = true; } return any; };
+  const inPreview = (n) => { for (let p = t.p0[n]; p < t.p1[n]; p++) if (av[p] && !pv.parts[p]) return false; return true; };
+  const ids = [];
+  let skipUnder = -1;
+  eachRegion((n, k, level) => {
+    if (level === 2 && t.parent[n] === skipUnder) return;
+    if (full(n) && !(preview && inPreview(n))) { ids.push(k); if (level === 1) skipUnder = n; }
+  });
+  return { preview, ids };
+};
+// Load what a tag says was loaded (nothing is unloaded).
+app.loadRegions = async function (r) {
+  if (!r) return;
+  if (r.all) { await loadParts(null); return; }
+  const f = app.regionFlags(r.ids) || new Uint8Array(app.nParts);
+  const pv = r.preview ? previewParts() : null;
+  if (pv) for (let p = 0; p < f.length; p++) f[p] |= pv.parts[p] & app.availableParts[p];
+  let need = false;
+  for (let p = 0; p < f.length && !need; p++) if (f[p] && !isLoaded(p)) need = true;
+  if (need) await loadParts(f);
+};
+
 async function loadConverted(src, ask) {
   const [meta, t, itemsBuf, partsBuf] = await Promise.all([
     src.json("chunks.json"), src.json("tree.json"), src.buf("items.bin"), src.buf("parts.bin"),
@@ -1250,7 +1317,7 @@ async function loadConverted(src, ask) {
   addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
-  await loadParts(await firstParts(ask === "auto" ? (meta.tris || Infinity) > MOBILE_PREVIEW_TRIANGLES : ask), touch);
+  await loadFirst(ask === "auto" ? (meta.tris || Infinity) > MOBILE_PREVIEW_TRIANGLES : ask, touch);
   app.emit("loaded");
 }
 
@@ -1306,7 +1373,7 @@ async function loadRaw(m, ask) {
   }
   const diag = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   source = { kind: "raw", m, t, small: isFinite(diag) ? diag * 0.004 : 0 }; // same rule as tools/build.py
-  await loadParts(await firstParts(ask === "auto" ? t.shapes.length > 1500 : ask));
+  await loadFirst(ask === "auto" ? t.shapes.length > 1500 : ask, false);
   app.emit("loaded");
 }
 
@@ -3028,12 +3095,7 @@ initNFC(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.
-function wantedCode() {
-  const q = new URLSearchParams(location.search).get("peca");
-  if (q) return q;
-  const m = /[#&]peca=([^&]+)/.exec(location.hash);
-  return m ? decodeURIComponent(m[1]) : "";
-}
+function wantedCode() { return parseTag(location.href)?.code || ""; }
 const normCode = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.\/]+/g, "");
 app.findByCode = function (code) {
   const want = normCode(code), t = app.tree, ki = app.keyIndex("part_objectid");
@@ -3050,9 +3112,10 @@ app.findByCode = function (code) {
 };
 // Select a part by its code (or name), load it if needed, look at it — from `cam` when given, else
 // framed — and make it pulse for a moment. Returns the nodes found.
-app.goToPart = async function (code, cam = null, label = "") {
+app.goToPart = async function (code, cam = null, label = "", regions = null) {
   const nodes = app.findByCode(code);
   if (!nodes.length) { status(`Nenhuma peça com o código “${code}” neste modelo.`); return nodes; }
+  if (regions) await app.loadRegions(regions); // the sections loaded when the tag was written
   const need = [];
   app.forParts(nodes, (p) => { if (!isLoaded(p) && app.availableParts[p]) need.push(p); });
   if (need.length) await app.loadParts(need);
@@ -3080,7 +3143,7 @@ app.on("loaded", async () => {
   // done: reopening the viewer later goes back to where you were, not to this part again
   if (tag.cam || tag.model) {
     const u = new URL(location.href);
-    for (const k of ["peca", "m", "c"]) u.searchParams.delete(k);
+    for (const k of ["p", "peca", "m", "c", "r"]) u.searchParams.delete(k);
     history.replaceState(null, "", u.pathname + u.search + u.hash);
   }
 });

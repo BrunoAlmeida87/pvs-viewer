@@ -34,7 +34,7 @@ export function initNFC(app) {
     const n = app.focus;
     if (!app.tree || n < 0 || writing) return;
     const code = codeOf(n);
-    const url = tagURL(location.href, { code, model: app.title, cam: app.getCamera() });
+    const url = tagURL(location.href, { code, model: app.title, cam: app.getCamera(), regions: app.loadedRegions() });
     const fit = tagFits(url);
     if (!fit.chip) { say(`O link ficou grande demais para uma tag (${fit.bytes} bytes).`); return; }
     writing = new AbortController();
@@ -105,7 +105,7 @@ export function initNFC(app) {
       await app.goToPart(tag.code, null, `Tag do modelo “${modelKey(tag.model)}”`);
       return;
     }
-    await app.goToPart(tag.code, tag.cam, "Tag NFC");
+    await app.goToPart(tag.code, tag.cam, "Tag NFC", tag.regions);
   }
   app.on("loaded", () => { if (pending) { const p = pending; pending = null; go(p.tag, p.href); } });
 

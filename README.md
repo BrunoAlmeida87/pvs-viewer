@@ -65,18 +65,21 @@ você mexe no modelo.
   - **Gravar**: escolha a peça (na árvore, na busca ou tocando no modelo), deixe a vista como quer vê-la (ângulo e
     zoom) e toque em **Tag NFC › Gravar na tag…** — ou segure o dedo na peça e escolha **Gravar na tag NFC…**.
     Encoste a tag atrás do celular e segure parada até aparecer “Tag gravada”. A tag guarda um link curto com o
-    código da peça, o nome do modelo e a câmera (cabe na menor tag comum, a NTAG213; a NTAG215/216 também serve).
+    código da peça, o nome do modelo, a câmera e o que estava carregado (as seções escolhidas, a Prévia geral ou
+    tudo). Em geral cabe na menor tag comum, a NTAG213; com muitas seções carregadas, o painel avisa que precisa de
+    uma NTAG215 ou NTAG216.
   - **Ler com o visualizador fechado**: encostar o celular na tag abre o visualizador no link; o modelo guardado no
-    aparelho com aquele nome reabre sozinho, na vista gravada, com a peça selecionada e piscando em laranja por
-    alguns segundos.
+    aparelho com aquele nome reabre sozinho, com as mesmas seções carregadas (sem perguntar), na vista gravada, com a
+    peça selecionada e piscando em laranja por alguns segundos.
   - **Ler com o visualizador aberto**: com **Ler tags com o visualizador aberto** ligado (vale depois de abrir o
-    painel a primeira vez e permitir o NFC), encostar uma tag leva direto à peça, sem recarregar. Se a tag for de
+    painel a primeira vez e permitir o NFC), encostar uma tag leva direto à peça, sem recarregar, carregando as seções
+    da tag que faltarem (o que já está carregado continua). Se a tag for de
     outro modelo guardado no aparelho, ele é aberto; se não estiver no aparelho, a peça é procurada no modelo aberto,
     com um aviso.
   - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
     link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
     esse mesmo endereço.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.4.0`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.4.1`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
