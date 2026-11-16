@@ -19,8 +19,9 @@ você mexe no modelo.
   últimos modelos; os outros aparecem em **Abrir › Abertos recentemente**, onde o ✕ apaga a cópia. A cópia só é
   apagada por você ou se você limpar os dados do site no navegador (Configurações do Chrome › Configurações do
   site); para o Chrome não apagá-la quando faltar espaço, instale o visualizador na tela inicial.
-  Modelos pequenos carregam inteiros; nos grandes aparece a escolha de seções, e **Prévia geral** carrega primeiro
-  até cerca de 2,5 milhões de triângulos (o resto fica em **Ferramentas › Carregar mais**).
+  Modelos pequenos carregam inteiros; nos grandes aparece a escolha de seções: as seções marcadas carregam
+  inteiras, e **Prévia geral** mostra o modelo todo com até cerca de 2,5 milhões de triângulos, as peças maiores
+  primeiro (o resto fica em **Ferramentas › Carregar mais**).
 - **Navegar**: um dedo gira (em torno do ponto tocado); dois dedos aproximam, afastam e deslocam. Toque seleciona;
   **dois toques** numa peça a enquadram (no fundo, enquadram tudo); **segurar o dedo** numa peça abre o menu dela
   (enquadrar, isolar, ocultar, vistas, copiar link…).

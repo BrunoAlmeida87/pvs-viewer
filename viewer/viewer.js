@@ -1230,7 +1230,11 @@ async function firstParts(ask) {
 async function loadFirst(ask, preview) {
   const tag = parseTag(location.href);
   const r = tag && tag.regions && (!tag.model || sameModel(tag.model, app.title)) ? tag.regions : null;
-  if (!r) return loadParts(await firstParts(ask), preview);
+  if (!r) {
+    // only "Prévia geral" (null) is cut to the preview budget; sections the user marked load whole
+    const want = await firstParts(ask);
+    return loadParts(want, preview && want === null);
+  }
   if (r.all) return loadParts(null, false);
   const f = app.regionFlags(r.ids);
   if (r.preview) { await loadParts(null, preview); if (f) await loadParts(f); }
