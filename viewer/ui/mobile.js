@@ -105,6 +105,7 @@ export function initMobile(app) {
     labels: () => app.toggleLabels(),
     mark: () => press("#markBtn"),
     man: () => press("#manBtn"),
+    goto: () => press("#gotoBtn"),
     route: () => press("#routeBtn"),
     draw: () => press("#drawBtn"),
     walk: () => { for (const p of panels) if (!p.hidden) p.querySelector("[data-close]")?.click(); app.setWalk(true, true); },

@@ -11,13 +11,20 @@
 //   you. It is where the walk mode stood (looking the same way), else next to the selection, else
 //   the middle of the model. "Mover" aims again, to put it on a chosen spot of the floor.
 //
+// "Ir até… › Na RA" walks a route at real size: the model starts where the route starts (you stand
+// there, facing the way it goes) and is hidden — the blue band and its arrows lie on the real
+// floor, an arrow at the top points where to go, with the next step and the distance. "Acertar
+// posição" fixes where you are: tap the floor at the foot of an equipment; a second one, a few
+// metres from the first, also fixes the direction.
+//
 // "Buscar" finds an item by name or code: it turns orange and everything else transparent; on the
 // table the view zooms in on it (only what is around it is drawn), at real size it comes in front
 // of you. "✕ name" takes the highlight away. Without typing (the keyboard may not open over the
 // camera picture), the list offers the systems (bigramas), then the equipment of the one chosen.
 import * as THREE from "three";
 import { $, status, VERSION } from "./util.js";
-import { BIGRAMA_KEY } from "../lib/bigrama.js";
+import { itemPicker } from "./picker.js";
+import { along } from "../lib/navpath.js";
 
 const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown this long
 const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
@@ -25,9 +32,6 @@ const MAX_TABLE = 1 / 5; // pinching on the table stops here (bigger is the real
 const SPEEDS = [0.75, 1.5, 3, 6]; // m/s at full thumb stick
 const FOCUS_TABLE = 0.25; // metres: on the table the found item is zoomed to about this size
 const FOCUS_AROUND = 0.3; // metres: radius of what is still drawn around it on the table
-const MAX_RESULTS = 50;
-// as in the Search tab: lower case, no accents, no separators ("LPREX" finds "LPR-EX20003")
-const norm = (s) => String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.\/]+/g, "");
 // on the table the side of the model the isometric view looks at faces the phone:
 // model (1, -1, 0) is room (1, 0, 1) once z-up becomes y-up
 const ISO_ANGLE = Math.atan2(1, 1);
@@ -50,6 +54,8 @@ export function initAR(app) {
     let ok = false;
     try { ok = !!navigator.xr && window.isSecureContext && await navigator.xr.isSessionSupported("immersive-ar"); } catch { ok = false; }
     for (const b of buttons) b.hidden = !ok;
+    const go = $("#goAr");
+    if (go) { go.hidden = !ok; go.onclick = () => start({ real: true, nav: true }); }
   })();
 
   // ------------------------------------------------------------ the ring that shows where the model goes
@@ -80,6 +86,9 @@ export function initAR(app) {
   let focus = null; // the found item: {nodes, box, name, ghost, sel} (ghost and selection from before)
   let zoom = null;  // the view zoomed on it: {anchor, clip}; the anchor replaces the preset's
   let tween = null; // a smooth move of the model: {t0, dur, p0, p1, s0, s1}
+  let nav = null;   // walking a route: {route, steps, name, s, cal: [{M, R}], shown, hideModel, done}
+  let navCal = null; // the equipment whose foot is being tapped to fix the position: {nodes, box, name}
+  let hitOk = false; // a surface under the ring this frame
 
   const real = () => preset === "real";
   const anchor = () => (zoom ? zoom.anchor : real() ? realAnchor : tableAnchor);
@@ -134,7 +143,8 @@ export function initAR(app) {
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
     fwd.normalize();
     const y = floorY !== null && floorY < camPos.y - 0.9 ? floorY : camPos.y - 1.4;
-    pos.set(camPos.x + fwd.x * 0.8, y, camPos.z + fwd.z * 0.8);
+    const ahead = nav ? 0 : 0.8; // a route starts where you stand
+    pos.set(camPos.x + fwd.x * ahead, y, camPos.z + fwd.z * ahead);
     faceCamera();
     setPhase("placed");
   }
@@ -175,9 +185,12 @@ export function initAR(app) {
     try {
       app.closeMobileSide?.();
       for (const p of document.querySelectorAll("#floaters .panel")) if (!p.hidden) p.querySelector("[data-close]")?.click();
+      const route = opts.nav && app.navRoute ? app.navRoute() : null;
+      nav = route ? startNav(route) : null;
+      if (nav) app.navShowRoute?.(true);
       const from = app.xr.begin();
-      realAnchor.copy(from ? from.point : tableAnchor);
-      realYaw = from ? from.yaw : null;
+      if (nav) { realAnchor.set(...route.route.points[0]); realYaw = nav.yaw0; }
+      else { realAnchor.copy(from ? from.point : tableAnchor); realYaw = from ? from.yaw : null; }
       r.xr.setReferenceSpaceType("local");
       await r.xr.setSession(session);
       refSpace = r.xr.getReferenceSpace();
@@ -193,7 +206,10 @@ export function initAR(app) {
     pos.set(0, 0, -1);
     floorY = null;
     phase = "search";
-    setPreset(opts.real ? "real" : "table");
+    setPreset(opts.real || nav ? "real" : "table");
+    ui.classList.toggle("nav", !!nav);
+    $("#arNav").hidden = !nav;
+    if (nav) { app.xr.hideModel(nav.hideModel); showNavModel(); hint.textContent = "Fique no começo do caminho, virado para onde ele vai. Depois, “Acertar posição” num equipamento perto."; }
     showSpeed();
     $("#arVersion").textContent = "v" + VERSION;
     ui.hidden = false;
@@ -214,6 +230,11 @@ export function initAR(app) {
     // the found item stays selected in the viewer; the transparency goes back to what it was
     if (focus) { app.setGhost(focus.ghost); focus = null; }
     zoom = null; tween = null;
+    if (nav) { app.navShowRoute?.(false); nav = null; }
+    navCal = null;
+    navArrow.visible = false;
+    ui.classList.remove("nav");
+    $("#arNav").hidden = true;
     showFocus();
     closeSearch();
     app.xr.end();
@@ -246,6 +267,7 @@ export function initAR(app) {
         break;
       }
     }
+    hitOk = found;
     if (found && hitPos.y < camPos.y - 0.9) floorY = floorY === null ? hitPos.y : Math.min(floorY, hitPos.y);
     if (phase === "search" && real() && cam.cameras.length) enterReal();
     if (found && phase === "search") setPhase("aim");
@@ -267,8 +289,9 @@ export function initAR(app) {
       pos.addScaledVector(fwd, -joy.y * v).addScaledVector(side, -joy.x * v);
       pos.y -= joy.vert * Math.min(v, 1.2 * dt);
     }
-    ring.visible = found && phase !== "placed";
+    ring.visible = found && (phase !== "placed" || !!navCal);
     if (ring.visible) ring.matrix.makeTranslation(hitPos.x, hitPos.y, hitPos.z);
+    if (nav && phase === "placed") navFrame(cam, t); else navArrow.visible = false;
     app.xr.place(phase === "search" ? null : modelMatrix());
     adaptLod(t);
     app.xr.render(lod.px, marks);
@@ -388,7 +411,8 @@ export function initAR(app) {
     if (touches.size === 0) {
       const tap = !g.moved && !g.multi && performance.now() - g.t0 < 500;
       g = null;
-      if (tap && phase === "aim") { setPhase("placed"); if (focus) zoomTo(focus.box); }
+      if (tap && navCal) { if (hitOk) applyCalib(); else hint.textContent = "Aponte para o piso até aparecer o anel, e toque."; }
+      else if (tap && phase === "aim") { setPhase("placed"); if (focus) zoomTo(focus.box); }
     } else if (touches.size === 1) { // one finger left: the turn / scale is over, nothing until it lifts
       g.moved = true;
     }
@@ -398,98 +422,19 @@ export function initAR(app) {
 
   // ------------------------------------------------------------ find an item, highlight it and zoom on it
   const panel = $("#arSearch"), q = $("#arQ"), list = $("#arResults"), chip = $("#arFocus");
-  let index = null; // normalized "name|code" of every node, built at the first search
-  let browse = null; // the bigrama whose equipment is listed (nothing typed), or null for the list of systems
-  app.on("model", () => { index = null; browse = null; });
-  function buildIndex() {
-    const t = app.tree, ki = app.keyIndex("part_objectid");
-    index = new Array(app.nNodes);
-    for (let n = 0; n < app.nNodes; n++) index[n] = norm(t.names[n]) + "|" + (ki >= 0 ? norm(app.prop(n, ki) ?? "") : "");
-  }
-  // every word must appear; an assembly and its own parts: the assembly only
-  function find(text) {
-    const words = text.split(/\s+/).map(norm).filter(Boolean);
-    if (!words.length) return [];
-    if (!index) buildIndex();
-    const hits = [];
-    for (let n = 1; n < app.nNodes && hits.length < 2000; n++) if (words.every((w) => index[n].includes(w))) hits.push(n);
-    const set = new Set(hits), parent = app.tree.parent;
-    const top = hits.filter((n) => { for (let p = parent[n]; p >= 0; p = parent[p]) if (set.has(p)) return false; return true; });
-    return top;
-  }
-  function row(label, sub, onClick) {
-    const b = document.createElement("button");
-    b.className = "arHit";
-    const name = document.createElement("b"), small = document.createElement("small");
-    name.textContent = label;
-    small.textContent = sub;
-    b.append(name, small);
-    b.onclick = onClick;
-    return b;
-  }
-  const partsText = (n) => { const k = app.partCount(n); return k === 1 ? "1 peça" : k.toLocaleString("pt-BR") + " peças"; };
-  const note = (text) => { const p = document.createElement("p"); p.textContent = text; list.append(p); };
-  // equipment of a bigrama: the nodes with that code of their own that are not inside another one
-  function equipmentOf(code) {
-    const ki = app.keyIndex(BIGRAMA_KEY), eff = app.bigramaEff, parent = app.tree.parent, out = [];
-    if (ki < 0 || !eff) return out;
-    for (let n = 1; n < app.nNodes; n++) if (app.prop(n, ki) === code && eff[parent[n]] !== code) out.push(n);
-    return out.sort((a, b) => app.tree.names[a].localeCompare(app.tree.names[b], "pt-BR", { numeric: true }));
-  }
-  function showBrowse() {
-    // what is selected in the viewer is one tap away
-    if (app.selNodes.size && !focus && !browse) {
-      const nodes = [...app.selNodes];
-      list.append(row(nodes.length === 1 ? app.tree.names[nodes[0]] : `Seleção atual (${nodes.length} itens)`, "selecionado no visualizador", () => pick(nodes)));
-    }
-    const systems = (app.bigramaList || []).filter((g) => g.code !== "");
-    if (!browse) {
-      note(systems.length ? "Digite o nome ou o código, ou escolha um sistema:" : "Digite o nome ou o código (por exemplo DT20003).");
-      for (const g of systems) {
-        list.append(row(g.code, `${g.equip.toLocaleString("pt-BR")} equipamento${g.equip === 1 ? "" : "s"} · ${g.parts.toLocaleString("pt-BR")} peças`, () => {
-          browse = g.code;
-          showResults();
-          list.scrollTop = 0;
-        }));
-      }
-      return;
-    }
-    const back = row("◂ Sistemas", "voltar à lista de bigramas", () => { browse = null; showResults(); list.scrollTop = 0; });
-    back.classList.add("arBack");
-    list.append(back);
-    const eq = equipmentOf(browse);
-    if (eq.length > 1) {
-      const all = row(`Todo o sistema ${browse}`, `${eq.length.toLocaleString("pt-BR")} equipamentos em destaque`, () => pick(eq, `Sistema ${browse}`));
-      all.classList.add("arAll");
-      list.append(all);
-    }
-    const parent = app.tree.parent;
-    for (const n of eq) list.append(row(app.tree.names[n], (parent[n] > 0 ? app.tree.names[parent[n]] + " · " : "") + partsText(n), () => pick([n])));
-    if (!eq.length) note("Nenhum equipamento com este bigrama.");
-  }
-  function showResults() {
-    list.innerHTML = "";
-    const text = q.value.trim();
-    if (!text) { showBrowse(); return; }
-    const hits = find(text);
-    if (!hits.length) { note("Nada encontrado."); return; }
-    const parent = app.tree.parent;
-    for (const n of hits.slice(0, MAX_RESULTS)) {
-      const up = parent[n] > 0 ? app.tree.names[parent[n]] + " · " : "";
-      list.append(row(app.tree.names[n], up + partsText(n), () => pick([n])));
-    }
-    if (hits.length > MAX_RESULTS) note(`Mais ${(hits.length - MAX_RESULTS).toLocaleString("pt-BR")} resultados: escreva mais do nome.`);
-  }
-  let searchT = 0;
-  q.addEventListener("input", () => { clearTimeout(searchT); searchT = setTimeout(showResults, 200); });
-  q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(searchT); showResults(); q.blur(); } });
+  let pickFor = "find"; // "find": highlight the item · "calib": tap at its foot to fix the position
+  const picker = itemPicker(app, {
+    list, input: q, allSystem: true,
+    onPick: (nodes, title) => (pickFor === "calib" ? startCalib(nodes, title) : pick(nodes, title)),
+    extra: () => (pickFor === "calib" ? nearRows() : []),
+  });
   // the box gets the focus only when tapped: on the phone that would open the keyboard over the list
   function openSearch() {
     panel.hidden = false;
-    showResults();
+    picker.show();
   }
   function closeSearch() { panel.hidden = true; q.blur(); }
-  $("#arFind").onclick = () => (panel.hidden ? openSearch() : closeSearch());
+  $("#arFind").onclick = () => { pickFor = "find"; if (panel.hidden) openSearch(); else closeSearch(); };
   $("#arQClose").onclick = closeSearch;
 
   async function pick(nodes, title) {
@@ -563,5 +508,141 @@ export function initAR(app) {
       showScale();
       scaleLbl.textContent = Math.abs(r - 1) < 0.05 ? "tamanho real" : "escala 1:" + (r < 10 ? r.toFixed(1).replace(".", ",").replace(",0", "") : Math.round(r));
     }
+  }
+
+  // ------------------------------------------------------------ walking a route ("Ir até…")
+  const NAV_AHEAD = 2.5; // metres: the arrow points at the route this far ahead
+  const navArrow = new THREE.Group();
+  {
+    // a flat arrow pointing to -z (forward), seen from above and a little from the side
+    const sh = new THREE.Shape([[0, -0.22], [0.13, 0.04], [0.045, 0.01], [0.045, 0.16], [-0.045, 0.16], [-0.045, 0.01], [-0.13, 0.04]].map(([x, y]) => new THREE.Vector2(x, y)));
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.03, bevelEnabled: false }).rotateX(Math.PI / 2);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4dabf7, transparent: true, opacity: 0.92, depthTest: false }));
+    m.renderOrder = 20;
+    navArrow.add(m);
+  }
+  navArrow.visible = false;
+  marks.add(navArrow);
+  function startNav(cur) {
+    const P = cur.route.points, cum = [0];
+    for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]));
+    const a = along(cur.route, 0);
+    return { route: cur.route, steps: cur.steps, to: cur.to, from: cur.from, cum, s: 0, cal: [], hideModel: true, done: false, shownAt: 0,
+      yaw0: Math.atan2(a.dir[1], a.dir[0]) };
+  }
+  function showNavModel() { $("#arNavModel").textContent = nav && nav.hideModel ? "Mostrar modelo" : "Ocultar modelo"; }
+  $("#arNavModel").onclick = () => { if (!nav) return; nav.hideModel = !nav.hideModel; app.xr.hideModel(nav.hideModel); showNavModel(); };
+  $("#arNavCal").onclick = () => {
+    if (!nav) return;
+    if (navCal) { navCal = null; hint.textContent = ""; return; }
+    pickFor = "calib";
+    q.value = "";
+    openSearch();
+  };
+  const _inv = new THREE.Matrix4(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
+  // where the phone is, in model coordinates, and the feet under it
+  function userInModel() {
+    _inv.copy(modelMatrix()).invert();
+    _u.copy(camPos).applyMatrix4(_inv);
+    const eye = floorY !== null && camPos.y - floorY > 0.9 ? camPos.y - floorY : 1.45;
+    return { x: _u.x, y: _u.y, z: _u.z, feet: _u.z - eye };
+  }
+  // equipment near where you are, to fix the position on (with the route's start first)
+  let eqCache = null;
+  function nearRows() {
+    if (!nav) return [];
+    if (!eqCache) {
+      eqCache = [];
+      for (const g of (app.bigramaList || []).filter((x) => x.code)) for (const n of picker.equipmentOf(g.code)) {
+        const b = app.nodesBox([n]);
+        if (!b.isEmpty()) eqCache.push({ n, b, c: b.getCenter(new THREE.Vector3()) });
+      }
+    }
+    const u = userInModel(), rows = [];
+    if (nav.from && nav.from.kind === "item") rows.push({ label: nav.from.name, sub: "ponto de partida do caminho", nodes: nav.from.nodes, title: nav.from.name });
+    const near = eqCache.map((e) => ({ ...e, d: Math.hypot(e.c.x - u.x, e.c.y - u.y) + Math.abs(e.b.min.z - u.feet) * 2 }))
+      .filter((e) => e.d < 25).sort((a, b) => a.d - b.d).slice(0, 12);
+    for (const e of near) rows.push({ label: app.tree.names[e.n], sub: `a uns ${Math.max(1, Math.round(e.d))} m daqui`, nodes: [e.n], title: app.tree.names[e.n] });
+    return rows;
+  }
+  function startCalib(nodes, name) {
+    closeSearch();
+    pickFor = "find";
+    const box = app.nodesBox(nodes);
+    if (box.isEmpty()) { hint.textContent = "Esse item não tem geometria carregada."; return; }
+    navCal = { nodes, box, name };
+    hint.textContent = `Aponte para o piso junto ao pé de ${name}, do lado em que você está, e toque quando aparecer o anel.`;
+  }
+  // the tapped floor point (room) is the foot of the chosen equipment on your side (model)
+  function applyCalib() {
+    const u = userInModel(), b = navCal.box;
+    const mx = Math.max(b.min.x, Math.min(b.max.x, u.x)), my = Math.max(b.min.y, Math.min(b.max.y, u.y));
+    // the floor at its foot: the route's floor near there, unless the equipment stands on it
+    let mz = b.min.z, bd = 4;
+    for (const p of nav.route.points) { const d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; if (Math.abs(p[2] - b.min.z) > 0.6) mz = p[2]; else mz = b.min.z; } }
+    const M = new THREE.Vector3(mx, my, mz), R = hitPos.clone();
+    const prev = nav.cal[nav.cal.length - 1];
+    let turnedNow = false;
+    if (prev && Math.hypot(M.x - prev.M.x, M.y - prev.M.y) > 2 && Math.hypot(R.x - prev.R.x, R.z - prev.R.z) > 1.5) {
+      yaw = angle(R.x - prev.R.x, R.z - prev.R.z) - Math.atan2(M.x - prev.M.x, -(M.y - prev.M.y));
+      turnedNow = true;
+    }
+    nav.cal.push({ M, R });
+    if (nav.cal.length > 2) nav.cal.shift();
+    zoom = null; tween = null; turned = true;
+    realAnchor.copy(M);
+    pos.copy(R);
+    hint.textContent = turnedNow ? `Posição e direção acertadas em ${navCal.name}.`
+      : `Posição acertada em ${navCal.name}. Para acertar também a direção, faça o mesmo num equipamento a alguns metros dali.`;
+    navCal = null;
+  }
+  // each frame: where you are along the route, where to go, the next step
+  function navFrame(cam, t) {
+    const P = nav.route.points, cum = nav.cum, L = cum[cum.length - 1];
+    const u = userInModel();
+    // the nearest point of the route (in plan, on about the same floor)
+    let best = Infinity, bs = 0, off = Infinity, q = null;
+    for (let i = 1; i < P.length; i++) {
+      const a = P[i - 1], b = P[i], dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+      const k = l2 > 1e-9 ? Math.max(0, Math.min(1, ((u.x - a[0]) * dx + (u.y - a[1]) * dy) / l2)) : 0;
+      const qx = a[0] + dx * k, qy = a[1] + dy * k, qz = a[2] + (b[2] - a[2]) * k;
+      const plan = Math.hypot(u.x - qx, u.y - qy);
+      const d = plan + 1.5 * Math.max(0, Math.abs(qz - u.feet) - 0.8) + 0.05 * Math.abs(cum[i - 1] + (cum[i] - cum[i - 1]) * k - nav.s);
+      if (d < best) { best = d; bs = cum[i - 1] + (cum[i] - cum[i - 1]) * k; off = plan; q = [qx, qy, qz]; }
+    }
+    nav.s = bs;
+    const lost = off > 3;
+    const target = lost ? q : along(nav.route, Math.min(L, bs + NAV_AHEAD)).p;
+    _t.set(target[0], target[1], target[2]).applyMatrix4(modelMatrix());
+    const e = cam.matrix.elements, fx = -e[8], fz = -e[10], fl = Math.hypot(fx, fz) || 1;
+    const dx = _t.x - camPos.x, dz = _t.z - camPos.z;
+    const rel = Math.atan2((-fz * dx + fx * dz) / fl, (fx * dx + fz * dz) / fl);
+    // the 3D arrow: a little in front of you, under the eyes, pointing there
+    navArrow.position.set(camPos.x + fx / fl * 1.1, camPos.y - 0.55, camPos.z + fz / fl * 1.1);
+    navArrow.rotation.set(0, Math.atan2(-dx, -dz), 0);
+    navArrow.visible = !navCal;
+    if (t - nav.shownAt < 150) return; // the text a few times a second
+    nav.shownAt = t;
+    $("#arNavArrow").style.transform = `rotate(${rel.toFixed(3)}rad)`;
+    const left = Math.max(0, L - bs), box = $("#arNav");
+    const arrived = left < 1.2 && off < 2;
+    box.classList.toggle("off", lost);
+    box.classList.toggle("arrived", arrived);
+    let text, dist;
+    if (arrived) {
+      text = nav.steps[nav.steps.length - 1]?.text || "Chegou.";
+      dist = "";
+      if (!nav.done) { nav.done = true; if (nav.to && nav.to.kind === "item") app.flashNodes(nav.to.nodes, 6000); }
+    } else if (lost) {
+      text = "Fora do caminho: siga a seta até a faixa azul";
+      dist = `a ${Math.round(off)} m · ou “Acertar posição” se a faixa estiver no lugar errado`;
+    } else {
+      const next = nav.steps.find((st) => st.dist > bs + 0.4) || nav.steps[nav.steps.length - 1];
+      text = next.text;
+      const up = target[2] - u.feet;
+      dist = `em ${Math.max(0, Math.round(next.dist - bs))} m · faltam ${Math.round(left)} m` + (up > 0.8 ? " · suba" : up < -0.8 ? " · desça" : "");
+    }
+    if ($("#arNavText").textContent !== text) $("#arNavText").textContent = text;
+    if ($("#arNavDist").textContent !== dist) $("#arNavDist").textContent = dist;
   }
 }

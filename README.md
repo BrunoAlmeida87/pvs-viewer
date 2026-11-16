@@ -61,6 +61,30 @@ você mexe no modelo.
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
   só aparece onde funciona (o iPhone não tem a realidade aumentada do navegador). Em modelos grandes, as peças
   pequenas deixam de ser desenhadas quando o celular não acompanha.
+- **Ir até** (em Ferramentas): diga onde você está e aonde quer ir — o caminho aparece no piso do modelo.
+  - **Estou em** / **Quero ir para**: digite o nome ou o código (`dt20003`), ou escolha o sistema (bigrama) e depois o
+    equipamento; a seleção atual aparece no topo. **Estou em** também aceita **Onde estou na caminhada** e **Tocar no
+    modelo…** (uma peça ou um ponto do piso). Segurar o dedo numa peça também oferece **Ir até aqui…** e **Estou aqui**.
+  - O caminho é uma faixa azul com setas no piso, do ponto verde (partida) ao laranja (chegada), com a distância, o
+    tempo a pé e os passos em palavras (“Siga 7 m”, “Suba a escada até o nível 4,5 m”, “Vire à esquerda”, “Chegou:
+    … à sua direita”). Tocar num passo mostra o trecho. **▶ Seguir** percorre o caminho na caminhada (o minimapa
+    mostra a rota); **Inverter** troca partida e destino.
+  - **Na RA** (Android com ARCore): o caminho no piso real, pela câmera, em tamanho real. Comece no ponto de partida,
+    virado para onde o caminho vai. Uma seta no topo aponta para onde ir, com o próximo passo e quantos metros
+    faltam; a faixa azul fica no chão. O celular não sabe sozinho onde está dentro da instalação (GPS e bússola não
+    funcionam dentro de estrutura de aço): **Acertar posição** › escolha um equipamento perto (a lista mostra os mais
+    próximos) › aponte para o piso junto ao pé dele, do lado em que você está, e toque. Um equipamento acerta a
+    posição; um segundo, a alguns metros do primeiro, acerta também a direção. Em percursos longos e depois de
+    escadas, acerte de novo num equipamento do caminho. **Mostrar modelo** sobrepõe o modelo à câmera.
+  - **Mapa de caminhada**: na primeira rota o visualizador calcula onde dá para andar (o modelo é fatiado de cima a
+    baixo pela placa de vídeo: piso com 1,8 m livres em cima, longe de paredes e guarda-corpos; degraus de até 0,4 m
+    sobem sozinhos) e guarda o resultado no aparelho. **Mostrar no modelo** pinta o piso: verde onde dá para andar,
+    amarelo junto de bordas, vermelho em áreas bloqueadas, roxo em áreas que não se ligam à principal; as escadas
+    achadas pelo nome são linhas laranja. Ajustes: os nomes das **escadas** (que ligam os níveis, como as de
+    marinheiro), os nomes das peças a **ignorar** (portas e escotilhas fechadas no modelo não bloqueiam), **Ligar dois
+    pontos…** (uma escada sem nome, uma passagem), **Bloquear área…**, célula, folga, degrau e raio. **Copiar
+    diagnóstico** copia só números e nomes (níveis, escadas achadas, áreas), sem a geometria. Conta o que está
+    carregado: com a Prévia geral, grades e escadas pequenas podem faltar — carregue as seções do caminho.
 - **Tag NFC** (em Ferramentas; Android com NFC): grava numa tag adesiva a peça escolhida e a vista de agora, e depois
   leva até ela só de encostar o celular na tag.
   - **Gravar**: escolha a peça (na árvore, na busca ou tocando no modelo), deixe a vista como quer vê-la (ângulo e
@@ -80,7 +104,7 @@ você mexe no modelo.
   - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
     link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
     esse mesmo endereço.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.4.1`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.5.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -266,6 +290,11 @@ convertida pelo `build.py`, que abre em segundos.
   percorre o caminho na tela. “Verificar a rota” testa o caminho em passos pequenos contra a malha real das peças:
   lista os trechos onde ele bate e com o quê (tocar num trecho leva o equipamento até lá), marca esses pontos em
   vermelho e dá a folga mínima quando passa. O que já encosta nele onde está (base, piso) conta como apoio.
+- **Ir até** (botão **Ir até**): o caminho a pé de um equipamento (ou de onde se está na caminhada, ou de um ponto
+  tocado) até outro, no piso do modelo, com instruções, “Seguir” na caminhada e as setas na realidade aumentada (veja
+  “No celular”). Usa o mapa de caminhada, calculado do próprio modelo e guardado no navegador. Para experimentar sem
+  um modelo real: `python tools/navsample.py viewer/data` cria uma instalação de teste (dois conveses, escada, escada
+  de marinheiro, porta, grade, equipamentos `LPR-…`) que abre com `python viewer/serve.py`.
 - **Vista 2D com cotas** (botão **Vista 2D**): planta, frente, lateral ou a vista atual, como desenho de linhas —
   arestas do CAD e contornos das superfícies curvas, só o que se vê (linhas ocultas removidas) —, com os cortes:
   onde um plano de corte está de frente para a vista, o contorno das peças cortadas sai em linha grossa. Cotas
