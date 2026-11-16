@@ -10,9 +10,57 @@ const fss = require("node:fs");
 const { Readable } = require("node:stream");
 const { exportMobile } = require("./mobile-export");
 
-app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
-app.commandLine.appendSwitch("ignore-gpu-blocklist");
+// Graphics mode (Windows 7 build). Old Windows 7 drivers often cannot give a WebGL2 context, and
+// "ignore-gpu-blocklist" then makes Chromium use the bad driver instead of its software fallback.
+// At start a hidden window checks WebGL2; when it fails the app restarts in the next mode and
+// remembers the one that works:
+//   gpu        -> dedicated GPU forced, blocklist ignored (fastest; the Windows 10 build always does this)
+//   compativel -> Chromium decides (a blocklisted driver falls back to software rendering)
+//   software   -> no hardware acceleration: SwiftShader (slower, works without a usable GPU)
+// "--modo-grafico=gpu|compativel|software" on the command line forces a mode (and resets the saved one).
+const GRAPHICS_MODES = ["gpu", "compativel", "software"];
+const graphicsFile = path.join(app.getPath("userData"), "modo-grafico.json");
+const graphicsArg = (process.argv.find((a) => a.startsWith("--modo-grafico=")) || "").split("=")[1];
+function readGraphicsMode() {
+  if (GRAPHICS_MODES.includes(graphicsArg)) return graphicsArg;
+  try { const m = JSON.parse(fss.readFileSync(graphicsFile, "utf8")).modo; if (GRAPHICS_MODES.includes(m)) return m; } catch {}
+  return "gpu";
+}
+function saveGraphicsMode(modo) {
+  try { fss.mkdirSync(path.dirname(graphicsFile), { recursive: true }); fss.writeFileSync(graphicsFile, JSON.stringify({ modo })); } catch {}
+}
+const graphicsMode = readGraphicsMode();
+if (graphicsMode === "gpu") {
+  app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
+  app.commandLine.appendSwitch("ignore-gpu-blocklist");
+} else if (graphicsMode === "software") {
+  app.disableHardwareAcceleration();
+}
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=8192");
+
+// Can this mode create a WebGL2 context (what the viewer needs)? A hung or crashed GPU process counts as no.
+async function webgl2Works() {
+  const probe = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  try {
+    await probe.loadURL("data:text/html,<!doctype html><title>gl</title>");
+    const test = probe.webContents.executeJavaScript(
+      "(() => { const g = document.createElement('canvas').getContext('webgl2'); if (!g) return null;" +
+      " const d = g.getExtension('WEBGL_debug_renderer_info'); return d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'webgl2'; })()");
+    return await Promise.race([test, new Promise((r) => setTimeout(() => r(null), 15000))]);
+  } catch {
+    return null;
+  } finally {
+    if (!probe.isDestroyed()) probe.destroy();
+  }
+}
+function restartIn(modo) {
+  saveGraphicsMode(modo);
+  const args = process.argv.slice(1).filter((a) => !a.startsWith("--modo-grafico="));
+  // the portable .exe runs from a temporary folder that is removed when the app exits: restart the .exe itself
+  const portable = process.env.PORTABLE_EXECUTABLE_FILE;
+  app.relaunch(portable ? { execPath: portable, args } : { args });
+  app.exit(0);
+}
 
 protocol.registerSchemesAsPrivileged([
   { scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
@@ -73,7 +121,23 @@ async function describe(dir) {
   };
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const renderer = await webgl2Works();
+  if (!renderer) {
+    const next = GRAPHICS_MODES[GRAPHICS_MODES.indexOf(graphicsMode) + 1];
+    if (next) { restartIn(next); return; }
+    let info = "";
+    try { info = JSON.stringify((await app.getGPUInfo("basic")).gpuDevice || [], null, 1); } catch {}
+    dialog.showMessageBoxSync({
+      type: "warning", title: "Visualizador PVS",
+      message: "Não foi possível ativar o 3D (WebGL2) neste computador, nem mesmo no modo por software.",
+      detail: "Atualize o driver da placa de vídeo. Na Área de Trabalho Remota ou em máquina virtual, abra o programa " +
+        "direto no computador.\n\nPlaca de vídeo: " + (info || "desconhecida"),
+    });
+    saveGraphicsMode("gpu"); // next start tries the GPU again (e.g. after a driver update)
+  } else {
+    saveGraphicsMode(graphicsMode); // also keeps a mode forced with --modo-grafico
+  }
   streamProtocol("app", () => VIEWER);
   streamProtocol("model", () => modelDir);
 
@@ -197,13 +261,16 @@ app.whenReady().then(() => {
     await fs.rm(temporary, { force: true });
   });
 
+  const modeNote = { compativel: " — modo gráfico compatível", software: " — 3D por software (mais lento)" }[graphicsMode] || "";
   win = new BrowserWindow({
-    width: 1500, height: 950, title: "Visualizador PVS", autoHideMenuBar: true, backgroundColor: "#eef1f5",
+    width: 1500, height: 950, title: "Visualizador PVS" + modeNote, autoHideMenuBar: true, backgroundColor: "#eef1f5",
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true },
   });
+  if (modeNote) win.on("page-title-updated", (event, title) => { event.preventDefault(); win.setTitle(title + modeNote); });
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
   win.loadURL("app://viewer/index.html");
 });
 
-app.on("window-all-closed", () => app.quit());
+// the hidden WebGL2 test window closes before the main window exists: only quit once that one is open
+app.on("window-all-closed", () => { if (win) app.quit(); });

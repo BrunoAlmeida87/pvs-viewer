@@ -204,6 +204,11 @@ usa o **Electron 22**, o último que roda no Windows 7 SP1, 8 e 8.1 (Chromium 10
 O workflow [`desktop-win7.yml`](.github/workflows/desktop-win7.yml) gera o `.exe` (32 e 64 bits no mesmo arquivo)
 a cada push nesta branch e o publica no pré-lançamento **win7** da página Releases, além do artefato
 “VisualizadorPVS-windows7” da execução. Não junte esta branch ao `main`.
+Se a placa de vídeo ou o driver não oferecem WebGL2 (erro “Error creating WebGL context”), o programa percebe ao
+abrir e reabre sozinho num modo gráfico mais compatível e, em último caso, com o 3D por software (mais lento); o
+título da janela mostra o modo, e o que funcionou fica guardado. Para forçar um modo, abra pelo atalho ou prompt com
+`VisualizadorPVS-1.1.0-win7.exe --modo-grafico=gpu` (ou `compativel`, ou `software`); `gpu` tenta de novo a placa
+de vídeo, por exemplo depois de atualizar o driver.
 
 **Na sua máquina:**
 
