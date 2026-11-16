@@ -36,7 +36,7 @@ export function chooseRegions(app, more = false) {
     $("#regionTitle").textContent = more ? "Carregar mais partes do modelo" : "Escolha o que carregar";
     const mobile = document.documentElement.classList.contains("touch");
     $("#regionHint").textContent = mobile && !more
-      ? "Escolha seções ou toque em Prévia geral. A primeira abertura carrega até 2,5 milhões de triângulos; use Carregar para acrescentar o restante."
+      ? "As seções marcadas carregam inteiras. Prévia geral mostra o modelo todo com até 2,5 milhões de triângulos (as peças maiores); use Carregar para acrescentar o restante."
       : "Marque as seções (nível 1) ou abra uma delas para escolher os subsistemas (nível 2).";
     $("#regionAll").textContent = mobile && !more ? "Prévia geral" : "Tudo";
     $("#regionSel").disabled = !app.selNodes.size;
@@ -59,7 +59,7 @@ export function chooseRegions(app, more = false) {
       }
     }));
     $("#regionSel").onclick = () => close(flags((f) => { for (const n of app.selNodes) f.fill(1, t.p0[n], t.p1[n]); }));
-    $("#regionAll").onclick = () => close(app.availableParts.every((v) => v) ? null : app.availableParts.slice());
+    $("#regionAll").onclick = () => close(!more || app.availableParts.every((v) => v) ? null : app.availableParts.slice());
     $("#regionCancel").onclick = () => close(more ? undefined : document.documentElement.classList.contains("touch") ? new Uint8Array(app.nParts) : null);
   });
 }
