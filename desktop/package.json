@@ -1,8 +1,8 @@
 {
   "name": "pvs-viewer-desktop",
   "productName": "Visualizador PVS",
-  "version": "1.1.0",
-  "description": "Visualizador de modelos Creo View (.pvs + .ol) para Windows",
+  "version": "1.1.0-win7",
+  "description": "Visualizador de modelos Creo View (.pvs + .ol) para Windows 7 ou mais novo (Electron 22)",
   "main": "main.js",
   "author": "Bruno",
   "private": true,
@@ -13,7 +13,7 @@
     "dist:dir": "npm run copy && electron-builder --win dir --publish never"
   },
   "devDependencies": {
-    "electron": "33.2.1",
+    "electron": "22.3.27",
     "electron-builder": "25.1.8"
   },
   "build": {
@@ -40,6 +40,6 @@
     }
   },
   "allowScripts": {
-    "electron@33.2.1": true
+    "electron@22.3.27": true
   }
 }

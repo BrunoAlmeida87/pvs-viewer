@@ -1,0 +1,70 @@
+# Builds the Windows 7 desktop app (Electron 22, portable .exe) from the Windows 7 branch.
+# Electron 22 is the last Electron that runs on Windows 7 / 8 / 8.1 (Electron 23+ needs Windows 10).
+#  - every push to that branch that changes the viewer or the desktop app, and "Run workflow" in the
+#    Actions tab: the .exe is attached to the run as an artifact (VisualizadorPVS-windows7) and
+#    published in the pre-release "win7" (Releases page), replaced at every build.
+# Do not merge this branch into main: main uses Electron 33 (Windows 10+).
+name: Executável desktop (Windows 7)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ccr-afea7e3b-ie1pfp, win7]
+    paths: ["viewer/**", "desktop/**", ".github/workflows/desktop-win7.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-win7-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Conferir a versão do Electron (precisa ser 22 para Windows 7)
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').devDependencies.electron")
+          echo "Electron $v"
+          case "$v" in 22.*) ;; *) echo "::error::Esta branch precisa do Electron 22 (está $v)"; exit 1;; esac
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar o executável
+        shell: bash
+        run: |
+          npm run copy
+          npx electron-builder --win portable --x64 --ia32 --publish never --config.win.signAndEditExecutable=true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Anexar o executável à execução
+        uses: actions/upload-artifact@v4
+        with:
+          name: VisualizadorPVS-windows7
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Publicar no pré-lançamento "win7"
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete win7 --cleanup-tag --yes > /dev/null 2>&1 || true
+          gh release create win7 dist/*.exe --target "$GITHUB_SHA" --prerelease \
+            --title "Visualizador PVS para Windows 7" \
+            --notes "Executável portátil para Windows 7 SP1, 8, 8.1, 10 e 11 (Electron 22), 32 e 64 bits no mesmo arquivo. Não precisa instalar. Gerado a partir da branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7}."

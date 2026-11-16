@@ -119,7 +119,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #viewTabs:empty { display: none; }
 #viewTabs > * { pointer-events: auto; flex: none; }
 .vt { display: flex; align-items: center; gap: 6px; max-width: 220px; height: 28px; padding: 0 6px 0 10px; border-radius: 8px; cursor: pointer;
-  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; user-select: none; }
+  background: var(--panel); background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12.5px; user-select: none; }
 .vt:hover { background: var(--panel); }
 .vt.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 .vt .vtName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -242,9 +242,9 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #pivot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; z-index: 5; pointer-events: none;
   background: var(--sel-line); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 
-.glass { background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); }
+.glass { background: var(--panel); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); }
 #legend { position: absolute; top: 10px; right: 10px; max-height: calc(100% - 20px); overflow: auto; z-index: 6; min-width: 190px; max-width: 330px;
-  background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px);
+  background: var(--panel); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; font-size: 12px; box-shadow: var(--shadow); }
 #view.bomOpen #legend { max-height: calc(58% - 20px); }
 #legend .lh { font-weight: 650; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
@@ -258,7 +258,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 /* floating panels: one at a time, draggable by the header */
 #floaters { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
 .panel { position: absolute; left: 12px; top: 118px; width: 300px; max-height: calc(100% - 130px); display: flex; flex-direction: column;
-  pointer-events: auto; background: color-mix(in srgb, var(--panel) 97%, transparent); backdrop-filter: blur(10px);
+  pointer-events: auto; background: var(--panel); background: color-mix(in srgb, var(--panel) 97%, transparent); backdrop-filter: blur(10px);
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); font-size: 12.5px; }
 .panel[hidden] { display: none; }
 .panel .ph { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; font-weight: 650; font-size: 13px;
@@ -459,14 +459,14 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 .mobile #view { position: absolute; inset: 0; }
 
 .mobile #mobileBar { display: flex; position: absolute; z-index: 10; left: 50%; transform: translateX(-50%); bottom: calc(8px + env(safe-area-inset-bottom));
-  gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: color-mix(in srgb, var(--panel) 80%, transparent);
+  gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); background: color-mix(in srgb, var(--panel) 80%, transparent);
   backdrop-filter: blur(10px); box-shadow: var(--shadow); transition: opacity .2s; }
 .mobile #mobileBar button { width: 46px; height: 40px; padding: 0; border: 0; background: none; border-radius: 999px; }
 .mobile #mobileBar button svg { width: 21px; height: 21px; }
 .mobile #mobileBar button.on { background: var(--accent-soft); color: var(--accent-text); }
 .mobile #selCard { display: flex; align-items: center; gap: 2px; position: absolute; z-index: 10; left: 8px; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom));
   max-width: 420px; height: 40px; margin: 0 auto; padding: 0 3px 0 0; border: 1px solid var(--border); border-left: 3px solid var(--sel-line); border-radius: 10px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); transition: opacity .2s; }
+  background: var(--panel); background: color-mix(in srgb, var(--panel) 88%, transparent); backdrop-filter: blur(10px); box-shadow: var(--shadow); transition: opacity .2s; }
 .mobile #selCard button { height: 36px; min-width: 38px; padding: 0; border: 0; background: none; }
 .mobile #selCardName { flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 0 4px 0 9px !important; text-align: left; }
 .mobile #selCardName b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -652,7 +652,7 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 
 /* NFC tags */
 .nfcWide { width: 100%; margin-top: 8px; }
-.nfcWait { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border-radius: 8px; background: color-mix(in srgb, #ff8c00 14%, transparent); }
+.nfcWait { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px; border-radius: 8px; background: rgba(255, 140, 0, 0.14); background: color-mix(in srgb, #ff8c00 14%, transparent); }
 .nfcWait svg { width: 26px; height: 26px; flex: none; color: #ff8c00; animation: nfcPulse 1.2s ease-in-out infinite; }
 .nfcWait span { flex: 1; min-width: 0; }
 @keyframes nfcPulse { 50% { transform: scale(1.18); opacity: .6; } }

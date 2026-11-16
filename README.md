@@ -199,6 +199,12 @@ Actions. O `.exe` fica anexado à execução como artefato “VisualizadorPVS-wi
 (por exemplo `git tag v1.2.0 && git push origin v1.2.0`), ele também cria um **Release** com o `.exe`, na versão
 da tag.
 
+**Windows 7 (esta branch):** o executável do `main` usa Electron 33 e só roda no Windows 10 ou 11. Esta branch
+usa o **Electron 22**, o último que roda no Windows 7 SP1, 8 e 8.1 (Chromium 108, sem atualizações de segurança).
+O workflow [`desktop-win7.yml`](.github/workflows/desktop-win7.yml) gera o `.exe` (32 e 64 bits no mesmo arquivo)
+a cada push nesta branch e o publica no pré-lançamento **win7** da página Releases, além do artefato
+“VisualizadorPVS-windows7” da execução. Não junte esta branch ao `main`.
+
 **Na sua máquina:**
 
 ```

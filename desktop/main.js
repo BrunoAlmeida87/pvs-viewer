@@ -7,6 +7,7 @@ const { app, BrowserWindow, protocol, ipcMain, dialog, shell } = require("electr
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const fss = require("node:fs");
+const { Readable } = require("node:stream");
 const { exportMobile } = require("./mobile-export");
 
 app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
@@ -28,16 +29,35 @@ let modelDir = null, win = null;
 let conversion = null;
 let objExport = null;
 
+// Windows 7 build: Electron 22 has no protocol.handle (Electron 25+) and its Node 16 has no global
+// Response, so files are served with registerStreamProtocol (read from disk as a stream).
+function textReply(statusCode, text) {
+  return { statusCode, headers: { "content-type": "text/plain; charset=utf-8", "access-control-allow-origin": "*" }, data: Readable.from([Buffer.from(text)]) };
+}
 async function serve(root, urlPath) {
   const file = path.normalize(path.join(root, decodeURIComponent(urlPath)));
-  if (!file.startsWith(root)) return new Response("proibido", { status: 403 });
+  if (!file.startsWith(root)) return textReply(403, "proibido");
   try {
     const st = await fs.stat(file);
     if (!st.isFile()) throw new Error("not a file");
-    return new Response(await fs.readFile(file), { headers: { "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream" } });
+    return {
+      statusCode: 200,
+      headers: {
+        "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
+        "content-length": String(st.size), "access-control-allow-origin": "*",
+      },
+      data: fss.createReadStream(file),
+    };
   } catch {
-    return new Response("não encontrado", { status: 404 });
+    return textReply(404, "não encontrado");
   }
+}
+function streamProtocol(scheme, rootOf) {
+  protocol.registerStreamProtocol(scheme, (req, reply) => {
+    const root = rootOf();
+    if (!root) { reply(textReply(404, "")); return; }
+    serve(root, new URL(req.url).pathname).then(reply, () => reply(textReply(500, "erro")));
+  });
 }
 
 // What the viewer needs to know about a model folder.
@@ -54,8 +74,8 @@ async function describe(dir) {
 }
 
 app.whenReady().then(() => {
-  protocol.handle("app", (req) => serve(VIEWER, new URL(req.url).pathname));
-  protocol.handle("model", (req) => (modelDir ? serve(modelDir, new URL(req.url).pathname) : new Response("", { status: 404 })));
+  streamProtocol("app", () => VIEWER);
+  streamProtocol("model", () => modelDir);
 
   ipcMain.handle("pick-folder", async () => {
     const r = await dialog.showOpenDialog(win, { title: "Pasta do modelo (.pvs + .ol, ou pasta convertida)", properties: ["openDirectory"] });
