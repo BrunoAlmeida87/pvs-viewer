@@ -34,9 +34,11 @@ export function chooseRegions(app, more = false) {
       list.append(sub.length ? el("details", null, head, kids) : el("div.row1", null, ...head.childNodes));
     }
     $("#regionTitle").textContent = more ? "Carregar mais partes do modelo" : "Escolha o que carregar";
-    const mobile = document.documentElement.classList.contains("touch");
+    // phones and the light mode (software 3D) load a bounded general preview instead of everything
+    const mobile = document.documentElement.classList.contains("touch") || app.light;
+    const budget = (app.previewBudget / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
     $("#regionHint").textContent = mobile && !more
-      ? "As seções marcadas carregam inteiras. Prévia geral mostra o modelo todo com até 2,5 milhões de triângulos (as peças maiores); use Carregar para acrescentar o restante."
+      ? `As seções marcadas carregam inteiras. Prévia geral mostra o modelo todo com até ${budget} ${app.previewBudget >= 2e6 ? "milhões" : "milhão"} de triângulos (as peças maiores); use Carregar para acrescentar o restante.`
       : "Marque as seções (nível 1) ou abra uma delas para escolher os subsistemas (nível 2).";
     $("#regionAll").textContent = mobile && !more ? "Prévia geral" : "Tudo";
     $("#regionSel").disabled = !app.selNodes.size;

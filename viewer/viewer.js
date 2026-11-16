@@ -51,6 +51,23 @@ const TEX_W = 4096;
 // which also gets the compact full-screen layout (ui/mobile.js).
 const touch = document.documentElement.classList.contains("touch");
 const mobile = document.documentElement.classList.contains("mobile");
+// "light": the 3D is drawn by the processor (SwiftShader, llvmpipe, Microsoft Basic Render) instead of
+// a graphics card, e.g. an old Windows 7 machine whose driver gives no WebGL2. Every pixel and triangle
+// then costs CPU time: no antialiasing, a smaller first load, lower resolution and fewer details while
+// the camera moves, fewer background threads. "?leve=1" / "?leve=0" forces it on / off.
+const softwareGL = (() => {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    const ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+    const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "";
+    gl && gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return /swiftshader|llvmpipe|softpipe|software|microsoft basic/i.test(name);
+  } catch { return false; }
+})();
+const lightParam = new URLSearchParams(location.search).get("leve");
+const light = lightParam === null ? softwareGL : lightParam !== "0";
+const LIGHT_PREVIEW_TRIANGLES = 1_000_000;
+const previewBudget = light ? LIGHT_PREVIEW_TRIANGLES : MOBILE_PREVIEW_TRIANGLES;
 
 // ---------------------------------------------------------------- app / events
 const listeners = {};
@@ -72,7 +89,7 @@ export const app = {
 
 // ---------------------------------------------------------------- renderer
 const view = $("#view");
-const renderer = new THREE.WebGLRenderer({ antialias: !touch, alpha: true, powerPreference: "high-performance" });
+const renderer = new THREE.WebGLRenderer({ antialias: !touch && !light, alpha: true, powerPreference: "high-performance" });
 // At rest the view is drawn at up to 2 device pixels per CSS pixel (sharp on phone screens too);
 // while the camera moves the resolution may drop (see the quality presets in the render loop).
 const baseRatio = () => Math.min(window.devicePixelRatio || 1, 2);
@@ -491,11 +508,16 @@ function updateVisibility() {
 const _box = new THREE.Box3();
 let drawnTris = 0, drawnChunks = 0;
 // `eye` and `fpx` (focal length in pixels) replace the camera's (augmented reality).
-function applyLod(minPx, noEdges = false, eye = null, fpx = 0) {
+// triBudget (light mode, while moving): besides the size limit, draw at most about this many triangles
+// of the chunks in view, the ones that look biggest first; the rest comes back when the camera stops.
+const _frustum = new THREE.Frustum(), _lodPV = new THREE.Matrix4(), _budget = [];
+function applyLod(minPx, noEdges = false, eye = null, fpx = 0, triBudget = 0) {
   const H = view.clientHeight;
   const f = fpx || H / (2 * Math.tan(THREE.MathUtils.degToRad(persp.fov / 2)));
   const orthoH = (ortho.top - ortho.bottom) / ortho.zoom;
-  const cull = minPx > 0 && !partOffset && !walk.on;
+  const cull = (minPx > 0 || triBudget > 0) && !partOffset && !walk.on;
+  const budget = cull && triBudget > 0;
+  if (budget) { camera.updateMatrixWorld(); _frustum.setFromProjectionMatrix(_lodPV.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)); _budget.length = 0; }
   drawnTris = 0; drawnChunks = 0;
   for (const c of chunks) {
     const w = c.want || { m: true, t: false, e: false };
@@ -504,11 +526,23 @@ function applyLod(minPx, noEdges = false, eye = null, fpx = 0) {
       const px = eye ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(eye))
         : camera === persp ? c.ps * f / Math.max(1e-6, _box.set(c.min, c.max).distanceToPoint(camera.position)) : c.ps * H / orthoH;
       hide = px < minPx;
+      if (budget && !hide && (w.m || w.t) && _frustum.intersectsBox(_box.set(c.min, c.max))) { c.lodPx = px; _budget.push(c); }
     }
     c.mesh.visible = w.m && !hide;
     c.meshT.visible = w.t && !hide;
     if (c.edges) c.edges.visible = w.e && !hide && !noEdges;
     if (c.mesh.visible || c.meshT.visible) { drawnTris += c.ni / 3; drawnChunks++; }
+  }
+  if (budget) {
+    _budget.sort((a, b) => b.lodPx - a.lodPx);
+    let tris = 0;
+    for (const c of _budget) {
+      tris += c.ni / 3;
+      if (tris <= triBudget || c === _budget[0]) continue;
+      c.mesh.visible = c.meshT.visible = false;
+      if (c.edges) c.edges.visible = false;
+      drawnTris -= c.ni / 3; drawnChunks--;
+    }
   }
 }
 
@@ -1208,7 +1242,7 @@ async function main() {
   status("Carregando estrutura…");
   // true: always ask which sections to load; "auto" (phones and tablets): ask only when the model
   // is too big to load at once; a link to one part never asks.
-  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes") ? true : touch && !wantedCode() ? "auto" : false;
+  const ask = $("#openRegions")?.checked || new URLSearchParams(location.search).has("regioes") ? true : (touch || light) && !wantedCode() ? "auto" : false;
   if (m.kind === "converted") await loadConverted(m.src, ask);
   else { app.access = m.access; await loadRaw(m, ask); }
 }
@@ -1222,7 +1256,7 @@ async function firstParts(ask) {
   if (!ask) return null;
   const selected = await chooseRegions(app);
   // On a phone, closing the section dialog must not load the entire model.
-  return touch && selected === undefined ? new Uint8Array(app.nParts) : selected;
+  return (touch || light) && selected === undefined ? new Uint8Array(app.nParts) : selected;
 }
 
 // The first load: what the user picks, or — opened by an NFC tag of this model — what was loaded
@@ -1260,7 +1294,7 @@ app.regionFlags = function (ids) {
 // Parts drawn by the general preview of a large converted model (null when there is none).
 function previewParts() {
   if (!source || source.kind !== "converted") return null;
-  const cs = source.meta.chunks, all = cs.map((_, k) => k), pv = previewChunks(cs, all);
+  const cs = source.meta.chunks, all = cs.map((_, k) => k), pv = previewChunks(cs, all, previewBudget);
   if (pv.length >= all.length) return null;
   const f = new Uint8Array(app.nParts);
   for (const k of pv) for (let i = cs[k].io; i < cs[k].io + cs[k].ic; i++) f[itemPart[i]] = 1;
@@ -1321,7 +1355,7 @@ async function loadConverted(src, ask) {
   addItems(parts, colors, layers, layers ? meta.layers : null);
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
-  await loadFirst(ask === "auto" ? (meta.tris || Infinity) > MOBILE_PREVIEW_TRIANGLES : ask, touch);
+  await loadFirst(ask === "auto" ? (meta.tris || Infinity) > previewBudget : ask, touch || light);
   app.emit("loaded");
 }
 
@@ -1333,7 +1367,7 @@ async function loadConvertedParts(want, preview = false) {
     if (want) { let any = false; for (let i = c.io; i < c.io + c.ic && !any; i++) any = want[itemPart[i]] === 1; if (!any) return; }
     list.push(k);
   });
-  const selected = preview ? previewChunks(meta.chunks, list) : list;
+  const selected = preview ? previewChunks(meta.chunks, list, previewBudget) : list;
   source.previewed = selected.length < list.length;
   let next = 0, done = 0;
   const bar = $("#bar > div");
@@ -1354,7 +1388,7 @@ async function loadConvertedParts(want, preview = false) {
       status(done < selected.length ? `Carregando geometria ${done}/${selected.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
     }
   }
-  await Promise.all(Array.from({ length: touch ? 3 : 6 }, fetcher));
+  await Promise.all(Array.from({ length: touch || light ? 3 : 6 }, fetcher));
   // A part can span several chunks: count it as complete only after all its chunks load.
   app.partLoaded.set(completedParts(meta.chunks, itemPart, source.loaded, app.nParts));
 }
@@ -1389,7 +1423,7 @@ async function loadRawParts(want) {
   const TASK = 150, total = todo.length;
   const tasks = [];
   for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
-  const nWorkers = Math.max(1, Math.min(touch ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
+  const nWorkers = Math.max(1, Math.min(touch || light ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
   let missing = 0, next = 0, doneParts = 0;
   const files = m.access.files;
@@ -2866,7 +2900,9 @@ const QUALITY = {
 // "Automática" adapts to the machine: while the camera moves, the time between frames decides
 // how small a part may be before it is skipped (px) and, as a last resort, the resolution. A fast
 // graphics card keeps nearly everything; a slow one drops detail until the movement is fluid.
-const adapt = { px: 5, ratio: touch ? 0.75 : 1, ema: 0, n: 0, last: 0 };
+// light (software 3D): starts lower and may go down to 35 % of the resolution while moving.
+const adapt = { px: light ? 8 : 5, ratio: touch || light ? 0.75 : 1, tris: 500_000, ema: 0, n: 0, last: 0 };
+const adaptMinRatio = light ? 0.35 : 0.5;
 function adaptQuality(now, moving) {
   if (!moving) { adapt.last = 0; return; }
   const dt = adapt.last ? now - adapt.last : 0;
@@ -2876,11 +2912,13 @@ function adaptQuality(now, moving) {
   if (++adapt.n < 5) return;
   adapt.n = 0;
   if (adapt.ema > 42) { // under about 24 frames/s: draw less
-    if (adapt.px < 24) adapt.px = Math.min(24, adapt.px * 1.4);
-    else if (adapt.ratio > 0.5) adapt.ratio -= 0.25;
+    if (light && adapt.tris > 100_000) adapt.tris = Math.max(100_000, adapt.tris * 0.7); // software 3D: fewer triangles first
+    else if (adapt.px < 24) adapt.px = Math.min(24, adapt.px * 1.4);
+    else if (adapt.ratio > adaptMinRatio + 0.01) adapt.ratio = Math.max(adaptMinRatio, adapt.ratio - 0.2);
   } else if (adapt.ema < 24) { // over about 40 frames/s: there is room for more
-    if (adapt.ratio < (touch ? 0.75 : 1)) adapt.ratio += 0.25;
+    if (adapt.ratio < (touch || light ? 0.75 : 1)) adapt.ratio = Math.min(touch || light ? 0.75 : 1, adapt.ratio + 0.2);
     else if (adapt.px > 1.5) adapt.px = Math.max(1.5, adapt.px / 1.25);
+    else if (light) adapt.tris = Math.min(20_000_000, adapt.tris * 1.3);
   }
 }
 let wasMoving = false;
@@ -2906,7 +2944,8 @@ function animate(now = performance.now()) {
   const minPx = moving ? (Q.adaptive ? adapt.px : Q.move) : Q.idle;
   const ratio = baseRatio() * (moving ? (Q.adaptive ? adapt.ratio : touch ? Math.min(Q.ratio, 0.75) : Q.ratio) : 1);
   if (Math.abs(ratio - curRatio) > 0.01) { curRatio = ratio; renderer.setPixelRatio(ratio); resize(); }
-  applyLod(minPx, moving && (!Q.edges || (Q.adaptive && adapt.px >= 14)));
+  const triBudget = moving && light && app.display.quality !== "high" ? (Q.adaptive ? adapt.tris : 500_000) : 0;
+  applyLod(minPx, moving && (!Q.edges || light || (Q.adaptive && adapt.px >= 14)), null, 0, triBudget);
   const size = modelMin ? modelBox().getSize(new THREE.Vector3()).length() : 100;
   if (camera === persp) {
     if (walk.on) { persp.near = 0.02; persp.far = size * 3; }
@@ -3037,6 +3076,8 @@ const gpuName = (() => {
   return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "desconhecida";
 })();
 app.gpu = gpuName;
+app.light = light;
+app.previewBudget = previewBudget;
 app.gpuIntegrated = /intel|uhd|iris|microsoft basic|swiftshader|llvmpipe|software/i.test(gpuName) && !/nvidia|radeon|amd|geforce|rtx|gtx|quadro|arc/i.test(gpuName);
 let perfShown = 0;
 function showPerf(now, cpuMs, moving) {
@@ -3056,8 +3097,16 @@ function showPerf(now, cpuMs, moving) {
   line("Memória de vídeo (aprox.)", (gpuBytes / 1048576).toFixed(0) + " MB");
   if (performance.memory) line("Memória JS", (performance.memory.usedJSHeapSize / 1048576).toFixed(0) + " MB");
   line("Qualidade", { high: "alta", auto: "automática", fast: "rápida" }[app.display.quality] + (moving ? " · em movimento" : "")
-    + (app.display.quality === "auto" ? ` · peças ≥ ${adapt.px.toFixed(1)} px${adapt.ratio < 1 ? ` · resolução ${Math.round(adapt.ratio * 100)}%` : ""}` : ""));
-  if (app.gpuIntegrated) {
+    + (app.display.quality === "auto" ? ` · peças ≥ ${adapt.px.toFixed(1)} px${adapt.ratio < 1 ? ` · resolução ${Math.round(adapt.ratio * 100)}%` : ""}` : "")
+    + (light && moving && app.display.quality !== "high" ? ` · até ${((app.display.quality === "auto" ? adapt.tris : 500_000) / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mi de triângulos` : ""));
+  if (light) line("Modo leve", (softwareGL ? "3D por software" : "forçado") + " · sem antisserrilhado · prévia de "
+    + (previewBudget / 1e6).toLocaleString("pt-BR") + " mi de triângulos", "warn");
+  if (softwareGL) {
+    const w = document.createElement("p");
+    w.className = "warn";
+    w.textContent = "O 3D está sendo desenhado pelo processador, não pela placa de vídeo. Para mais quadros: abra só as seções que precisa, use o estilo Sombreado sem arestas e sem SSAO, a qualidade Rápida, e uma janela menor. Atualizar o driver da placa de vídeo pode permitir usá-la.";
+    el.append(w);
+  } else if (app.gpuIntegrated) {
     const w = document.createElement("p");
     w.className = "warn";
     w.textContent = "O navegador está usando a placa integrada. No Windows: Configurações › Sistema › Tela › Elementos gráficos › escolha o navegador › Alto desempenho, e reabra o navegador.";

@@ -210,6 +210,15 @@ título da janela mostra o modo, e o que funcionou fica guardado. Para forçar u
 `VisualizadorPVS-1.1.0-win7.exe --modo-grafico=gpu` (ou `compativel`, ou `software`); `gpu` tenta de novo a placa
 de vídeo, por exemplo depois de atualizar o driver.
 
+**Modo leve (3D por software):** quando o 3D é desenhado pelo processador (SwiftShader, llvmpipe, adaptador básico
+da Microsoft), o visualizador liga sozinho o modo leve: sem antisserrilhado; modelos grandes abrem com a escolha de
+seções e uma **Prévia geral** de até 1 milhão de triângulos (as peças maiores; o resto em **Carregar mais**); em
+movimento, resolução menor, sem arestas e no máximo uns 500 mil triângulos por quadro (os que aparecem maiores; o
+limite se ajusta à velocidade do computador), com o quadro completo ao parar; menos processos de leitura em
+paralelo. Num modelo de teste de 3,6 milhões de triângulos no SwiftShader (4 núcleos), o giro passou de 0,4 para
+cerca de 7 quadros por segundo e a abertura de 25 s para 7 s (1 s só com a prévia). O painel de desempenho mostra o
+modo; `?leve=1` / `?leve=0` na URL força ligar ou desligar.
+
 **Na sua máquina:**
 
 ```
