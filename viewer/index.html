@@ -77,6 +77,7 @@
     <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l1.2-4.6L15.8 4.8a1.8 1.8 0 0 1 2.6 0l.8.8a1.8 1.8 0 0 1 0 2.6L8.6 18.8z"/><path d="M13.8 6.8l3.4 3.4M4 20h16"/></symbol>
     <symbol id="i-man" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v7M8 10.5l4-1.5 4 1.5M9.5 21l2.5-6.5 2.5 6.5"/></symbol>
     <symbol id="i-route" viewBox="0 0 24 24"><rect x="3.5" y="13.5" width="6" height="6" rx="1"/><path d="M9.5 16.5h4a3 3 0 0 0 3-3V7.5"/><path d="M13.5 10l3-3 3 3"/><circle cx="16.5" cy="4.5" r="1"/></symbol>
+    <symbol id="i-goto" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><path d="M8 18h5a3.5 3.5 0 0 0 0-7h-2a3.5 3.5 0 0 1 0-7h3"/><path d="M18 9.5c-1.8-2.1-2.7-3.6-2.7-4.6a2.7 2.7 0 0 1 5.4 0c0 1-.9 2.5-2.7 4.6z"/></symbol>
     <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M7 15.5h6.5V9H7zM7 7v1M13.5 7v1M16 9v6.5M15 9h2M15 15.5h2"/></symbol>
     <symbol id="i-gpu"viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="9" cy="12" r="2.5"/><circle cx="15.5" cy="12" r="2.5"/></symbol>
   </defs>
@@ -157,6 +158,7 @@
       <button id="markBtn" class="tb" title="Marcações à mão: desenhar e escrever sobre a vista (ficam com a vista salva)"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
       <button id="manBtn" class="tb" title="Manequim de 1,75 m para checar acesso e espaço de manutenção"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
       <button id="drawBtn" class="tb" title="Vista 2D: planta, frente ou lateral com cotas, em SVG, PDF ou DXF"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
+      <button id="gotoBtn" class="tb" title="Ir até…: o caminho de um equipamento (ou de onde você está) até outro, desenhado no piso do modelo"><svg><use href="#i-goto"/></svg><span>Ir até</span></button>
       <button id="routeBtn" class="tb" title="Rota de retirada: levar um equipamento por um caminho e ver onde ele bate"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
       <button id="walkBtn" class="tb" title="Modo caminhada: WASD move, arraste olha, Esc sai"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
       <button id="nfcBtn" class="tb" hidden title="Tag NFC: gravar a peça selecionada, com esta vista, numa tag adesiva; e ler tags"><svg><use href="#i-nfc"/></svg><span>NFC</span></button>
@@ -400,6 +402,7 @@
         <button data-do="measure"><svg><use href="#i-ruler"/></svg><span>Medir</span></button>
         <button data-do="mark"><svg><use href="#i-pen"/></svg><span>Marcar</span></button>
         <button data-do="man"><svg><use href="#i-man"/></svg><span>Manequim</span></button>
+        <button data-do="goto"><svg><use href="#i-goto"/></svg><span>Ir até</span></button>
         <button data-do="route"><svg><use href="#i-route"/></svg><span>Retirada</span></button>
         <button data-do="draw"><svg><use href="#i-sheet"/></svg><span>Vista 2D</span></button>
         <button data-do="walk"><svg><use href="#i-walk"/></svg><span>Caminhar</span></button>
@@ -619,6 +622,39 @@
           <p class="hint">Escolha a peça (na árvore ou no modelo), deixe a vista como quer vê-la e toque em “Gravar na tag…”. Depois, encostar o celular na tag abre o visualizador (mesmo fechado) nessa peça e nessa vista, com ela piscando.</p>
         </div>
       </div>
+      <div id="gotoPanel" class="panel" hidden>
+        <div class="ph"><svg><use href="#i-goto"/></svg>Ir até… <button class="x" data-close="gotoPanel" title="Fechar">✕</button></div>
+        <div class="pb">
+          <div class="goField"><span class="muted">Estou em</span><button id="goFrom" class="goEnd" title="Um equipamento, onde você está na caminhada ou um ponto tocado no modelo">Escolher…</button></div>
+          <div class="goField"><span class="muted">Quero ir para</span><button id="goTo" class="goEnd" title="O equipamento (ou o ponto) aonde quer chegar">Escolher…</button></div>
+          <div class="row2"><button id="goSwap" disabled title="Trocar a partida e o destino">⇅ Inverter</button><button id="goRun" class="primary" disabled>Traçar o caminho</button></div>
+          <div id="goPick" hidden>
+            <div class="goPickHead"><b id="goPickTitle">Estou em…</b><button id="goQClose" title="Fechar a lista">✕</button></div>
+            <input id="goQ" type="search" placeholder="Nome ou código (ex.: DT20003)" enterkeyhint="search" autocomplete="off" spellcheck="false">
+            <div id="goList"></div>
+          </div>
+          <div id="goResult"></div>
+          <div class="row2" id="goActions" hidden><button id="goFollow" title="A caminhada percorre o caminho">▶ Seguir</button><button id="goAr" hidden title="Setas no piso real, pela câmera do celular">Na RA</button><button id="goClear">Limpar</button></div>
+          <p class="hint" id="goHint">Escolha onde você está e aonde quer ir. Na primeira vez o visualizador calcula o mapa de caminhada do modelo (onde dá para andar) e o guarda neste aparelho.</p>
+          <details id="goMapBox">
+            <summary>Mapa de caminhada</summary>
+            <div id="goMapInfo" class="hint goPre"></div>
+            <div class="row2"><button id="goCompute">Calcular</button><label title="Verde: dá para andar · amarelo: junto de paredes e bordas · vermelho: área bloqueada · roxo: áreas que não se ligam à principal · laranja: escadas"><input type="checkbox" id="goShowMap"> Mostrar no modelo</label></div>
+            <div class="row2"><button id="goLink" title="Para escadas sem nome, portas e passagens que o mapa não achou">Ligar dois pontos…</button><button id="goBlock" title="Uma área por onde as rotas não devem passar">Bloquear área…</button></div>
+            <div class="row2"><button id="goUndoExtra" disabled>Desfazer a última</button><span id="goExtrasInfo" class="muted"></span></div>
+            <label class="goLbl">Escadas (pelo nome ou código)<input id="goLadders" type="text" spellcheck="false" title="Partes do nome, da descrição ou do código, separadas por | ou vírgula"></label>
+            <label class="goLbl">Ignorar (não bloqueiam: portas, escotilhas)<input id="goIgnore" type="text" spellcheck="false"></label>
+            <div class="goNums">
+              <label title="Tamanho da célula do mapa (menor: mais preciso e mais lento)">Célula (m)<input id="goCell" inputmode="decimal"></label>
+              <label title="Altura livre necessária para passar">Folga (m)<input id="goHead" inputmode="decimal"></label>
+              <label title="O maior degrau que se sobe sem escada">Degrau (m)<input id="goStep" inputmode="decimal"></label>
+              <label title="Metade da largura de uma pessoa: mantém o caminho longe das paredes">Raio (m)<input id="goRadius" inputmode="decimal"></label>
+            </div>
+            <label title="Desligue se o mapa sair quase todo vermelho ou vazio (modelo com faces viradas para dentro)"><input type="checkbox" id="goInside"> Considerar o interior das peças</label>
+            <div class="row2"><button id="goDefaults">Valores padrão</button><button id="goCopyDiag" title="Números e nomes do mapa (sem a geometria), para conferir ou enviar">Copiar diagnóstico</button></div>
+          </details>
+        </div>
+      </div>
       <div id="routePanel" class="panel" hidden>
         <div class="ph"><svg><use href="#i-route"/></svg>Rota de retirada <button class="x" data-close="routePanel" title="Fechar">✕</button></div>
         <div class="pb">
@@ -762,6 +798,17 @@
       <button id="arQClose" aria-label="Fechar a busca">✕</button>
     </div>
     <div id="arResults"></div>
+  </div>
+  <!-- navigation along the route of "Ir até…": where to go, from where the phone points -->
+  <div id="arNav" hidden>
+    <div id="arNavHead">
+      <svg id="arNavArrow" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3 41 42 24 33 7 42z"/></svg>
+      <div><b id="arNavText">Siga a seta</b><small id="arNavDist"></small></div>
+    </div>
+    <div id="arNavRow">
+      <button id="arNavCal" title="Tocar no piso junto ao pé de um equipamento: acerta onde você está no modelo">Acertar posição</button>
+      <button id="arNavModel" title="Mostrar ou ocultar o modelo (a rota continua)">Mostrar modelo</button>
+    </div>
   </div>
   <div id="arWalk">
     <div class="joy" id="arJoy" aria-label="Andar"><i></i></div>

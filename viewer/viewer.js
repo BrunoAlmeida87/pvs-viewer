@@ -41,9 +41,11 @@ import { initLabels } from "./ui/labels.js";
 import { initMarkup } from "./ui/markup.js";
 import { initMannequin } from "./ui/mannequin.js";
 import { initRoute } from "./ui/route.js";
+import { initGoto } from "./ui/goto.js";
 import { initExports } from "./ui/exports.js";
 import { initDrawing } from "./ui/drawing.js";
 import { initNFC } from "./ui/nfc.js";
+import { tileTops } from "./lib/navgrid.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
@@ -1833,6 +1835,121 @@ function probe(origin, dir, max, fov = 5) {
   return best;
 }
 const _pv2 = new THREE.Vector3();
+
+// ---------------------------------------------------------------- walking map: slices
+// The model seen from above, cut at increasing heights (every `dz` m), as view depths: for each
+// pixel, the highest surface below the cut, negative when it is a back face (the inside of a solid
+// the cut goes through). Everything loaded counts, as an opaque solid, whatever is shown or hidden
+// now (but not the hidden layers, nor the parts in `exclude`: doors, hatches). A grid of `cell` m,
+// `sub` pixels per cell side, drawn in tiles. on.start(grid) comes first, then on.slice(rx, ry,
+// rw, rh, tops, inside) gets each slice of each tile reduced to cells (lib/navgrid.js tileTops),
+// the lowest cut first; on.progress(fraction) now and then.
+const NAV_FRAG = COMMON + /* glsl */ `
+in vec3 vView;
+in vec3 vWorld;
+flat in vec4 vCol;
+flat in float vSel;
+flat in uint vId;
+out vec4 outColor;
+void main() {
+  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
+  float d = -vView.z;
+  outColor = packId(floatBitsToUint(gl_FrontFacing ? d : -d));
+  // a face of a solid standing on a floor and that floor are at the same depth: the inside wins
+  gl_FragDepth = gl_FrontFacing ? gl_FragCoord.z : max(0.0, gl_FragCoord.z - 4e-6);
+}`;
+let navTex = null;
+app.navSlices = async function ({ cell, sub, dz, exclude = null, signal = null }, on) {
+  if (!chunks.length || !modelMin) throw new Error("Nenhum modelo carregado.");
+  const b = modelBox();
+  const W = Math.max(1, Math.ceil((b.max.x - b.min.x) / cell) + 1), H = Math.max(1, Math.ceil((b.max.y - b.min.y) / cell) + 1);
+  const x0 = b.min.x - cell / 2, y0 = b.min.y - cell / 2, camZ = b.max.z + 1;
+  const tc = Math.max(8, Math.floor(Math.min(2048, renderer.capabilities.maxTextureSize) / sub)); // cells per tile side
+  const cuts = [];
+  for (let z = b.min.z + dz / 2; z < b.max.z + dz; z += dz) cuts.push(z);
+  const tiles = [];
+  for (let ty = 0; ty < H; ty += tc) for (let tx = 0; tx < W; tx += tc) tiles.push([tx, ty, Math.min(tc, W - tx), Math.min(tc, H - ty)]);
+  // the items as drawn here: every loaded one opaque, unless on a hidden layer or left out
+  const data = new Uint8Array(itemTexData.length);
+  for (let i = 0; i < nItems; i++) data[i * 4 + 3] = layerHidden[itemLayer[i]] || (exclude && exclude[itemPart[i]]) ? 0 : 127;
+  if (navTex) navTex.dispose();
+  navTex = new THREE.DataTexture(data, TEX_W, itemTexData.length / 4 / TEX_W, THREE.RGBAFormat, THREE.UnsignedByteType);
+  navTex.minFilter = navTex.magFilter = THREE.NearestFilter;
+  navTex.generateMipmaps = false;
+  navTex.needsUpdate = true;
+  for (const c of chunks) if (!c.navMat) c.navMat = chunkMaterial(VERT, NAV_FRAG, c, { pass: { value: 0 } });
+  const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, camZ - b.min.z + 2);
+  cam.up.set(0, 1, 0);
+  const rt = new THREE.WebGLRenderTarget(tc * sub, tc * sub, { depthBuffer: true });
+  const tops = new Float32Array(tc * tc), inside = new Uint8Array(tc * tc);
+  let buf = new Uint8Array(tc * sub * tc * sub * 4);
+  // what is changed while drawing the slices, and put back before the page draws again
+  let saved = null;
+  const enter = () => {
+    saved = {
+      tex: shared.itemTex.value, planeOn: shared.planeOn.value, plane: shared.plane.value.clone(), clipOn: shared.clipOn.value,
+      nb: shared.nbClip.value, ex: shared.exploded.value, clear: renderer.getClearColor(new THREE.Color()), alpha: renderer.getClearAlpha(),
+      vis: scene.children.map((o) => o.visible), mats: chunks.map((c) => c.mesh.material),
+    };
+    shared.itemTex.value = navTex; shared.pickMode.value = 3; shared.planeOn.value = 1;
+    shared.clipOn.value = 0; shared.nbClip.value = 0; shared.exploded.value = 0;
+    for (const o of scene.children) o.visible = false;
+    for (const c of chunks) { c.mesh.material = c.navMat; c.mesh.visible = true; }
+    renderer.setClearColor(0x000000, 0);
+  };
+  const leave = () => {
+    if (!saved) return;
+    shared.itemTex.value = saved.tex; shared.pickMode.value = 0; shared.planeOn.value = saved.planeOn; shared.plane.value.copy(saved.plane);
+    shared.clipOn.value = saved.clipOn; shared.nbClip.value = saved.nb; shared.exploded.value = saved.ex;
+    scene.children.forEach((o, i) => { o.visible = saved.vis[i]; });
+    chunks.forEach((c, i) => { c.mesh.material = saved.mats[i] || c.mesh.material; });
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(saved.clear, saved.alpha);
+    saved = null;
+    requestRender();
+  };
+  const total = tiles.length * cuts.length, grid = { W, H, x0, y0, cell };
+  let done = 0;
+  on.start(grid);
+  try {
+    enter();
+    let t0 = performance.now();
+    for (const [tx, ty, cw, ch] of tiles) {
+      const rw = cw * sub, rh = ch * sub, hw = cw * cell / 2, hh = ch * cell / 2;
+      cam.left = -hw; cam.right = hw; cam.top = hh; cam.bottom = -hh;
+      cam.position.set(x0 + tx * cell + hw, y0 + ty * cell + hh, camZ);
+      cam.lookAt(cam.position.x, cam.position.y, camZ - 1);
+      cam.updateProjectionMatrix();
+      cam.updateMatrixWorld();
+      rt.setSize(rw, rh);
+      if (buf.length !== rw * rh * 4) buf = new Uint8Array(rw * rh * 4);
+      for (const cut of cuts) {
+        if (signal && signal.aborted) throw new DOMException("cancelado", "AbortError");
+        shared.plane.value.set(0, 0, 1, cut);
+        for (const c of chunks) c.mesh.visible = c.min.z < cut; // all above the cut: nothing to draw
+        renderer.setRenderTarget(rt);
+        renderer.clear();
+        renderer.render(scene, cam);
+        renderer.readRenderTargetPixels(rt, 0, 0, rw, rh, buf);
+        tileTops(buf, rw, rh, sub, camZ, cw, ch, tops, inside);
+        on.slice(tx, ty, cw, ch, tops.slice(0, cw * ch), inside.slice(0, cw * ch));
+        done++;
+        if (performance.now() - t0 > 40) { // let the page breathe (and draw as it was)
+          leave();
+          on.progress(done / total);
+          await new Promise((r) => setTimeout(r, 0));
+          enter();
+          t0 = performance.now();
+        }
+      }
+    }
+  } finally {
+    leave();
+    rt.dispose();
+  }
+  on.progress(1);
+  return grid;
+};
 function pickRect(x0, y0, x1, y1) {
   const { buf } = pickRender(1, x0, y0, x1, y1);
   requestRender();
@@ -2553,9 +2670,12 @@ function drawMap() {
   const r = Math.max(W, H) * 0.16, a = -walk.yaw, half = THREE.MathUtils.degToRad(WALK_FOV / 2) * 1.2;
   g.fillStyle = "rgba(37, 99, 235, .28)";
   g.beginPath(); g.moveTo(x, y); g.arc(x, y, r, a - half, a + half); g.closePath(); g.fill();
+  // another tool's drawing on the plan (the route of "Ir até…"): it gets world → map pixels
+  if (app.mapExtra) app.mapExtra(g, (px, py) => [(px - b.min.x) / (b.max.x - b.min.x) * W, (b.max.y - py) / (b.max.y - b.min.y) * H], W, H, map.z);
   g.fillStyle = "#e8590c"; g.strokeStyle = "#fff"; g.lineWidth = Math.max(1.5, W / 120);
   g.beginPath(); g.arc(x, y, Math.max(4, W / 40), 0, Math.PI * 2); g.fill(); g.stroke();
 }
+app.redrawMap = () => drawMap();
 // a new plan when the eyes change deck (more than 1.2 m up or down)
 function mapFollow() {
   if (!walk.on || !map.show) return;
@@ -2595,6 +2715,21 @@ function walkSpot() {
   return { point: camera.position.clone().addScaledVector(Z, -(isFinite(g) ? g : EYE)), yaw: walk.yaw, cam: camera.position.clone() };
 }
 app.walking = () => walk.on;
+// Where one stands in the walk mode now (or where it was left): {point (feet), yaw, cam} or null.
+app.whereWalk = () => (walk.on ? walkSpot() : lastWalk);
+// Another tool drives the walk ("Seguir a rota" of Ir até…): the eyes at `eye`, looking at `yaw`
+// (in plan) and `pitch`. The tool keeps the height, so "Chão" is turned off.
+app.walkPose = function (eye, yaw, pitch = -0.08) {
+  if (!walk.on) setWalk(true);
+  walk.ground = false; walk.collide = false; walk.placing = false;
+  camera.position.set(eye[0], eye[1], eye[2]);
+  walk.yaw = yaw; walk.pitch = pitch;
+  walkLook();
+  syncWalkUI();
+  userMoved = true;
+  lastMove = performance.now();
+  requestRender();
+};
 $("#walkPlace").onclick = () => setWalkPlacing(!walk.placing);
 $("#walkGround").onclick = () => { walk.ground = !walk.ground; walk.floorT = 0; walk.floorZ = null; syncWalkUI(); status(walk.ground ? "Pés no chão: a câmera fica a 1,6 m do piso." : "Voo livre: suba e desça à vontade."); };
 $("#walkCollide").onclick = () => { walk.collide = !walk.collide; walk.freeT = 0; syncWalkUI(); status(walk.collide ? "Colisão ligada: você para em paredes e equipamentos." : "Colisão desligada: você atravessa as peças."); };
@@ -2940,7 +3075,7 @@ function animate(now = performance.now()) {
 // While an AR session runs, the window loop above stops and the session's frames draw the model.
 // Its place in the room is the transform of the whole scene: every mesh is a child of it and the
 // shaders keep model coordinates for the cuts, so nothing else needs to know about AR.
-let xrOn = false, xrOrtho = 0, xrNb = null;
+let xrOn = false, xrOrtho = 0, xrNb = null, xrHide = false;
 const xrCam = new THREE.PerspectiveCamera(60, 1, 0.01, 2000); // takes the phone's pose and lens each frame
 const _eye = new THREE.Vector3(), _xrInv = new THREE.Matrix4(), _xrMv = new THREE.Matrix4();
 app.renderer = renderer;
@@ -3010,15 +3145,19 @@ app.xr = {
       _eye.setFromMatrixPosition(cam.matrix).applyMatrix4(_xrInv.copy(scene.matrixWorld).invert());
       const h = sub.viewport && sub.viewport.w > 0 ? sub.viewport.w : renderer.domElement.height;
       applyLod(minPx, false, _eye, h * sub.projectionMatrix.elements[5] / 2);
+      if (xrHide) for (const c of chunks) { c.mesh.visible = c.meshT.visible = false; if (c.edges) c.edges.visible = false; }
       shared.skyDir.value.copy(SKY).transformDirection(_xrMv.multiplyMatrices(_xrInv.copy(cam.matrix).invert(), scene.matrixWorld));
     }
     renderer.render(scene, xrCam);
     if (extra) { renderer.autoClear = false; renderer.render(extra, xrCam); renderer.autoClear = true; }
     return drawnTris;
   },
+  // the model hidden (only the helpers drawn: the route of "Ir até" over the camera picture)
+  hideModel(on) { xrHide = !!on; },
   end() {
     app.xr.clipSphere(null);
     xrOn = false;
+    if (xrHide) { xrHide = false; updateVisibility(); }
     renderer.xr.enabled = false;
     scene.matrix.identity();
     scene.matrixAutoUpdate = true;
@@ -3093,6 +3232,7 @@ initLabels(app);
 initMarkup(app);
 initMannequin(app);
 initRoute(app);
+initGoto(app);
 initExports(app);
 initDrawing(app);
 initNFC(app);

@@ -99,6 +99,18 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Vista 2D com cotas (planta, frente, lateral, vista atual; linhas ocultas removidas; seção nos cortes) em
   PDF, SVG e DXF
 
+## Navegação até um equipamento ✅
+- [x] Mapa de caminhada calculado do modelo (fatias de profundidade pela placa de vídeo): pisos com folga, degraus,
+  distância de paredes, grades vazadas, faces invertidas detectadas; guardado no aparelho
+- [x] Escadas e escadas de marinheiro pelo nome ligando os níveis; peças ignoradas pelo nome (portas, escotilhas);
+  ligações à mão e áreas bloqueadas por modelo; diagnóstico sem geometria
+- [x] “Ir até…”: partida e destino pela lista (código ou bigrama), pela caminhada ou tocando; caminho mais curto (A*),
+  reto onde dá, com instruções em palavras; “Seguir” na caminhada; rota no minimapa
+- [x] Na RA: faixa e setas no piso real, seta de direção com o próximo passo, acerto de posição e direção tocando
+  no pé de equipamentos
+- [ ] Testar no local com um modelo real (precisão da RA, deriva, escadas; nomes de escadas e portas do modelo)
+- [ ] Tags NFC como pontos de partida/acerto automáticos da RA
+
 ## A fazer
 - [ ] Transformações de instância (posição + matriz 3×3 do PVS): o visualizador avisa quando o modelo as usa, mas
   não as aplica. Falta um modelo de exemplo para confirmar a convenção da matriz antes de implementar.
