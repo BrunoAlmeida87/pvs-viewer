@@ -141,22 +141,39 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   dois scripts embutidos para arquivos e manter só o hash do `importmap`, conferido por um teste no CI;
   (b) não aplicar no site (risco atual baixo: a auditoria não achou ponto de XSS).
 
+### Lote 7 — Permissões do CI (SEG-03, parte)
+- **Mudou (`.github/workflows/desktop.yml`):** permissão `contents: read` por padrão; a criação do Release
+  foi para um job próprio (`release`), o único com `contents: write`, que roda só em tags `v*`, depois do
+  build, com o `.exe` baixado do artefato.
+- **Benefício:** o build — que instala e roda pacotes de terceiros (`npm ci`, electron-builder) — não tem
+  mais permissão de escrita no repositório.
+- **Não incluído:** fixar as actions por SHA e Dependabot (parte restante de SEG-03).
+
 ## Em andamento
 
 - Nenhuma.
 
+## Validação pendente (fora deste ambiente)
+
+- `.exe` com Electron 44 no Windows (placa dedicada e integrada), com um modelo real: abrir, converter,
+  exportar (SEG-01, lotes 4 e 5, CSP).
+- Job `release` (lote 7): só roda numa tag `v*`; validar na próxima versão publicada.
+- Modelo real (SBR): abertura, conversão e verificações com peças fechadas (lotes 2 a 4, ENG-03).
+- Celular: textos novos das verificações e soltar arquivo (lotes 3 e 6).
+
 ## Pendentes (aprovação não solicitada ainda)
 
-- Lote 7 — Permissões do CI (SEG-03, parte).
-- Etapas 2 a 4 do relatório (desempenho, refatoração, modernização).
+- SEG-03 restante: fixar actions por SHA; Dependabot para npm e GitHub Actions.
+- Etapas 2 a 4 do relatório (desempenho, refatoração, modernização), incluindo ARQ-02 (usar
+  `app.modelSignature` em `structure.js` e `anim.js`, hoje com o mesmo cálculo repetido).
 
 ## Bloqueadas (aguardam decisão)
 
-- SEG-01 — Atualizar o Electron 33 → 45.x: precisa de teste do `.exe` no Windows (GPU dedicada e integrada).
-- DAD-01 — Identidade do modelo em vistas/conjuntos/links: escolher “só avisar” ou “avisar e remapear”.
-- ENG-02 b/e e ENG-03 — Mudam o resultado das verificações (ordem dos candidatos da rota, alcance do
-  “apoio”, peça contida em outra).
-- CSP no site e no aplicativo: exige hash dos scripts embutidos; risco de quebrar o carregamento.
+- CSP no site (GitHub Pages): escolher entre mover os scripts embutidos para arquivos (com o hash do
+  `importmap` conferido no CI) ou não aplicar no site (ver “CSP no aplicativo desktop”).
+- DAD-01 opção b (remapear vistas/conjuntos de outra versão por código/nome) e as abas de vista.
+- ENG-02: apoio lateral (parede encostada) em movimento horizontal continua ignorado; mudar exige outra
+  regra (por exemplo, detectar só penetração além da inicial).
 
 ## Resultados medidos
 
@@ -346,3 +363,14 @@ Electron 44, o mesmo roteiro com a política desligada (código anterior) e liga
 - `eval` não pôde ser testado pela automação (o código injetado pelo protocolo de depuração não passa
   pela política); a ausência de `unsafe-eval` é conferida no teste unitário.
 - `npm test`: 41 passam. ESLint sem avisos.
+
+### Lote 7
+- YAML lido sem erro: permissão global `contents: read`; job `build` (Windows) sem permissões próprias;
+  job `release` com `contents: write`, `needs: build`, só em tags `v*`. (O verificador `actionlint` não
+  pôde ser baixado neste ambiente.)
+- Execução manual do workflow no branch de trabalho (nº 32, Electron 44, build só com leitura):
+  dependências instaladas e **passo Testes aprovado no Windows** (pendência do lote 1 resolvida); geração
+  do `.exe` em andamento no momento deste registro — o resultado entra no próximo commit.
+- Varredura final de ESLint em todos os 80 arquivos JavaScript do projeto: só os 4 avisos que já existiam
+  na auditoria (`goto.js`, `picker.js`, `viewer.js` ×2).
+- **Pendente:** o job `release` só roda numa tag `v*`.
