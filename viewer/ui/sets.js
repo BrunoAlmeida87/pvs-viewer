@@ -1,5 +1,5 @@
 // Named selection sets and colour schemes, kept in this browser's localStorage per model.
-import { $, el, fmt, store } from "./util.js";
+import { $, el, fmt, status, store } from "./util.js";
 
 // run-length encode a typed array, skipping the default value: [[start, length, value], ...]
 function runs(arr, skip) {
@@ -28,7 +28,7 @@ export function initSets(app) {
     const d = load();
     const name = $("#setName").value.trim() || `Conjunto ${d.sets.length + 1}`;
     d.sets = d.sets.filter((s) => s.name !== name);
-    d.sets.push({ name, nodes: [...app.selNodes] });
+    d.sets.push({ name, nodes: [...app.selNodes], sig: app.modelSignature });
     save(d);
     $("#setName").value = "";
     render();
@@ -39,7 +39,7 @@ export function initSets(app) {
     const name = $("#schemeName").value.trim() || `Esquema ${d.schemes.length + 1}`;
     d.schemes = d.schemes.filter((s) => s.name !== name);
     d.schemes.push({ name, color: runs(app.partColor, -1), opacity: runs(app.partOpacity, 255),
-      visible: runs(app.partVisible, 1), rule: app.ruleSpec || "", ghost: app.ghost });
+      visible: runs(app.partVisible, 1), rule: app.ruleSpec || "", ghost: app.ghost, sig: app.modelSignature });
     save(d);
     $("#schemeName").value = "";
     render();
@@ -58,6 +58,16 @@ export function initSets(app) {
     else { app.partRule = null; app.emit("rule", ""); app.refresh(); }
   }
 
+  // A set or scheme records the version of the model it was saved on (sig): used on another version (parts
+  // added or removed: other part numbers) it would pick other parts, so the user is asked first. Those
+  // saved before this was recorded have no sig: they work as before, with a note.
+  const other = (s) => !!(s.sig && s.sig !== app.modelSignature);
+  const sameVersion = (s, what) => {
+    if (!s.sig) status(`${what} “${s.name}” foi salvo antes da identificação da versão do modelo: confira se as peças correspondem.`);
+    return !other(s) || confirm(`${what} “${s.name}” foi salvo em outra versão do modelo: as peças podem não corresponder. Usar mesmo assim?`);
+  };
+  const label = (s, text) => el("span.nm", { text: text + (other(s) ? " ⚠" : ""), title: s.name + (other(s) ? " — salvo em outra versão do modelo" : "") });
+
   function render() {
     const d = load();
     const sets = $("#setList"), schemes = $("#schemeList");
@@ -67,17 +77,17 @@ export function initSets(app) {
     for (const s of d.sets) {
       const nodes = s.nodes.filter((n) => n < app.nNodes);
       sets.append(el("div.item", null,
-        el("span.nm", { text: `${s.name} (${fmt(nodes.length)})`, title: s.name }),
-        el("button", { text: "Selecionar", onclick: () => app.select(nodes, "replace", { reveal: false }) }),
-        el("button", { text: "+", title: "Somar à seleção", onclick: () => app.select(nodes, "add", { reveal: false }) }),
-        el("button", { text: "Isolar", onclick: () => app.isolate(nodes) }),
+        label(s, `${s.name} (${fmt(nodes.length)})`),
+        el("button", { text: "Selecionar", onclick: () => { if (sameVersion(s, "O conjunto")) app.select(nodes, "replace", { reveal: false }); } }),
+        el("button", { text: "+", title: "Somar à seleção", onclick: () => { if (sameVersion(s, "O conjunto")) app.select(nodes, "add", { reveal: false }); } }),
+        el("button", { text: "Isolar", onclick: () => { if (sameVersion(s, "O conjunto")) app.isolate(nodes); } }),
         el("button", { text: "✕", title: "Excluir", onclick: () => { const x = load(); x.sets = x.sets.filter((y) => y.name !== s.name); save(x); render(); } })));
     }
     if (!d.schemes.length) schemes.append(el("div.muted", { text: "Nenhum esquema salvo." }));
     for (const s of d.schemes) {
       schemes.append(el("div.item", null,
-        el("span.nm", { text: s.name, title: s.name }),
-        el("button", { text: "Aplicar", onclick: () => applyScheme(s) }),
+        label(s, s.name),
+        el("button", { text: "Aplicar", onclick: () => { if (sameVersion(s, "O esquema")) applyScheme(s); } }),
         el("button", { text: "✕", title: "Excluir", onclick: () => { const x = load(); x.schemes = x.schemes.filter((y) => y.name !== s.name); save(x); render(); } })));
     }
   }

@@ -8,6 +8,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const fss = require("node:fs");
 const { exportMobile } = require("./mobile-export");
+const { insideFolder, isViewerURL, isExternalLink, viewerCSP } = require("./security");
 
 app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
@@ -29,12 +30,17 @@ let conversion = null;
 let objExport = null;
 
 async function serve(root, urlPath) {
-  const file = path.normalize(path.join(root, decodeURIComponent(urlPath)));
-  if (!file.startsWith(root)) return new Response("proibido", { status: 403 });
+  let file;
+  try { file = path.normalize(path.join(root, decodeURIComponent(urlPath))); } catch { return new Response("endereço inválido", { status: 400 }); }
+  if (!insideFolder(root, file)) return new Response("proibido", { status: 403 }); // also a sibling folder with the same prefix
   try {
     const st = await fs.stat(file);
     if (!st.isFile()) throw new Error("not a file");
-    return new Response(await fs.readFile(file), { headers: { "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream" } });
+    const body = await fs.readFile(file), ext = path.extname(file).toLowerCase();
+    const headers = { "content-type": MIME[ext] || "application/octet-stream" };
+    // the viewer's pages: only the app's own scripts run (see viewerCSP in security.js)
+    if (root === VIEWER && ext === ".html") headers["content-security-policy"] = viewerCSP(body.toString("utf8"));
+    return new Response(body, { headers });
   } catch {
     return new Response("não encontrado", { status: 404 });
   }
@@ -53,25 +59,34 @@ async function describe(dir) {
   };
 }
 
+// The bridge (preload.js) answers only the viewer's own pages: a page of anything else, if one were
+// ever loaded in the window, gets an error instead of access to files and dialogs.
+function handle(channel, fn) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isViewerURL(event.senderFrame && event.senderFrame.url)) throw new Error("pedido recusado: origem desconhecida");
+    return fn(event, ...args);
+  });
+}
+
 app.whenReady().then(() => {
   protocol.handle("app", (req) => serve(VIEWER, new URL(req.url).pathname));
   protocol.handle("model", (req) => (modelDir ? serve(modelDir, new URL(req.url).pathname) : new Response("", { status: 404 })));
 
-  ipcMain.handle("pick-folder", async () => {
+  handle("pick-folder", async () => {
     const r = await dialog.showOpenDialog(win, { title: "Pasta do modelo (.pvs + .ol, ou pasta convertida)", properties: ["openDirectory"] });
     return r.canceled || !r.filePaths.length ? null : describe(r.filePaths[0]);
   });
   // a folder opened before (the viewer's "Abertos recentemente" list); null when it is gone
-  ipcMain.handle("open-folder", async (_event, dir) => {
+  handle("open-folder", async (_event, dir) => {
     try { return (await fs.stat(String(dir))).isDirectory() ? describe(String(dir)) : null; } catch { return null; }
   });
   // a folder given on the command line (or dropped on the .exe) opens directly
-  ipcMain.handle("initial-folder", async () => {
+  handle("initial-folder", async () => {
     const arg = process.argv.slice(1).find((a) => !a.startsWith("-") && a !== "." && fss.existsSync(a) && fss.statSync(a).isDirectory());
     return arg ? describe(arg) : null;
   });
 
-  ipcMain.handle("conversion-begin", async () => {
+  handle("conversion-begin", async () => {
     if (conversion) throw new Error("Já existe uma conversão em andamento.");
     const input = await dialog.showOpenDialog(win, { title: "Pasta do modelo original (.pvs + .ol)", properties: ["openDirectory"] });
     if (input.canceled) return null;
@@ -90,7 +105,7 @@ app.whenReady().then(() => {
     return { pvs, base: "model://local/", folder: target, input: input.filePaths[0] };
   });
   // Reorganized structure saved as a converted folder: the same writing steps as a conversion.
-  ipcMain.handle("export-folder-begin", async (_event, folderName) => {
+  handle("export-folder-begin", async (_event, folderName) => {
     if (conversion) throw new Error("Já existe uma conversão ou exportação em andamento.");
     const parent = await dialog.showOpenDialog(win, { title: "Onde salvar a pasta com a nova estrutura?", properties: ["openDirectory", "createDirectory"] });
     if (parent.canceled) return null;
@@ -103,7 +118,7 @@ app.whenReady().then(() => {
     return target;
   });
   // One file chosen by the user in a save dialog (reorganized .pvs, animation video).
-  ipcMain.handle("save-file", async (_event, suggestedName, data, filterName, extensions) => {
+  handle("save-file", async (_event, suggestedName, data, filterName, extensions) => {
     const result = await dialog.showSaveDialog(win, {
       defaultPath: path.join(modelDir || app.getPath("documents"), String(suggestedName).replace(/[\\/]/g, "_")),
       filters: [{ name: String(filterName), extensions: extensions.map(String) }],
@@ -112,20 +127,20 @@ app.whenReady().then(() => {
     await fs.writeFile(result.filePath, Buffer.from(data));
     return result.filePath;
   });
-  ipcMain.handle("conversion-write", async (_event, name, data) => {
+  handle("conversion-write", async (_event, name, data) => {
     if (!conversion || !/^(?:c\/\d{5}\.bin|tree\.json|items\.bin|parts\.bin|layers\.bin|pvsbox\.bin|chunks\.json)$/.test(name))
       throw new Error("Arquivo de conversão inválido.");
     await fs.writeFile(path.join(conversion.temporary, name), Buffer.from(data));
   });
-  ipcMain.handle("conversion-finish", async () => {
+  handle("conversion-finish", async () => {
     if (!conversion) throw new Error("Nenhuma conversão em andamento.");
     await fs.rename(conversion.temporary, conversion.target);
     conversion = null;
   });
-  ipcMain.handle("conversion-cancel", async () => {
+  handle("conversion-cancel", async () => {
     if (conversion) { await fs.rm(conversion.temporary, { recursive: true, force: true }); conversion = null; }
   });
-  ipcMain.handle("mobile-export", async (_event, parts) => {
+  handle("mobile-export", async (_event, parts) => {
     const source = modelDir;
     if (!source || !fss.existsSync(path.join(source, "chunks.json")))
       throw new Error("Abra uma pasta convertida antes de exportar para o celular.");
@@ -147,7 +162,7 @@ app.whenReady().then(() => {
       throw error;
     }
   });
-  ipcMain.handle("obj-begin", async (_event, suggestedName) => {
+  handle("obj-begin", async (_event, suggestedName) => {
     if (objExport) throw new Error("Já existe uma exportação em andamento.");
     const result = await dialog.showSaveDialog(win, {
       title: "Exportar peças em OBJ", defaultPath: String(suggestedName).replace(/[\\/]/g, "_"),
@@ -158,18 +173,18 @@ app.whenReady().then(() => {
     objExport = { target: result.filePath, temporary, handle: await fs.open(temporary, "wx") };
     return true;
   });
-  ipcMain.handle("obj-write", async (_event, text) => {
+  handle("obj-write", async (_event, text) => {
     if (!objExport) throw new Error("Nenhuma exportação em andamento.");
     await objExport.handle.write(text);
   });
-  ipcMain.handle("obj-finish", async () => {
+  handle("obj-finish", async () => {
     if (!objExport) throw new Error("Nenhuma exportação em andamento.");
     const { handle, temporary, target } = objExport;
     await handle.close();
     await fs.rename(temporary, target);
     objExport = null;
   });
-  ipcMain.handle("obj-cancel", async () => {
+  handle("obj-cancel", async () => {
     if (!objExport) return;
     const { handle, temporary } = objExport;
     objExport = null;
@@ -182,7 +197,12 @@ app.whenReady().then(() => {
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, sandbox: true },
   });
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
+  // links: https opens in the user's browser; nothing else leaves the app (files, other programs)
+  win.webContents.setWindowOpenHandler(({ url }) => { if (isExternalLink(url)) shell.openExternal(url); return { action: "deny" }; });
+  // the window stays on the viewer: a dropped file or a link cannot take it (and the bridge) elsewhere
+  const stay = (event, url) => { if (!isViewerURL(url)) event.preventDefault(); };
+  win.webContents.on("will-navigate", stay);
+  win.webContents.on("will-redirect", stay);
   win.loadURL("app://viewer/index.html");
 });
 

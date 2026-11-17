@@ -11,6 +11,7 @@ import { geomClient } from "../lib/geomclient.js";
 
 const TOUCH = 0.005; // metres: closer than this is a hit
 const MAX_NEAR = 300; // parts checked per step, nearest first
+const MERGE_CAP = 300; // parts of the equipment merged into the moving mesh (the rest is not checked)
 
 export function initRoute(app) {
   const panel = $("#routePanel"), btn = $("#routeBtn"), hint = $("#rtHint"), result = $("#rtResult"), slider = $("#rtPos");
@@ -23,6 +24,7 @@ export function initRoute(app) {
   let item = null;   // {nodes, parts, name, box (Box3), ref (Vector3: base centre), key}
   let pts = [];      // offsets [x, y, z] of the equipment, the first one [0, 0, 0]
   let hits = [];     // [{from, to (metres along the path), parts: Set}]
+  let unchecked = new Set(); // parts on the way that could not be checked
   let t = 0, playing = 0, offsets = null;
 
   // ------------------------------------------------------------ the path
@@ -140,7 +142,7 @@ export function initRoute(app) {
     $("#rtCheck").disabled = true;
     try {
       hint.textContent = "Preparando…";
-      item.key = await g.merged("route:" + item.parts.join(","), item.parts);
+      item.key = await g.merged("route:" + item.parts.join(","), item.parts, MERGE_CAP);
       if (!item.key) { hint.textContent = "Não foi possível ler a geometria do equipamento."; return; }
       const own = new Set(item.parts), B = app.partBoxes(), L = len();
       // steps: a quarter of its smallest side, between 2 cm and 25 cm
@@ -159,11 +161,15 @@ export function initRoute(app) {
         cand.push(p);
       }
       // support: what touches it where it stands
+      // parts that could not be checked (no readable geometry, an error in the check) are reported:
+      // "passa sem bater" only when everything on the way was checked
       const support = new Set();
+      unchecked = new Set();
       for (const p of nearAt([0, 0, 0], cand, B)) {
         const k = await g.part(p);
-        if (!k) continue;
+        if (!k) { unchecked.add(p); continue; }
         const r = await g.pair(item.key, k, TOUCH);
+        if (r.error) { unchecked.add(p); continue; }
         if (r.crossings > 0 || r.d < TOUCH) support.add(p);
       }
       hits = [];
@@ -171,12 +177,18 @@ export function initRoute(app) {
       for (let i = 1; i <= n; i++) {
         const s = i / n * L, o = at(s);
         if (i % 4 === 0) { hint.textContent = `Verificando… ${Math.round(i / n * 100)}%`; show(s); await new Promise((r) => setTimeout(r)); }
+        // the check worker keeps a limited number of meshes and drops the oldest: with many parts on the
+        // way, the equipment's own mesh would be dropped (then every check fails). Sent again if so.
+        item.key = await g.merged("route:" + item.parts.join(","), item.parts, MERGE_CAP);
         const here = new Set();
         for (const p of nearAt(o, cand, B)) {
-          if (support.has(p)) continue;
+          // a support (the floor it stands on…) is left out while the equipment is at its starting height
+          // or above; below it (lowered through the floor), it is checked like any other part
+          if (support.has(p) && o[2] >= -TOUCH) continue;
           const k = await g.part(p);
-          if (!k) continue;
+          if (!k) { unchecked.add(p); continue; }
           const r = await g.pairAt(item.key, k, o, 0.1);
+          if (r.error) { unchecked.add(p); continue; }
           if (r.crossings > 0 || r.d < TOUCH) here.add(p);
           else if (r.d < minD) { minD = r.d; minP = p; }
         }
@@ -190,21 +202,27 @@ export function initRoute(app) {
       show(hits.length ? hits[0].from : 0);
     } finally { $("#rtCheck").disabled = false; }
   };
-  // candidate parts whose box meets the equipment's box moved by o (plus a margin), nearest first
+  // candidate parts whose box meets the equipment's box moved by o (plus a margin), nearest first: by the
+  // gap between the boxes (a long wall that touches it comes before a small part whose centre is
+  // nearer), then by the distance between the centres
   function nearAt(o, cand, B) {
-    const b = item.box.clone().translate(new THREE.Vector3(...o)).expandByScalar(0.1), c = b.getCenter(new THREE.Vector3()), out = [];
+    const e = item.box.clone().translate(new THREE.Vector3(...o)), b = e.clone().expandByScalar(0.1), c = b.getCenter(new THREE.Vector3()), out = [];
     for (const p of cand) {
       const q = p * 6;
       if (B[q] > b.max.x || B[q + 3] < b.min.x || B[q + 1] > b.max.y || B[q + 4] < b.min.y || B[q + 2] > b.max.z || B[q + 5] < b.min.z) continue;
-      out.push([p, ((B[q] + B[q + 3]) / 2 - c.x) ** 2 + ((B[q + 1] + B[q + 4]) / 2 - c.y) ** 2 + ((B[q + 2] + B[q + 5]) / 2 - c.z) ** 2]);
+      const gx = Math.max(0, B[q] - e.max.x, e.min.x - B[q + 3]), gy = Math.max(0, B[q + 1] - e.max.y, e.min.y - B[q + 4]), gz = Math.max(0, B[q + 2] - e.max.z, e.min.z - B[q + 5]);
+      out.push([p, gx * gx + gy * gy + gz * gz, ((B[q] + B[q + 3]) / 2 - c.x) ** 2 + ((B[q + 1] + B[q + 4]) / 2 - c.y) ** 2 + ((B[q + 2] + B[q + 5]) / 2 - c.z) ** 2]);
     }
-    return out.sort((u, v) => u[1] - v[1]).slice(0, MAX_NEAR).map((x) => x[0]);
+    return out.sort((u, v) => u[1] - v[1] || u[2] - v[2]).slice(0, MAX_NEAR).map((x) => x[0]);
   }
   const name = (p) => app.tree.names[app.partNode[p]];
   function report(support, minD, minP) {
     result.innerHTML = "";
+    const partial = unchecked.size > 0 || item.parts.length > MERGE_CAP;
     if (!hits.length) {
-      result.append(el("p.rtOk", { text: "Passa sem bater." + (minP >= 0 ? ` Folga mínima ${(minD * 1000).toFixed(0)} mm (${name(minP)}).` : "") }));
+      const gapText = minP >= 0 ? ` Folga mínima ${(minD * 1000).toFixed(0)} mm (${name(minP)}).` : "";
+      if (partial) result.append(el("p.warn", { text: "Não bate no que foi verificado, mas a verificação ficou incompleta (veja abaixo)." + gapText }));
+      else result.append(el("p.rtOk", { text: "Passa sem bater." + gapText }));
     } else {
       result.append(el("p.rtBad", { text: `Bate em ${hits.length} trecho${hits.length === 1 ? "" : "s"} do caminho:` }));
       hits.forEach((h, i) => {
@@ -215,14 +233,16 @@ export function initRoute(app) {
         }, el("b", { text: `${i + 1}. de ${fmtM(h.from)} a ${fmtM(h.to)}` }), el("span", { text: parts.slice(0, 3).map(name).join(", ") + (parts.length > 3 ? ` e mais ${parts.length - 3}` : "") })));
       });
     }
-    if (support.size) result.append(el("p.hint", { text: `Apoios ignorados (encostam nele onde está): ${[...support].slice(0, 4).map(name).join(", ")}${support.size > 4 ? "…" : ""}` }));
-    hint.textContent = hits.length ? "Toque num trecho para ver o equipamento ali." : "Rota livre.";
+    if (item.parts.length > MERGE_CAP) result.append(el("p.warn", { text: `O equipamento tem ${item.parts.length} peças: só as ${MERGE_CAP} primeiras foram verificadas.` }));
+    if (unchecked.size) result.append(el("p.warn", { text: `${unchecked.size} peça${unchecked.size === 1 ? "" : "s"} no caminho não ${unchecked.size === 1 ? "pôde" : "puderam"} ser verificada${unchecked.size === 1 ? "" : "s"} (sem geometria legível ou erro no cálculo): ${[...unchecked].slice(0, 4).map(name).join(", ")}${unchecked.size > 4 ? "…" : ""}` }));
+    if (support.size) result.append(el("p.hint", { text: `Apoios ignorados enquanto ele não desce abaixo da posição inicial (encostam nele onde está): ${[...support].slice(0, 4).map(name).join(", ")}${support.size > 4 ? "…" : ""}` }));
+    hint.textContent = hits.length ? "Toque num trecho para ver o equipamento ali." : partial ? "Verificação incompleta: veja os avisos." : "Rota livre.";
   }
 
   // ------------------------------------------------------------ panel
   function reset() {
     stop();
-    item = null; pts = []; hits = []; result.innerHTML = "";
+    item = null; pts = []; hits = []; unchecked = new Set(); result.innerHTML = "";
     if (offsets) { offsets = null; app.setPartOffsets(null); }
     sync(); redraw();
   }

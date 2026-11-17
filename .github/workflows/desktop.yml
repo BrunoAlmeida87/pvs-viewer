@@ -12,8 +12,10 @@ on:
     paths: ["viewer/**", "desktop/**", ".github/workflows/desktop.yml"]
     tags: ["v*"]
 
+# Read only by default: the build (which installs and runs third-party packages) cannot write to the
+# repository. Only the release job, which runs no package code, gets write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: desktop-${{ github.ref }}
@@ -37,6 +39,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Testes
+        run: npm test
+
       - name: Versão a partir da tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -58,11 +63,23 @@ jobs:
           path: desktop/dist/*.exe
           if-no-files-found: error
 
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar o executável gerado
+        uses: actions/download-artifact@v4
+        with:
+          name: VisualizadorPVS-windows
+          path: dist
+
       - name: Criar o Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         # a Release made on the GitHub site (which also creates the tag) just gets the .exe attached
         run: |
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then

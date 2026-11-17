@@ -27,6 +27,7 @@ export async function convertModel(desktop, progress = () => {}) {
     delete tree.boxes;
     const small = Number.isFinite(low[0]) ? Math.hypot(...low.map((v, i) => high[i] - v)) * 0.004 : 0;
     const chunks = [], items = [], itemLayers = [], layers = [], layerIds = new Map();
+    const missing = []; // .ol files absent or unreadable: those parts have no geometry in the folder
     let tris = 0;
     worker = new Worker(new URL("./olworker.js", import.meta.url), { type: "module" });
     worker.postMessage({ type: "init", base: input.base, small });
@@ -55,6 +56,7 @@ export async function convertModel(desktop, progress = () => {}) {
               itemLayers.push(layerIds.get(name));
             }
           } else if (d.type === "done") {
+            missing.push(...(d.missingNames || []));
             for (let i = 0; i < d.boxParts.length; i++) partsBoxes.set(d.boxes.subarray(i * 6, i * 6 + 6), d.boxParts[i] * 6);
             resolve();
           }
@@ -74,6 +76,8 @@ export async function convertModel(desktop, progress = () => {}) {
     const min = [0, 1, 2].map((k) => Math.min(...chunks.map((c) => c.min[k])));
     const max = [0, 1, 2].map((k) => Math.max(...chunks.map((c) => c.max[k])));
     const meta = { format: 2, source: input.pvs, parts: n, items: items.length, tris, min, max, layers, chunks };
+    // recorded in the folder (older viewers ignore it): the viewer warns when such a folder is opened
+    if (missing.length) meta.missing = { count: missing.length, names: missing.slice(0, 1000) };
     await desktop.conversionWrite("tree.json", encoder.encode(JSON.stringify(tree)));
     await desktop.conversionWrite("items.bin", itemBytes);
     await desktop.conversionWrite("parts.bin", new Uint8Array(partsBoxes.buffer));
@@ -82,7 +86,7 @@ export async function convertModel(desktop, progress = () => {}) {
     // This manifest is written last so an incomplete directory is never recognized as a model.
     await desktop.conversionWrite("chunks.json", encoder.encode(JSON.stringify(meta)));
     await desktop.conversionFinish();
-    return input.folder;
+    return { folder: input.folder, missing };
   } catch (error) {
     await desktop.conversionCancel();
     throw error;

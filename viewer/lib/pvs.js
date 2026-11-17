@@ -134,17 +134,24 @@ export function parsePVS(buffer) {
 }
 
 // Flatten the component tree into the viewer's DFS-ordered tree (same layout as tree.json).
+// A corrupt file can make a component hold itself (directly or through others): the walk stops
+// there with an error instead of growing without end. A component used several times (the same
+// part in two places) is still expanded each time.
 export function buildTree(comps) {
+  if (!comps.length) throw new Error("PVS sem componentes (arquivo vazio ou corrompido)");
   const used = new Uint8Array(comps.length);
   for (const c of comps) for (const i of c.children) used[i.comp] = 1;
   let root = comps.length - 1;
   for (let i = comps.length - 1; i >= 0; i--) if (!used[i]) { root = i; break; }
   const names = [], parent = [], part = [], p0 = [], p1 = [], shapes = [], boxes = [], thumbs = [];
   const keys = [], keyIx = new Map(), vals = [], valIx = new Map(), start = [0], kv = [];
+  const onPath = new Uint8Array(comps.length); // components between the root and the current node
   const stack = [[root, -1, false]];
   while (stack.length) {
     const [ci, par, done] = stack.pop();
-    if (done) { p1[par] = shapes.length; continue; }
+    if (done) { p1[par] = shapes.length; onPath[ci] = 0; continue; }
+    checkComponent(comps, ci, onPath);
+    onPath[ci] = 1;
     const node = names.length;
     const c = comps[ci];
     names.push(c.name);
@@ -169,4 +176,10 @@ export function buildTree(comps) {
     for (let k = c.children.length - 1; k >= 0; k--) stack.push([c.children[k].comp, node, false]);
   }
   return { names, parent, part, p0, p1, shapes, boxes, thumbs, props: { keys, vals, start, kv } };
+}
+
+// Throws when component `ci` does not exist or is already on the path from the root (a cycle).
+export function checkComponent(comps, ci, onPath) {
+  if (!(ci >= 0 && ci < comps.length)) throw new Error(`PVS corrompido: referência a um componente inexistente (${ci})`);
+  if (onPath[ci]) throw new Error(`PVS corrompido: o componente “${comps[ci].name ?? ci}” contém a si mesmo`);
 }

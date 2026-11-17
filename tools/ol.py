@@ -49,6 +49,8 @@ def parse_records(buf):
                 stack.pop()
             p += max(ln, 0)
             continue
+        if ln < 0:  # it would point back at this header and read it again forever
+            raise ValueError("arquivo .ol corrompido: registro com tamanho negativo")
         rec = Rec(tag, bool(word & 0x1000000), buf[p:p + ln])
         p += ln
         stack[-1].children.append(rec)
@@ -231,7 +233,13 @@ def load_ol(path, with_edges=False):
                     for k in map(tuple, np.round(p / WELD).astype(np.int64).tolist()):
                         where.setdefault(k, layer)
         acc = {}
-        r2 = parse_records(secs[2])
+        try:
+            r2 = parse_records(secs[2])
+        except ValueError:
+            # damaged edges: the faces are kept, without edges (a file with no faces is unreadable)
+            if not mesh.groups:
+                raise
+            r2 = Rec(-1, True, b"")
 
         def edge(rec):
             if rec.tag != 0x16 or len(rec.payload) < 5:

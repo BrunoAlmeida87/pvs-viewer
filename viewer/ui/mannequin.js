@@ -136,7 +136,8 @@ export function initMannequin(app) {
     const mesh = worldMesh(it);
     for (let i = 2; i < mesh.pos.length; i += 3) mesh.pos[i] += 0.01;
     const key = app.geom.custom("mannequin", mesh), sole = it.p[2] + 0.03;
-    const box = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(mesh.pos, 3)).expandByScalar(LIMIT);
+    const body = new THREE.Box3().setFromBufferAttribute(new THREE.BufferAttribute(mesh.pos, 3));
+    const box = body.clone().expandByScalar(LIMIT);
     const B = app.partBoxes(), near = [];
     for (let p = 0; p < app.nParts; p++) {
       if (!app.partVisible[p] || !app.isLoaded(p)) continue;
@@ -145,12 +146,26 @@ export function initMannequin(app) {
       if (B[o] > box.max.x || B[o + 3] < box.min.x || B[o + 1] > box.max.y || B[o + 4] < box.min.y || B[o + 2] > box.max.z || B[o + 5] < box.min.z) continue;
       near.push(p);
     }
+    // nearest first (gap between the boxes, then distance between the centres): with more than 400
+    // around, the 400 checked are the nearest ones, as the message says
+    const c = body.getCenter(new THREE.Vector3());
+    const order = near.map((p) => {
+      const o = p * 6;
+      let gap = 0, mid = 0;
+      for (let a = 0; a < 3; a++) {
+        const lo = B[o + a], hi = B[o + 3 + a], g = Math.max(0, lo - body.max.getComponent(a), body.min.getComponent(a) - hi);
+        gap += g * g;
+        mid += ((lo + hi) / 2 - c.getComponent(a)) ** 2;
+      }
+      return [p, gap, mid];
+    }).sort((u, v) => u[1] - v[1] || u[2] - v[2]);
     touched = [];
-    let best = { d: Infinity, p: -1 };
-    for (const p of near.slice(0, 400)) {
+    let best = { d: Infinity, p: -1 }, unchecked = 0;
+    for (const [p] of order.slice(0, 400)) {
       const k = await app.geom.part(p);
-      if (!k) continue;
+      if (!k) { unchecked++; continue; }
       const r = await app.geom.pair(key, k, LIMIT);
+      if (r.error) { unchecked++; continue; }
       if (r.crossings > 0 || r.d < 0.003) touched.push(p);
       else if (r.d < best.d) best = { d: r.d, p };
     }
@@ -164,6 +179,7 @@ export function initMannequin(app) {
       : best.p >= 0 ? `Sem contato. Folga mínima ${(best.d * 1000).toFixed(0)} mm até ${name(best.p)}.`
         : `Sem contato: nada a menos de ${LIMIT * 1000} mm.`;
     if (near.length > 400) hint.textContent += " (verificadas as 400 peças mais próximas)";
+    if (unchecked) hint.textContent += ` Atenção: ${unchecked} peça${unchecked === 1 ? "" : "s"} perto não ${unchecked === 1 ? "pôde" : "puderam"} ser verificada${unchecked === 1 ? "" : "s"} (sem geometria legível ou erro no cálculo).`;
   };
   $("#manSelect").onclick = () => { if (touched.length) app.select(touched.map((p) => app.partNode[p]), "replace"); };
 

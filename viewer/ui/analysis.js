@@ -137,25 +137,40 @@ export function initAnalysis(app) {
     const list = $("#intList");
     list.innerHTML = "";
     const hits = [];
+    // pairs that could not be checked (a part without readable geometry, an error in the check): they
+    // are counted and shown, so that "0 interferências" never stands for "not checked"
+    const unchecked = [];
+    let done = 0;
     const t0 = performance.now();
-    for (let i = 0; i < pairs.length && !stop; i++) {
+    for (let i = 0; i < pairs.length && !stop; i++, done++) {
       if (i % 10 === 0) $("#intStatus").textContent = `Verificando ${fmt(i)}/${fmt(pairs.length)} pares com caixas sobrepostas… ${fmt(hits.length)} encontrado(s)`;
       const [a, b] = pairs[i];
-      const ka = await app.geom.part(a), kb = await app.geom.part(b);
-      if (!ka || !kb) continue;
+      let ka = await app.geom.part(a);
+      const kb = await app.geom.part(b);
+      if (ka) ka = await app.geom.part(a); // sending b may have dropped a from the check worker's memory: again if so
+      if (!ka || !kb) { unchecked.push(pairs[i]); continue; }
       const r = await app.geom.pair(ka, kb, tol);
-      if (r.error) continue;
+      if (r.error) { unchecked.push(pairs[i]); continue; }
       if (r.crossings || r.d <= tol) {
-        const h = { a, b, cross: r.crossings > 0, d: r.d };
+        const h = { a, b, cross: r.crossings > 0 || !!r.contained, inside: !!r.contained, d: r.d };
         hits.push(h);
         addRow(h);
       }
     }
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
-    const nCross = hits.filter((h) => h.cross).length;
+    const nCross = hits.filter((h) => h.cross).length, checked = done - unchecked.length;
     $("#intStatus").textContent = (stop ? "Interrompido. " : "") +
-      `${fmt(pairs.length)} pares verificados em ${secs}s: ${fmt(nCross)} interferência(s), ${fmt(hits.length - nCross)} contato(s)` +
+      (checked === pairs.length ? fmt(pairs.length) : `${fmt(checked)} de ${fmt(pairs.length)}`) +
+      ` pares verificados em ${secs}s: ${fmt(nCross)} interferência(s), ${fmt(hits.length - nCross)} contato(s)` +
+      (unchecked.length ? ` · ${fmt(unchecked.length)} par(es) NÃO verificado(s)` : "") +
       (pairs.length >= MAX_PAIRS ? ` · limite de ${fmt(MAX_PAIRS)} pares: selecione menos peças` : "");
+    if (unchecked.length) {
+      const row = el("div.intRow.warn", { title: "Clique para selecionar as peças desses pares" },
+        el("b", { text: `${fmt(unchecked.length)} par(es) não verificado(s)` }),
+        el("div", { text: "Peça sem geometria legível (arquivo .ol ausente ou ilegível) ou erro no cálculo: o resultado não vale para eles." }));
+      row.onclick = () => { const s = new Set(); for (const [a, b] of unchecked) { s.add(app.partNode[a]); s.add(app.partNode[b]); } app.select([...s], "replace", { reveal: false }); };
+      list.prepend(row);
+    }
     if (hits.length) {
       list.prepend(el("div.row2", null,
         el("button", { text: "Selecionar interferências", onclick: () => { const s = new Set(); for (const h of hits) if (h.cross) { s.add(app.partNode[h.a]); s.add(app.partNode[h.b]); } app.select([...s], "replace", { reveal: false }); } }),
@@ -165,7 +180,7 @@ export function initAnalysis(app) {
   function addRow(h) {
     const na = app.tree.names[app.partNode[h.a]], nb = app.tree.names[app.partNode[h.b]];
     const row = el("div.intRow" + (h.cross ? ".warn" : ""), { title: "Clique para selecionar e enquadrar o par" },
-      el("b", { text: h.cross ? "Interferência" : `Contato ${mm(h.d)}` }), el("div", { text: na }), el("div", { text: nb }));
+      el("b", { text: h.inside ? "Interferência (uma dentro da outra)" : h.cross ? "Interferência" : `Contato ${mm(h.d)}` }), el("div", { text: na }), el("div", { text: nb }));
     row.onclick = () => { const n = [app.partNode[h.a], app.partNode[h.b]]; app.select(n, "replace", { reveal: false }); app.frameNodes(n); };
     $("#intList").append(row);
   }
