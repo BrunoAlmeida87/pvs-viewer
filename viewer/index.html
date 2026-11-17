@@ -799,15 +799,15 @@
     </div>
     <div id="arResults"></div>
   </div>
-  <!-- navigation along the route of "Ir até…": where to go, from where the phone points -->
+  <!-- where to go, from where the phone points: the found item at real size, or the route of "Ir até…" -->
   <div id="arNav" hidden>
     <div id="arNavHead">
       <svg id="arNavArrow" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3 41 42 24 33 7 42z"/></svg>
       <div><b id="arNavText">Siga a seta</b><small id="arNavDist"></small></div>
     </div>
     <div id="arNavRow">
-      <button id="arNavCal" title="Tocar no piso junto ao pé de um equipamento: acerta onde você está no modelo">Acertar posição</button>
-      <button id="arNavModel" title="Mostrar ou ocultar o modelo (a rota continua)">Mostrar modelo</button>
+      <button id="arNavNear" hidden title="Trazer o item para a sua frente (e depois voltar ao lugar)">Ver de perto</button>
+      <button id="arNavModel" title="Mostrar ou ocultar o modelo (o item encontrado e a rota continuam)">Mostrar modelo</button>
     </div>
   </div>
   <div id="arWalk">
@@ -826,7 +826,8 @@
     </div>
     <div id="arRow">
       <button id="arMove" title="Levar o modelo para outro lugar: ele volta a seguir o anel">Mover</button>
-      <button id="arFind" title="Buscar uma peça pelo nome ou código e dar zoom nela"><svg><use href="#i-search"/></svg>Buscar</button>
+      <button id="arFind" title="Buscar uma peça pelo nome ou código: na mesa, zoom nela; em tamanho real, uma seta até ela"><svg><use href="#i-search"/></svg>Buscar</button>
+      <button id="arCal" title="Pôr o modelo no lugar real: tocar no piso junto ao pé de um equipamento perto de você">Acertar posição</button>
       <b id="arScale"></b>
       <small id="arVersion"></small>
     </div>
