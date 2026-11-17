@@ -73,13 +73,20 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   - `security.js` entrou na lista de arquivos empacotados (`desktop/package.json`).
 - **Benefício:** a ponte com acesso a arquivos e diálogos fica restrita às páginas do próprio visualizador.
 
+### Lote 6 — Soltar arquivo não sai da página (CONF-04, parte)
+- **Mudou (`viewer/viewer.js`):** um arquivo ou pasta solto fora da zona do cartão de abertura (sobre o
+  modelo, num painel) é cancelado com a dica “use Abrir”; antes, o navegador o abria no lugar do
+  visualizador e o que estava na tela se perdia. Só arrastos de arquivos são afetados; a zona do cartão
+  continua abrindo ZIP e pastas. (No aplicativo desktop, o lote 5 já impede a janela de navegar.)
+- **Benefício:** um arraste acidental não descarta seleção, cortes, medições e marcações.
+- **Não incluído:** aviso ao fechar a página com trabalho não salvo (`beforeunload`).
+
 ## Em andamento
 
 - Nenhuma.
 
 ## Pendentes (aprovação não solicitada ainda)
 
-- Lote 6 — Arrastar arquivo não sai da página (CONF-04, parte).
 - Lote 7 — Permissões do CI (SEG-03, parte).
 - Etapas 2 a 4 do relatório (desempenho, refatoração, modernização).
 
@@ -191,3 +198,15 @@ trocado por um registrador durante o teste (nada foi aberto de fato).
 - `npm test`: 35 passam (4 novos em `desktop/test/security.test.js`, inclusive caminhos do Windows).
   ESLint sem avisos nos arquivos alterados.
 - **Pendente:** o `.exe` no Windows (gerado pelo CI) — o mesmo código, outro sistema.
+
+### Lote 6
+- Arraste real de arquivo (pelo protocolo de depuração do Chromium, `Input.dispatchDragEvent`) sobre o
+  modelo aberto, versão nova: o evento chega à página (confiável), é cancelado, aparece a dica e a seleção
+  continua. Com `modelo.json`, `modelo.zip` e uma pasta.
+- **Limite do teste:** a ação padrão do navegador (abrir o arquivo solto no lugar da página) acontece fora
+  da página e não é reproduzida por automação, então o “antes” não pôde ser filmado: a correção foi
+  verificada pelo cancelamento do evento, que é o que impede essa ação.
+- Zona do cartão de abertura, ZIP solto: antes e depois abrem o modelo e guardam a cópia no aparelho
+  (“Modelo guardado neste aparelho…”).
+- Abertura geral no desktop e no celular (emulado): sem erros no console. `npm test`: 35 passam. ESLint:
+  nenhum aviso novo.

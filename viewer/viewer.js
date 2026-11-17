@@ -1079,6 +1079,18 @@ async function pickModel() {
     showRecent();
   });
 }
+// A file or folder dropped anywhere but the opening card's drop zone (on the model, on a panel): the
+// browser would open it in place of the viewer and what is on screen would be lost. The drop is
+// cancelled, with a hint. Only drags of files are concerned; the drop zone handles its own first.
+const dragsFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+window.addEventListener("dragover", (e) => { if (dragsFiles(e) && !e.defaultPrevented) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+window.addEventListener("drop", (e) => {
+  if (!dragsFiles(e) || e.defaultPrevented) return;
+  e.preventDefault();
+  status(app.tree ? "O arquivo solto aqui não foi aberto: para trocar de modelo, use Abrir (o modelo atual continua na tela)."
+    : "Solte o arquivo ou a pasta na área indicada no cartão de abertura.");
+});
+
 // Open a model from the recent list. ask: may ask the browser for permission (inside a click).
 // Returns null when it cannot be opened without asking.
 let reopened = null;
