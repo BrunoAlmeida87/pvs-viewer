@@ -28,9 +28,24 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - **Compatibilidade:** nenhum formato de arquivo mudou; para arquivos válidos a saída é idêntica (medido
   abaixo).
 
+### Lote 3 — Verificações que mostram o que não verificaram (ENG-01, ENG-04, ENG-02 a/c/d)
+- **Mudou:**
+  - `viewer/ui/analysis.js` (interferência): pares sem geometria legível ou com erro no cálculo são
+    contados e mostrados (“28 de 29 pares verificados … · 1 par(es) NÃO verificado(s)”), com uma linha
+    que seleciona as peças desses pares; interrompida, conta só os pares de fato verificados.
+  - `viewer/ui/mannequin.js`: as peças em volta são ordenadas pela distância ao corpo antes de pegar as
+    400 (antes: as 400 primeiras pela numeração, embora a mensagem dissesse “mais próximas”); peças não
+    verificadas são avisadas.
+  - `viewer/ui/route.js` (rota de retirada): equipamento com mais de 300 peças é avisado; peça sem
+    geometria ou erro no cálculo é “não verificada” (antes: contava como “não bate”); “Passa sem bater”
+    só quando tudo foi verificado.
+- **Benefício:** um resultado “sem interferência / sem contato / passa” passa a significar “verificado e
+  livre”, e não “não deu para verificar”.
+- **Mudança funcional (aprovada):** só as mensagens; quando tudo é verificado, os textos são os mesmos de
+  antes (medido abaixo).
+
 ## Em andamento
 
-- Lote 3 — Verificações que mostram o que não verificaram (ENG-01, ENG-04, ENG-02 a/c/d).
 - Lote 4 — Carga e conversão sem falhas silenciosas (DAD-02, CONF-03, CONF-05).
 
 ## Pendentes (aprovação não solicitada ainda)
@@ -80,3 +95,25 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   medições, duas vezes).
 - ESLint (regras recomendadas) sem avisos nos arquivos alterados.
 - **Pendente:** confirmar com um modelo real (SBR) que abre e converte como antes.
+- Workflow **Testes** no GitHub após o push: jobs `node` e `python` com sucesso (execução nº 2).
+
+### Lote 3
+Chromium, modelo de exemplo do `tools/navsample.py` (21 peças) e uma variação com 502 peças (500 cubos em
+volta de um ponto e, por último na numeração, uma barra atravessando o peito do manequim). Falhas
+simuladas trocando `app.partGeometry` (peça sem geometria) ou o cálculo do worker (erro), em tempo de
+execução, nas duas versões.
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Interferência, sem falha | 29 pares · 11 interferências · 16 contatos | idêntico |
+| Interferência, uma peça sem geometria | “29 pares verificados” · **10** interferências | “28 de 29 pares verificados” · 10 · “1 par NÃO verificado” + linha de aviso |
+| Interferência, erro no cálculo | “29 pares verificados” · 10 | igual à linha acima |
+| Interferência interrompida (5.000 pares) | “Interrompido. **5.000** pares verificados” | “Interrompido. **2.761 de 5.000** pares verificados” |
+| Rota, sem falha | “Passa sem bater.” + apoio | idêntico |
+| Rota, piso sem geometria / erro | “Passa sem bater.” (apoio some) | “verificação ficou incompleta” + nome da peça |
+| Rota, equipamento de 500 peças | só os trechos | + “só as 300 primeiras foram verificadas” |
+| Manequim, modelo de 21 peças | “Sem contato: nada a menos de 300 mm.” | idêntico |
+| Manequim, 500 peças + barra no peito | “**Sem contato.** Folga mínima 205 mm” (falso) | “**Encosta em 1 peça: BARRA NO PEITO**” |
+
+- `npm test`: 31 passam. ESLint sem avisos nos 3 arquivos.
+- **Não testado:** a interface no celular (os textos novos ficam no mesmo lugar dos antigos).
