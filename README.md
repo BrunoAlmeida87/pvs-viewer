@@ -118,7 +118,7 @@ você mexe no modelo.
   - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
     link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
     esse mesmo endereço.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.6.0`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.6.1`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
