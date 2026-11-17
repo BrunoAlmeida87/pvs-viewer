@@ -7,6 +7,7 @@
   "author": "Bruno",
   "private": true,
   "scripts": {
+    "test": "node --test \"test/*.test.js\"",
     "copy": "node scripts/copy-viewer.js",
     "start": "npm run copy && electron .",
     "dist": "npm run copy && electron-builder --win portable --publish never",

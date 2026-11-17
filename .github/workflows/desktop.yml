@@ -37,6 +37,9 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Testes
+        run: npm test
+
       - name: Versão a partir da tag
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
