@@ -18,4 +18,30 @@ function isExternalLink(url) {
   try { return new URL(url).protocol === "https:"; } catch { return false; }
 }
 
-module.exports = { insideFolder, isViewerURL, isExternalLink };
+// Content Security Policy of a viewer page: scripts only from the app itself and the page's own inline
+// scripts, allowed by their hash (computed from the page, so editing index.html never breaks it); no
+// eval, no plugins. Models are read through model://; blob: and data: are images, downloads and
+// the drawings of the page.
+function viewerCSP(html) {
+  const crypto = require("node:crypto");
+  const hashes = [];
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (/\bsrc\s*=/i.test(m[1])) continue; // an external script: allowed by 'self'
+    hashes.push(`'sha256-${crypto.createHash("sha256").update(m[2], "utf8").digest("base64")}'`);
+  }
+  return [
+    "default-src 'self'",
+    `script-src 'self'${hashes.length ? " " + hashes.join(" ") : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: model:",
+    "connect-src 'self' model: blob: data:",
+    "worker-src 'self'",
+    "font-src 'self' data:",
+    "media-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+}
+
+module.exports = { insideFolder, isViewerURL, isExternalLink, viewerCSP };

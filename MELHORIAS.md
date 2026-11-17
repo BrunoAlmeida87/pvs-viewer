@@ -128,6 +128,19 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   dentro do electron-builder 26), sem versão corrigida compatível (`npm audit fix` não muda nada; a
   “correção” sugerida é voltar ao electron-builder 24). Só rodam ao gerar o `.exe`.
 
+### CSP no aplicativo desktop (SEG-02 d, parte)
+- **Mudou:** `desktop/security.js` (`viewerCSP`) e `desktop/main.js`: as páginas do visualizador saem com o
+  cabeçalho `Content-Security-Policy` — scripts só do próprio aplicativo; os scripts embutidos do
+  `index.html` liberados pelo **hash, calculado do próprio arquivo ao servi-lo** (editar o `index.html`
+  não quebra a política); sem `unsafe-inline`/`unsafe-eval` para scripts, sem plugins (`object-src
+  'none'`), `base-uri 'none'`, `form-action 'none'`; modelos por `model:`, imagens/downloads por `blob:`/`data:`.
+- **Benefício:** um script injetado na página (um defeito futuro, um dado malicioso) não roda, e com ele
+  não chega à ponte do aplicativo.
+- **Não incluído:** CSP no site (GitHub Pages). Lá ela iria numa `<meta>` com hashes **fixos**; uma
+  edição dos scripts embutidos sem atualizar o hash deixaria o site em branco. Alternativas: (a) mover os
+  dois scripts embutidos para arquivos e manter só o hash do `importmap`, conferido por um teste no CI;
+  (b) não aplicar no site (risco atual baixo: a auditoria não achou ponto de XSS).
+
 ## Em andamento
 
 - Nenhuma.
@@ -315,3 +328,21 @@ Aplicativo desktop real no Linux (tela virtual, Playwright), Electron 33.2.1 × 
 - `npm test`: 40 passam.
 - **Pendente (você):** abrir o `.exe` gerado pelo CI no Windows, numa máquina com placa dedicada e numa
   com integrada (placa usada no painel Desempenho), abrir e converter um modelo real.
+
+### CSP no aplicativo desktop
+Electron 44, o mesmo roteiro com a política desligada (código anterior) e ligada:
+
+| Verificação | Sem CSP | Com CSP |
+|---|---|---|
+| Script injetado na página | **rodou** | bloqueado (a única violação registrada) |
+| Abrir modelo convertido e original (workers) | ok | ok |
+| Medir folga entre as duas bombas | 1.200,0 mm | idêntico |
+| Interferência (29 pares) | 11 interferências, 16 contatos | idêntico |
+| Arestas + SSAO, rótulos (6), caminhada | ok | ok |
+| Captura PNG | 536.875 bytes | idêntico |
+| Vista 2D (SVG) | 7 caminhos | idêntico |
+| Exportar glTF (diálogo respondido automaticamente) | 1.776 bytes | **idêntico byte a byte** |
+
+- `eval` não pôde ser testado pela automação (o código injetado pelo protocolo de depuração não passa
+  pela política); a ausência de `unsafe-eval` é conferida no teste unitário.
+- `npm test`: 41 passam. ESLint sem avisos.

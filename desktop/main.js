@@ -8,7 +8,7 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const fss = require("node:fs");
 const { exportMobile } = require("./mobile-export");
-const { insideFolder, isViewerURL, isExternalLink } = require("./security");
+const { insideFolder, isViewerURL, isExternalLink, viewerCSP } = require("./security");
 
 app.commandLine.appendSwitch("force_high_performance_gpu"); // NVIDIA/AMD instead of the integrated GPU
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
@@ -36,7 +36,11 @@ async function serve(root, urlPath) {
   try {
     const st = await fs.stat(file);
     if (!st.isFile()) throw new Error("not a file");
-    return new Response(await fs.readFile(file), { headers: { "content-type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream" } });
+    const body = await fs.readFile(file), ext = path.extname(file).toLowerCase();
+    const headers = { "content-type": MIME[ext] || "application/octet-stream" };
+    // the viewer's pages: only the app's own scripts run (see viewerCSP in security.js)
+    if (root === VIEWER && ext === ".html") headers["content-security-policy"] = viewerCSP(body.toString("utf8"));
+    return new Response(body, { headers });
   } catch {
     return new Response("não encontrado", { status: 404 });
   }
