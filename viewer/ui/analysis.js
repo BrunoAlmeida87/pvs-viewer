@@ -145,12 +145,14 @@ export function initAnalysis(app) {
     for (let i = 0; i < pairs.length && !stop; i++, done++) {
       if (i % 10 === 0) $("#intStatus").textContent = `Verificando ${fmt(i)}/${fmt(pairs.length)} pares com caixas sobrepostas… ${fmt(hits.length)} encontrado(s)`;
       const [a, b] = pairs[i];
-      const ka = await app.geom.part(a), kb = await app.geom.part(b);
+      let ka = await app.geom.part(a);
+      const kb = await app.geom.part(b);
+      if (ka) ka = await app.geom.part(a); // sending b may have dropped a from the check worker's memory: again if so
       if (!ka || !kb) { unchecked.push(pairs[i]); continue; }
       const r = await app.geom.pair(ka, kb, tol);
       if (r.error) { unchecked.push(pairs[i]); continue; }
       if (r.crossings || r.d <= tol) {
-        const h = { a, b, cross: r.crossings > 0, d: r.d };
+        const h = { a, b, cross: r.crossings > 0 || !!r.contained, inside: !!r.contained, d: r.d };
         hits.push(h);
         addRow(h);
       }
@@ -178,7 +180,7 @@ export function initAnalysis(app) {
   function addRow(h) {
     const na = app.tree.names[app.partNode[h.a]], nb = app.tree.names[app.partNode[h.b]];
     const row = el("div.intRow" + (h.cross ? ".warn" : ""), { title: "Clique para selecionar e enquadrar o par" },
-      el("b", { text: h.cross ? "Interferência" : `Contato ${mm(h.d)}` }), el("div", { text: na }), el("div", { text: nb }));
+      el("b", { text: h.inside ? "Interferência (uma dentro da outra)" : h.cross ? "Interferência" : `Contato ${mm(h.d)}` }), el("div", { text: na }), el("div", { text: nb }));
     row.onclick = () => { const n = [app.partNode[h.a], app.partNode[h.b]]; app.select(n, "replace", { reveal: false }); app.frameNodes(n); };
     $("#intList").append(row);
   }

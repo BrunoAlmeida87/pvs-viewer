@@ -3,34 +3,44 @@
 //
 // In:  {type:"mesh", key, pos, idx}
 //      {type:"pair", id, a, b, limit}   -> {type:"pair", id, crossings, d, pa, pb}
+//      (contained: true, d: 0 when one mesh is entirely inside the other, a closed one)
 //      {type:"pairAt", id, a, b, off, limit}: the same with mesh a moved by off [dx, dy, dz]
 //      (the moved copy of the last one is kept: a removal route checks many parts per step)
 //      {type:"forget"}                  (drop the cache)
-import { buildBVH, minDistance, intersections } from "./geom.js";
+import { buildBVH, minDistance, intersections, contained } from "./geom.js";
 
-// First in, first out (geomclient.js mirrors this to know which meshes are still here).
+// The least recently used mesh is dropped first (geomclient.js mirrors this order to know which meshes
+// are still here): a mesh sent or used in a check moves to the end. (Dropping the oldest sent, as before,
+// dropped the mesh of an equipment checked against many parts in the middle of its check.)
 const cache = new Map();
 export const MAX = 600;
 
 function get(key) {
   const m = cache.get(key);
   if (!m) return null;
+  cache.delete(key); cache.set(key, m); // most recently used: last
   if (!m.bvh) m.bvh = buildBVH(m);
   return m;
 }
 
 let moved = null; // {key, pos, idx, bvh}: mesh a moved by an offset
 function check(id, A, B, limit) {
-  if (!A || !B || !A.idx.length || !B.idx.length) { self.postMessage({ type: "pair", id, crossings: 0, d: Infinity }); return; }
+  // a mesh this worker does not hold (never sent, or dropped to keep memory): it cannot be checked, which
+  // the page reports as "not checked" — never as "no collision"
+  if (!A || !B) { self.postMessage({ type: "pair", id, error: "malha ausente na memória do cálculo" }); return; }
+  if (!A.idx.length || !B.idx.length) { self.postMessage({ type: "pair", id, crossings: 0, d: Infinity }); return; }
   const crossings = intersections(A.bvh, B.bvh, 20);
   if (crossings) { self.postMessage({ type: "pair", id, crossings, d: 0 }); return; }
   const r = minDistance(A, B, A.bvh, B.bvh, limit ?? Infinity);
+  // apart or one entirely inside the other (a closed outer part): the second is an interference too
+  if (r.d > 0 && contained(A.bvh, B.bvh)) { self.postMessage({ type: "pair", id, crossings: 0, contained: true, d: 0 }); return; }
   self.postMessage({ type: "pair", id, crossings: 0, d: r.d, pa: r.pa, pb: r.pb });
 }
 
 self.onmessage = (e) => {
   const m = e.data;
   if (m.type === "mesh") {
+    cache.delete(m.key); // a mesh sent again (the mannequin) moves to the end too
     cache.set(m.key, { pos: m.pos, idx: m.idx, bvh: null });
     while (cache.size > MAX) cache.delete(cache.keys().next().value);
   } else if (m.type === "forget") {

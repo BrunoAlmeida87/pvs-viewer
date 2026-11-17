@@ -1,8 +1,10 @@
 // Page side of geomworker.js: sends part meshes once and runs distance / interference checks.
-const MAX = 600; // same as geomworker.js (first in, first out)
+const MAX = 600; // same as geomworker.js (the least recently used mesh is dropped first)
 
 export function geomClient(app) {
   let worker = null, seq = 0;
+  // `sent` mirrors the worker's cache in the same order (least recently used first): a mesh sent, or
+  // used in a check, moves to the end on both sides
   const sent = [], sentSet = new Set(), pending = new Map();
   const start = () => {
     if (worker) return worker;
@@ -10,7 +12,10 @@ export function geomClient(app) {
     worker.onmessage = (e) => { const r = pending.get(e.data.id); if (r) { pending.delete(e.data.id); r(e.data); } };
     return worker;
   };
+  const touch = (key) => { const i = sent.indexOf(key); if (i >= 0) { sent.splice(i, 1); sent.push(key); } };
   const post = (key, g) => {
+    const i = sent.indexOf(key);
+    if (i >= 0) sent.splice(i, 1); // sent again: one entry, at the end
     start().postMessage({ type: "mesh", key, pos: g.pos.slice(), idx: g.idx.slice() });
     sent.push(key); sentSet.add(key);
     while (sent.length > MAX) sentSet.delete(sent.shift());
@@ -40,11 +45,13 @@ export function geomClient(app) {
   }
   // {crossings, d, pa, pb}: crossings > 0 means the surfaces cross (interference).
   function pair(a, b, limit = Infinity) {
+    touch(a); touch(b); // the worker does the same, in the same order
     const id = ++seq;
     return new Promise((resolve) => { pending.set(id, resolve); start().postMessage({ type: "pair", id, a, b, limit }); });
   }
   // The same with mesh a moved by off [dx, dy, dz] (removal route).
   function pairAt(a, b, off, limit = Infinity) {
+    touch(a); touch(b);
     const id = ++seq;
     return new Promise((resolve) => { pending.set(id, resolve); start().postMessage({ type: "pairAt", id, a, b, off, limit }); });
   }

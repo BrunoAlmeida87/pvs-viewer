@@ -150,12 +150,15 @@ export function initMeasure(app) {
       app.forParts(nodes, (p) => parts.push(p));
       return parts.length === 1 ? app.geom.part(parts[0]) : app.geom.merged("n" + nodes.join(","), parts);
     };
-    const [ka, kb] = [await keyOf(nodesA), await keyOf(nodesB)];
+    let ka = await keyOf(nodesA);
+    const kb = await keyOf(nodesB);
+    if (ka) ka = await keyOf(nodesA); // sending B may have dropped A from the check worker's memory: again if so
     if (!ka || !kb) { $("#mHint").textContent = "Não foi possível ler a geometria dessas peças."; return; }
     const r = await app.geom.pair(ka, kb);
     const na = app.tree.names[nodesA[0]], nb = app.tree.names[nodesB[0]];
     if (r.error) { $("#mHint").textContent = "Erro: " + r.error; return; }
     if (r.crossings) items.push({ type: "min", pts: [], text: "Interferência: as peças se cruzam", detail: `${na} × ${nb}`, warn: true });
+    else if (r.contained) items.push({ type: "min", pts: [], text: "Interferência: uma peça está dentro da outra", detail: `${na} × ${nb}`, warn: true });
     else items.push({ type: "min", pts: [r.pa, r.pb], text: `Folga ${mm(r.d)}`, detail: `${na} × ${nb}` });
     $("#mHint").textContent = HINTS[mode];
     render();

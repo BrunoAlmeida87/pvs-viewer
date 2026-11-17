@@ -94,6 +94,30 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   não mudaram. **Não incluído:** remapear as peças por código/nome (opção b) e as abas de vista (já
   separadas por nome + nº de peças).
 
+### ENG-02 b/e e ENG-03 — Rota de retirada e peça contida em outra
+- **Mudou:**
+  - `viewer/lib/geom.js`: `isClosed` (malha fechada: cada aresta em exatamente dois triângulos),
+    `pointInside` (três raios votam; numa peça oca, a cavidade conta como fora) e `contained` (uma malha
+    inteira dentro de outra, **só se a de fora for fechada** — malha aberta nunca gera alarme).
+  - `viewer/lib/geomworker.js`: quando as superfícies não se cruzam nem se tocam, testa a contenção
+    (`contained: true, d: 0`). Interferência mostra “Interferência (uma dentro da outra)”; Medir mostra
+    “uma peça está dentro da outra”; manequim e rota já tratam distância 0 como contato.
+  - `viewer/ui/route.js`: candidatos de cada passo ordenados pela folga entre as caixas (quem encosta
+    primeiro) e só depois pelo centro; o “apoio” (o que encosta onde ele está) volta a ser verificado
+    quando o equipamento desce abaixo da posição inicial.
+  - **Defeito encontrado nos testes e corrigido:** o worker de cálculo guarda até 600 malhas e
+    descartava pela ordem de chegada; numa rota com muitas peças, a malha do **próprio equipamento** era
+    descartada no meio da verificação e o worker respondia “sem colisão” para uma malha que não tinha.
+    Agora descarta a menos usada (LRU, com a página espelhando a mesma ordem) e uma malha ausente é erro
+    (“não verificado”), nunca “sem colisão”. Interferência, Medir e rota reconfirmam as malhas antes de
+    comparar.
+- **Benefício:** peça embutida, manequim dentro de um sólido e equipamento descendo pelo piso deixam de
+  passar como livres; peças grandes que encostam no caminho deixam de ficar fora da amostra.
+- **Limites conhecidos:** a contenção só vale para malhas fechadas — peças com várias cores ou divididas
+  entre blocos da pasta convertida (posições quantizadas por bloco) podem não fechar e então não são
+  testadas; quanto isso ocorre num modelo real ainda não foi medido. Um apoio lateral (parede encostada)
+  continua ignorado em movimento horizontal.
+
 ## Em andamento
 
 - Nenhuma.
@@ -165,6 +189,10 @@ execução, nas duas versões.
 
 - `npm test`: 31 passam. ESLint sem avisos nos 3 arquivos.
 - **Não testado:** a interface no celular (os textos novos ficam no mesmo lugar dos antigos).
+- **Correção deste registro (feita na etapa ENG-02):** nas linhas “Rota” acima, o roteiro de teste
+  escrevia um passo inexistente na lista “Subir/Descer” (0,25 / 0,5 / 1 m), e a subida ficou com 0 m: os
+  avisos de “não verificado” vieram da verificação do apoio, na posição inicial. Repetido depois com uma
+  subida real de 2 m: mesmos resultados (ver ENG-02).
 - Workflow **Testes** no GitHub após o push: ver o registro do lote 4.
 
 ### Lote 4
@@ -238,3 +266,29 @@ salvos, link `#vista=` gerado; depois o mesmo armazenamento na versão B.
 | A: V1 salva sem assinatura (como as atuais) | — | aplica normalmente, com a nota “salva antes da identificação da versão…” |
 
 - `npm test`: 35 passam. ESLint: nenhum aviso novo. Abertura geral sem erros no console.
+
+### ENG-02 b/e e ENG-03
+Testes unitários (`desktop/test/geom.test.js`, 5 novos, incluindo o worker de cálculo rodando em Node):
+malha fechada × aberta × oca; ponto dentro/fora/na cavidade; contenção nos dois sentidos; malha ausente
+é erro; a malha em uso não é descartada. Precisão de `pointInside` contra a resposta exata: 20.000 pontos
+aleatórios em cada um de cubo, peça oca e esfera facetada (48 × 48): **0 erros**.
+
+No navegador, com dois modelos de teste: C (caixa fechada com uma peça dentro; tanque oco com uma peça na
+cavidade; bloco maciço) e D (equipamento cercado por 1.000 cubinhos a 2 cm, uma viga longa de centro a
+~20 m atravessando a subida, e o piso).
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Interferência: caixa × peça dentro dela | 0 interferências | “Interferência (uma dentro da outra)” |
+| Interferência: tanque oco × peça na cavidade | 0 | 0 (sem falso alarme) |
+| Medir: caixa × peça dentro dela | “Folga 500,0 mm” | “Interferência: uma peça está dentro da outra” |
+| Manequim dentro do bloco maciço | “Sem contato. Folga mínima 10 mm…” | “Encosta em 1 peça: BLOCO MACICO” |
+| Rota: subir 3 m sob a viga, com ~375 peças por passo | “**Passa sem bater.** Folga mínima 20 mm” | “Bate … de 1,00 m a 2,00 m: VIGA LONGA” |
+| Rota: descer 0,5 m através do piso (sem o aperto) | “Passa sem bater.” (piso = apoio ignorado) | “Bate … PISO” |
+| Mesma subida, antes da correção do cache (LRU) | — | viga só a 1,00 m e “24 peças não verificadas”: a malha do equipamento era descartada no meio |
+
+- Regressão: os cenários do lote 3 no modelo de exemplo (com e sem falhas simuladas; agora com subida
+  real de 2 m) dão os mesmos resultados; muda só o texto do apoio (“ignorados enquanto ele não desce…”).
+- `npm test`: 40 passam. ESLint sem avisos nos arquivos alterados.
+- **Pendente:** medir num modelo real quantas peças são malhas fechadas (cobertura da contenção) e o
+  tempo das verificações com o cache novo.

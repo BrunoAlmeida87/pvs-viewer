@@ -177,9 +177,14 @@ export function initRoute(app) {
       for (let i = 1; i <= n; i++) {
         const s = i / n * L, o = at(s);
         if (i % 4 === 0) { hint.textContent = `Verificando… ${Math.round(i / n * 100)}%`; show(s); await new Promise((r) => setTimeout(r)); }
+        // the check worker keeps a limited number of meshes and drops the oldest: with many parts on the
+        // way, the equipment's own mesh would be dropped (then every check fails). Sent again if so.
+        item.key = await g.merged("route:" + item.parts.join(","), item.parts, MERGE_CAP);
         const here = new Set();
         for (const p of nearAt(o, cand, B)) {
-          if (support.has(p)) continue;
+          // a support (the floor it stands on…) is left out while the equipment is at its starting height
+          // or above; below it (lowered through the floor), it is checked like any other part
+          if (support.has(p) && o[2] >= -TOUCH) continue;
           const k = await g.part(p);
           if (!k) { unchecked.add(p); continue; }
           const r = await g.pairAt(item.key, k, o, 0.1);
@@ -197,15 +202,18 @@ export function initRoute(app) {
       show(hits.length ? hits[0].from : 0);
     } finally { $("#rtCheck").disabled = false; }
   };
-  // candidate parts whose box meets the equipment's box moved by o (plus a margin), nearest first
+  // candidate parts whose box meets the equipment's box moved by o (plus a margin), nearest first: by the
+  // gap between the boxes (a long wall that touches it comes before a small part whose centre is
+  // nearer), then by the distance between the centres
   function nearAt(o, cand, B) {
-    const b = item.box.clone().translate(new THREE.Vector3(...o)).expandByScalar(0.1), c = b.getCenter(new THREE.Vector3()), out = [];
+    const e = item.box.clone().translate(new THREE.Vector3(...o)), b = e.clone().expandByScalar(0.1), c = b.getCenter(new THREE.Vector3()), out = [];
     for (const p of cand) {
       const q = p * 6;
       if (B[q] > b.max.x || B[q + 3] < b.min.x || B[q + 1] > b.max.y || B[q + 4] < b.min.y || B[q + 2] > b.max.z || B[q + 5] < b.min.z) continue;
-      out.push([p, ((B[q] + B[q + 3]) / 2 - c.x) ** 2 + ((B[q + 1] + B[q + 4]) / 2 - c.y) ** 2 + ((B[q + 2] + B[q + 5]) / 2 - c.z) ** 2]);
+      const gx = Math.max(0, B[q] - e.max.x, e.min.x - B[q + 3]), gy = Math.max(0, B[q + 1] - e.max.y, e.min.y - B[q + 4]), gz = Math.max(0, B[q + 2] - e.max.z, e.min.z - B[q + 5]);
+      out.push([p, gx * gx + gy * gy + gz * gz, ((B[q] + B[q + 3]) / 2 - c.x) ** 2 + ((B[q + 1] + B[q + 4]) / 2 - c.y) ** 2 + ((B[q + 2] + B[q + 5]) / 2 - c.z) ** 2]);
     }
-    return out.sort((u, v) => u[1] - v[1]).slice(0, MAX_NEAR).map((x) => x[0]);
+    return out.sort((u, v) => u[1] - v[1] || u[2] - v[2]).slice(0, MAX_NEAR).map((x) => x[0]);
   }
   const name = (p) => app.tree.names[app.partNode[p]];
   function report(support, minD, minP) {
@@ -227,7 +235,7 @@ export function initRoute(app) {
     }
     if (item.parts.length > MERGE_CAP) result.append(el("p.warn", { text: `O equipamento tem ${item.parts.length} peças: só as ${MERGE_CAP} primeiras foram verificadas.` }));
     if (unchecked.size) result.append(el("p.warn", { text: `${unchecked.size} peça${unchecked.size === 1 ? "" : "s"} no caminho não ${unchecked.size === 1 ? "pôde" : "puderam"} ser verificada${unchecked.size === 1 ? "" : "s"} (sem geometria legível ou erro no cálculo): ${[...unchecked].slice(0, 4).map(name).join(", ")}${unchecked.size > 4 ? "…" : ""}` }));
-    if (support.size) result.append(el("p.hint", { text: `Apoios ignorados (encostam nele onde está): ${[...support].slice(0, 4).map(name).join(", ")}${support.size > 4 ? "…" : ""}` }));
+    if (support.size) result.append(el("p.hint", { text: `Apoios ignorados enquanto ele não desce abaixo da posição inicial (encostam nele onde está): ${[...support].slice(0, 4).map(name).join(", ")}${support.size > 4 ? "…" : ""}` }));
     hint.textContent = hits.length ? "Toque num trecho para ver o equipamento ali." : partial ? "Verificação incompleta: veja os avisos." : "Rota livre.";
   }
 

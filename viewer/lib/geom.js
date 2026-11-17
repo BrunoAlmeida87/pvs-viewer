@@ -219,6 +219,93 @@ export function intersections(bvhA, bvhB, cap = 50) {
 }
 function boxVol(b, n) { const o = n * 6; return (b[o + 3] - b[o]) * (b[o + 4] - b[o + 1]) * (b[o + 5] - b[o + 2]); }
 
+// ------------------------------------------------------------------ one part inside another
+// Is the mesh closed (watertight)? Every edge shared by exactly two triangles, once the vertices at the
+// same position are merged (the faces of a CAD part are separate pools of vertices).
+export function isClosed(mesh) {
+  const { pos, idx } = mesh;
+  const nv = pos.length / 3, id = new Int32Array(nv), at = new Map();
+  for (let v = 0; v < nv; v++) {
+    const k = Math.round(pos[v * 3] * 1e6) + "," + Math.round(pos[v * 3 + 1] * 1e6) + "," + Math.round(pos[v * 3 + 2] * 1e6);
+    let i = at.get(k);
+    if (i === undefined) at.set(k, (i = at.size));
+    id[v] = i;
+  }
+  const n = at.size, edges = new Map();
+  for (let t = 0; t < idx.length; t += 3) {
+    for (let k = 0; k < 3; k++) {
+      const a = id[idx[t + k]], b = id[idx[t + (k + 1) % 3]];
+      if (a === b) continue; // degenerate triangle
+      const key = a < b ? a * n + b : b * n + a;
+      edges.set(key, (edges.get(key) || 0) + 1);
+    }
+  }
+  if (!edges.size) return false;
+  for (const c of edges.values()) if (c !== 2) return false;
+  return true;
+}
+
+// Is point p inside the closed mesh of `bvh`? Rays cast from p cross its surface an odd number of times
+// when p is inside (in a hollow part, a point in the cavity crosses an even number: outside). Three
+// rays in skewed directions vote, so that one grazing an edge does not decide alone.
+const RAYS = [[0.5773, 0.5775, 0.5776], [-0.6011, 0.3019, 0.7399], [0.2087, -0.8803, 0.4261]];
+export function pointInside(bvh, p) {
+  let votes = 0;
+  for (const d of RAYS) if (rayCrossings(bvh, p, d) % 2 === 1) votes++;
+  return votes >= 2;
+}
+function rayCrossings(bvh, p, d) {
+  const { pos, idx } = bvh.mesh, inv = d.map((c) => 1 / c);
+  let n = 0;
+  const stack = [0];
+  while (stack.length) {
+    const k = stack.pop(), o = k * 6;
+    // slab test: does the ray (t > 0) meet the node's box?
+    let t0 = 0, t1 = Infinity;
+    for (let a = 0; a < 3; a++) {
+      let u = (bvh.box[o + a] - p[a]) * inv[a], w = (bvh.box[o + 3 + a] - p[a]) * inv[a];
+      if (u > w) [u, w] = [w, u];
+      t0 = Math.max(t0, u); t1 = Math.min(t1, w);
+    }
+    if (t0 > t1) continue;
+    if (bvh.left[k] >= 0) { stack.push(bvh.left[k], bvh.right[k]); continue; }
+    for (let i = bvh.start[k]; i < bvh.start[k] + bvh.count[k]; i++) {
+      const t = bvh.tri[i] * 3;
+      if (rayTri(p, d, V(pos, idx[t]), V(pos, idx[t + 1]), V(pos, idx[t + 2]))) n++;
+    }
+  }
+  return n;
+}
+// Ray p + t·d (t > 0) crosses triangle abc (Möller–Trumbore).
+function rayTri(p, d, a, b, c) {
+  const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const h = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]];
+  const det = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+  if (Math.abs(det) < 1e-14) return false;
+  const f = 1 / det, s = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+  const u = f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+  if (u < 0 || u > 1) return false;
+  const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]];
+  const v = f * (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]);
+  if (v < 0 || u + v > 1) return false;
+  return f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) > 1e-9;
+}
+
+// One mesh entirely inside the other (their surfaces do not cross): an interference that the surface
+// tests do not see. Only a closed outer mesh counts — an open one has no "inside", so it never gives a
+// false alarm. Meant for meshes whose surfaces neither cross nor touch.
+export function contained(bvhA, bvhB) {
+  return insideOf(bvhA, bvhB) || insideOf(bvhB, bvhA);
+}
+function insideOf(inner, outer) {
+  const a = inner.box, b = outer.box, m = inner.mesh;
+  if (!m.idx.length || a[0] < b[0] || a[1] < b[1] || a[2] < b[2] || a[3] > b[3] || a[4] > b[4] || a[5] > b[5]) return false;
+  if (outer.closed === undefined) outer.closed = isClosed(outer.mesh);
+  if (!outer.closed) return false;
+  const v = m.idx[0] * 3;
+  return pointInside(outer, [m.pos[v], m.pos[v + 1], m.pos[v + 2]]);
+}
+
 // ------------------------------------------------------------------ volume
 // Volume enclosed by a closed, outward-oriented mesh (m³ when positions are in metres).
 export function volume(mesh) {
