@@ -689,8 +689,11 @@ code { background: var(--hover); padding: 1px 5px; border-radius: 4px; font-size
 #arNavHead { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: rgba(20, 24, 31, .78);
   backdrop-filter: blur(8px); }
 #arNavArrow { width: 58px; height: 58px; flex: none; fill: #4dabf7; stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
-#arNavHead b { display: block; font-size: 16px; line-height: 1.3; }
-#arNavHead small { display: block; margin-top: 2px; opacity: .8; font-size: 13px; font-variant-numeric: tabular-nums; }
+#arNavHead > div { flex: 1; min-width: 0; }
+/* at most two lines each, the distance always taking two: the buttons under the card stay put while it changes */
+#arNavHead b, #arNavHead small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+#arNavHead b { font-size: 16px; line-height: 1.3; }
+#arNavHead small { margin-top: 2px; min-height: 2.7em; line-height: 1.35; opacity: .8; font-size: 13px; font-variant-numeric: tabular-nums; }
 #arNav.find #arNavArrow { fill: #ff922b; }
 #arNav.off #arNavArrow { fill: #fcc419; }
 #arNav.arrived #arNavArrow { fill: #51cf66; }

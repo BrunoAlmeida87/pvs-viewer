@@ -55,7 +55,8 @@ export function initAR(app) {
   new MutationObserver(() => { hint.style.animation = "none"; void hint.offsetWidth; hint.style.animation = ""; })
     .observe(hint, { childList: true, characterData: true, subtree: true });
   const buttons = [$("#arBtn"), $("#mAr"), $("#walkAr")].filter(Boolean);
-  for (const b of buttons) b.onclick = () => start({ real: b.id === "walkAr" }); // from the walk mode: real size, right there
+  // (the phone's Tools tile, #mAr, starts it through the sheet's menu in ui/mobile.js: not here too)
+  for (const b of buttons) if (b.id !== "mAr") b.onclick = () => start({ real: b.id === "walkAr" }); // from the walk mode: real size, right there
   app.startAR = start;
 
   // shown only where the browser can do it (an Android phone or tablet with ARCore, over https)
@@ -133,9 +134,11 @@ export function initAR(app) {
     scaleLbl.textContent = Math.abs(r - 1) < 0.05 ? "tamanho real" : r > 1 ? "escala 1:" + dec(r) : "escala " + dec(scale) + ":1";
     for (const b of ui.querySelectorAll("[data-s]")) b.classList.toggle("on", b.dataset.s === preset);
   }
+  let startHint = null; // what to say once the model is put at the start (from the walk mode, on a route)
   function setPhase(p) {
     phase = p;
-    hint.textContent = HINT[p === "search" ? p : p + (real() ? "Real" : "")];
+    hint.textContent = p === "placed" && startHint ? startHint : HINT[p === "search" ? p : p + (real() ? "Real" : "")];
+    if (p === "placed") startHint = null;
     ui.dataset.phase = p;
   }
   const showSpeed = () => { $("#arSpeed").textContent = String(SPEEDS[speed]).replace(".", ",") + " m/s"; };
@@ -181,9 +184,14 @@ export function initAR(app) {
   }
 
   // ------------------------------------------------------------ start and end
+  let starting = false; // a session is being asked for (a second tap meanwhile must not ask again)
   async function start(opts = {}) {
-    if (session || !app.tree) return;
+    if (session || starting || !app.tree) return;
     if (!navigator.xr) { status("Este navegador não tem realidade aumentada (use o Chrome no Android)."); return; }
+    starting = true;
+    try { await open(opts); } finally { starting = false; }
+  }
+  async function open(opts) {
     const box = app.xr.bounds();
     box.getSize(size);
     tableAnchor.set((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, box.min.z);
@@ -200,6 +208,9 @@ export function initAR(app) {
     session = s;
     session.addEventListener("end", onEnd);
     const r = app.renderer;
+    // anything that goes wrong from here ends the session: the viewer comes back as it was, instead of
+    // staying stuck with the camera on and nothing drawn
+    let fromWalk = false;
     try {
       app.closeMobileSide?.();
       for (const p of document.querySelectorAll("#floaters .panel")) if (!p.hidden) p.querySelector("[data-close]")?.click();
@@ -207,7 +218,7 @@ export function initAR(app) {
       nav = route ? startNav(route) : null;
       if (nav) app.navShowRoute?.(true);
       const from = app.xr.begin();
-      const fromWalk = !nav && !!(from && from.cam);
+      fromWalk = !nav && !!(from && from.cam);
       if (nav) { realAnchor.set(...route.route.points[0]); realYaw = nav.yaw0; }
       else { realAnchor.copy(from ? from.point : tableAnchor); realYaw = from ? from.yaw : null; }
       startAtFeet = !!nav || fromWalk;
@@ -217,27 +228,27 @@ export function initAR(app) {
       refSpace = r.xr.getReferenceSpace();
       const viewer = await session.requestReferenceSpace("viewer");
       hitSource = await session.requestHitTestSource({ space: viewer });
+      if (!session.domOverlayState) session.addEventListener("select", onSelect); // no buttons: a tap places / picks up again
+      turned = false;
+      pos.set(0, 0, -1);
+      floorY = null;
+      phase = "search";
+      cal = []; near = null; navCal = null;
+      startHint = nav ? "Fique no começo do caminho, virado para onde ele vai. Depois, “Acertar posição” num equipamento perto."
+        : fromWalk ? "Você está onde parou na caminhada: fique nesse lugar, olhando para o mesmo lado. “Acertar posição” corrige." : null;
+      modelHidden = !!nav;
+      app.xr.hideModel(modelHidden);
+      setPreset(opts.real || nav ? "real" : "table");
+      showSpeed();
+      $("#arVersion").textContent = "v" + VERSION;
+      ui.hidden = false;
+      lod.px = 2; lod.last = 0; lod.ema = 0; lastT = 0;
+      r.setAnimationLoop(onFrame);
     } catch (e) {
+      console.error(e);
       status("Erro na realidade aumentada: " + (e.message || e));
       session.end().catch(() => {});
-      return;
     }
-    if (!session.domOverlayState) session.addEventListener("select", onSelect); // no buttons: a tap places / picks up again
-    turned = false;
-    pos.set(0, 0, -1);
-    floorY = null;
-    phase = "search";
-    cal = []; near = null; navCal = null;
-    modelHidden = !!nav;
-    app.xr.hideModel(modelHidden);
-    setPreset(opts.real || nav ? "real" : "table");
-    if (nav) hint.textContent = "Fique no começo do caminho, virado para onde ele vai. Depois, “Acertar posição” num equipamento perto.";
-    else if (fromWalk) hint.textContent = "Você está onde parou na caminhada: fique nesse lugar, olhando para o mesmo lado. “Acertar posição” corrige.";
-    showSpeed();
-    $("#arVersion").textContent = "v" + VERSION;
-    ui.hidden = false;
-    lod.px = 2; lod.last = 0; lod.ema = 0; lastT = 0;
-    r.setAnimationLoop(onFrame);
   }
 
   function onEnd() {
@@ -572,7 +583,7 @@ export function initAR(app) {
     if (!real() || phase === "search") return;
     if (navCal) { navCal = null; hint.textContent = "Acerto cancelado."; return; }
     pickFor = "calib";
-    q.value = "";
+    picker.reset(); // the nearest equipment first, not the system of the last search
     openSearch();
   };
   const _inv = new THREE.Matrix4(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
