@@ -14,8 +14,8 @@
     "dist:dir": "npm run copy && electron-builder --win dir --publish never"
   },
   "devDependencies": {
-    "electron": "33.2.1",
-    "electron-builder": "25.1.8"
+    "electron": "44.11.3",
+    "electron-builder": "26.18.1"
   },
   "build": {
     "appId": "br.bruno.pvsviewer",
@@ -42,6 +42,6 @@
     }
   },
   "allowScripts": {
-    "electron@33.2.1": true
+    "electron@44.11.3": true
   }
 }

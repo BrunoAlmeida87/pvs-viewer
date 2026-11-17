@@ -118,6 +118,16 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   testadas; quanto isso ocorre num modelo real ainda não foi medido. Um apoio lateral (parede encostada)
   continua ignorado em movimento horizontal.
 
+### SEG-01 — Electron 33 → 44 (versão com suporte)
+- **Mudou:** `desktop/package.json` e `desktop/package-lock.json`: Electron **33.2.1 → 44.11.3**
+  (Chromium 130 → 152; a linha 44 é estável desde agosto/2026 e tem suporte), electron-builder
+  **25.1.8 → 26.18.1**. Nenhuma linha de código precisou mudar.
+- **Benefício:** `npm audit` deixa de apontar avisos do Electron (eram ~45, 7+ altos); no total, de 18
+  avisos (1 crítico, 13 altos) para 11 (0 críticos, 6 altos).
+- **Risco residual:** os 11 restantes são de ferramentas de build (`picomatch`, `minimatch`, `node-gyp`
+  dentro do electron-builder 26), sem versão corrigida compatível (`npm audit fix` não muda nada; a
+  “correção” sugerida é voltar ao electron-builder 24). Só rodam ao gerar o `.exe`.
+
 ## Em andamento
 
 - Nenhuma.
@@ -292,3 +302,16 @@ cavidade; bloco maciço) e D (equipamento cercado por 1.000 cubinhos a 2 cm, uma
 - `npm test`: 40 passam. ESLint sem avisos nos arquivos alterados.
 - **Pendente:** medir num modelo real quantas peças são malhas fechadas (cobertura da contenção) e o
   tempo das verificações com o cache novo.
+
+### SEG-01
+Aplicativo desktop real no Linux (tela virtual, Playwright), Electron 33.2.1 × 44.11.3, mesmo código:
+- Segurança (cenários do lote 5) e fluxos legítimos (modelo original pela linha de comando, `openFolder`,
+  `conversionWrite` sem conversão, “Abrir outro modelo”): **resultados idênticos**.
+- **Converter modelo** (diálogos respondidos automaticamente) e, com a pasta convertida aberta,
+  **Exportar modelo** para o celular: os 14 arquivos gerados são **idênticos byte a byte** nas duas versões.
+- Empacotado com o electron-builder 26: pacote Linux (`app.asar` com `main.js`, `preload.js`,
+  `mobile-export.js`, `security.js`) abre o modelo; **`.exe` portátil do Windows gerado** aqui
+  (`VisualizadorPVS-1.1.0.exe`, 110 MB) — não executado (sem Windows).
+- `npm test`: 40 passam.
+- **Pendente (você):** abrir o `.exe` gerado pelo CI no Windows, numa máquina com placa dedicada e numa
+  com integrada (placa usada no painel Desempenho), abrir e converter um modelo real.
