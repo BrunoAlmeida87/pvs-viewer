@@ -24,6 +24,7 @@
       "main.js",
       "mobile-export.js",
       "preload.js",
+      "security.js",
       "build/icon.png",
       "app/**/*"
     ],

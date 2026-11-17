@@ -62,13 +62,23 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   (medido). Exportações feitas a partir dessa pasta (celular, ZIP, estrutura reorganizada) copiam o campo e
   mostram o mesmo aviso “(na conversão)”.
 
+### Lote 5 — Endurecimento do aplicativo desktop (SEG-04, SEG-02 a–c)
+- **Mudou:** `desktop/security.js` (novo, testável sem Electron) e `desktop/main.js`:
+  - arquivos de `app://` e `model://` só de dentro da pasta (antes: uma pasta irmã com o mesmo começo de
+    nome, como `SBR-convertido`, era legível); endereço malformado responde 400 (antes: falha da requisição);
+  - links abertos fora do aplicativo: só `https:` (antes: qualquer endereço, inclusive outros programas,
+    como `ms-settings:`);
+  - a janela não navega para fora do visualizador (`will-navigate`, `will-redirect`);
+  - as 14 mensagens da ponte (IPC) só são atendidas se vierem de `app://viewer/`.
+  - `security.js` entrou na lista de arquivos empacotados (`desktop/package.json`).
+- **Benefício:** a ponte com acesso a arquivos e diálogos fica restrita às páginas do próprio visualizador.
+
 ## Em andamento
 
 - Nenhuma.
 
 ## Pendentes (aprovação não solicitada ainda)
 
-- Lote 5 — Endurecimento do Electron sem trocar a versão (SEG-04, SEG-02 a–c).
 - Lote 6 — Arrastar arquivo não sai da página (CONF-04, parte).
 - Lote 7 — Permissões do CI (SEG-03, parte).
 - Etapas 2 a 4 do relatório (desempenho, refatoração, modernização).
@@ -160,3 +170,24 @@ injetadas no `olworker.js` pela interceptação de rede do navegador; conversão
 - `npm test`: 31 passam; `tools/test_parsers.py`: 5 passam. ESLint: nenhum aviso novo (os 2 de
   `viewer.js` já existiam: `mobile` sem uso, escape desnecessário).
 - **Pendente:** conversão real no aplicativo desktop (Windows) com um modelo real.
+
+### Lote 5
+Aplicativo desktop real (Electron 33.2.1, Linux com tela virtual, Playwright), versão anterior × nova,
+com a pasta `SBR` (modelo de exemplo) e, ao lado, `SBR-segredo/segredo.txt`. `shell.openExternal` foi
+trocado por um registrador durante o teste (nada foi aberto de fato).
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| `model://local/..%2FSBR-segredo%2Fsegredo.txt` | **200** com o conteúdo | 403 |
+| `model://local/%E0%A4%A` (malformado) | falha da requisição | 400 |
+| Arquivo do modelo (`chunks.json`) | 200 | 200 |
+| `window.open` de `file:`, `https:`, `ms-settings:` | abriu `https:` **e `ms-settings:`** | abre só `https:` |
+| Navegar para `https://example.com/` | a janela **saiu do aplicativo**, com a ponte disponível | permanece em `app://viewer/` |
+| Navegar para `file:///…` | bloqueado pelo Chromium | permanece em `app://viewer/` |
+| Modelo original pela linha de comando; `openFolder`; `conversionWrite` sem conversão; “Abrir outro modelo” | funciona | idêntico |
+
+- Pacote gerado com `electron-builder --linux dir` (cópia fora do repositório): `security.js` está no
+  `app.asar` e o executável empacotado abre o modelo.
+- `npm test`: 35 passam (4 novos em `desktop/test/security.test.js`, inclusive caminhos do Windows).
+  ESLint sem avisos nos arquivos alterados.
+- **Pendente:** o `.exe` no Windows (gerado pelo CI) — o mesmo código, outro sistema.
