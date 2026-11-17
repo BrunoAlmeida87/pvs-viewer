@@ -47,15 +47,29 @@ você mexe no modelo.
   - **Real** (tamanho real): você fica dentro do modelo. O controle da esquerda anda (na direção para onde o celular
     aponta), **▲ ▼** sobem e descem (para trocar de pavimento), o botão de velocidade alterna entre 0,75, 1,5, 3 e
     6 m/s; arrastar com um dedo puxa o piso; dois dedos giram o modelo em volta de você. Não é preciso mirar: ao tocar
-    em **Real** você já está dentro, com o ponto de partida no chão logo à sua frente — o ponto onde estava na
-    **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois de sair dela), olhando para o mesmo lado;
-    senão, ao lado da peça selecionada; senão, o meio do modelo. **Mover** escolhe outro ponto do piso (aponte e toque).
+    em **Real** você já está dentro. Vindo da **Caminhada** (pelo botão **RA** na barra da caminhada, ou logo depois
+    de sair dela), você começa **sob os seus pés**, no ponto onde estava a caminhada, olhando para o mesmo lado — fique
+    nesse lugar de verdade, olhando para o mesmo lado, e o modelo já fica no lugar real. Senão o ponto de partida fica
+    no chão logo à sua frente: ao lado da peça selecionada, ou o meio do modelo. **Mover** escolhe outro ponto do piso
+    (aponte e toque).
+  - **Acertar posição** (tamanho real): põe o modelo no lugar real. Escolha um equipamento perto de você (a lista
+    mostra os mais próximos; também dá para digitar o código) e toque no piso junto ao pé dele, do lado em que você
+    está. Um equipamento acerta a posição; um segundo, a alguns metros do primeiro, acerta também a direção. Em
+    percursos longos e depois de escadas, acerte de novo.
   - **Buscar** (nas duas escalas): digite o nome ou o código (como na Busca: `dt20003` acha `LPR-DT20003`) e toque no
     resultado — ou, sem digitar, escolha o sistema (bigrama) e depois o equipamento, ou **Todo o sistema** para
     destacar todos os equipamentos dele; a seleção atual do visualizador também aparece no topo da lista. A peça fica em laranja e o resto transparente; **na mesa** a vista dá zoom nela (ela vai para onde o
-    modelo estava, com uns 25 cm, e só o que está em volta continua desenhado); **em tamanho real** ela vem para a sua
-    frente. O botão laranja **✕ nome** tira o destaque (na mesa, volta ao modelo inteiro); as escalas também voltam ao
-    modelo inteiro. Ao sair da RA a peça continua selecionada no visualizador.
+    modelo estava, com uns 25 cm, e só o que está em volta continua desenhado).
+    **Em tamanho real** o modelo fica no lugar e você vai até a peça, como quem procura um AirTag: um cartão no topo
+    tem uma seta que aponta para ela (mesmo atrás de você), o nome, a distância em metros, o lado (à frente, à
+    direita, atrás de você…) e se ela está acima ou abaixo (outro nível). O contorno dela e um marcador laranja em cima
+    aparecem através das paredes; o celular vibra ao chegar a 20, 10, 5 e 2 m, e ao chegar o cartão fica verde (“Está
+    aqui”) e a peça pisca. Com **Todo o sistema**, a seta vai até o equipamento mais perto. A seta só aponta certo
+    com o modelo no lugar real: comece da caminhada ou use **Acertar posição** (o cartão avisa quando a posição ainda
+    não foi acertada). **Ver de perto** traz a peça para a sua frente; **Voltar ao lugar** a devolve e a seta volta.
+    **Só o item** esconde o resto do modelo (o contorno e o marcador continuam). O botão laranja **✕ nome** tira o
+    destaque (na mesa, volta ao modelo inteiro); as escalas também voltam ao modelo inteiro. Ao sair da RA a peça
+    continua selecionada no visualizador.
 
   Aparece o que está na tela: peças visíveis, cores, cortes e vista explodida — para ver só um sistema, isole-o
   antes. Precisa do Chrome no Android, do app **Google Play Services para RA** (ARCore) e do site em https; o botão
@@ -104,7 +118,7 @@ você mexe no modelo.
   - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
     link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
     esse mesmo endereço.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.5.0`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.6.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -324,7 +338,9 @@ convertida pelo `build.py`, que abre em segundos.
   pavimento em que se está), com “você está aqui” e o cone de visão; tocar no mapa leva até o ponto.
 - **Realidade aumentada** (Android): o modelo, como está na tela, sobre a mesa ou o piso, em escala de mesa, 1:20,
   1:50, 1:100 ou real; na mesa um dedo move e dois dedos aumentam e giram; em tamanho real um controle anda, ▲ ▼
-  trocam de pavimento e você começa onde estava na caminhada ou ao lado da seleção (botão **Na mesa (RA)**).
+  trocam de pavimento e você começa onde estava na caminhada ou ao lado da seleção (botão **Na mesa (RA)**);
+  **Buscar** em tamanho real mostra uma seta até a peça, com a distância (como um AirTag), e **Acertar posição** põe
+  o modelo no lugar real tocando no pé de equipamentos.
 - **Tags NFC** (Android): gravar a peça e a vista de agora numa tag adesiva; encostar o celular na tag (com o
   visualizador aberto ou fechado) abre o modelo nessa vista, com a peça selecionada e piscando.
 - **Realce**: a peça sob o cursor fica mais clara e mostra o nome (Exibição › Realçar a peça sob o cursor).

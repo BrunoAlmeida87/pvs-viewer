@@ -86,7 +86,10 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Tamanho real: controle para andar, ▲ ▼ entre pavimentos, velocidade, giro em volta de quem olha; começa no
   ponto da caminhada (botão RA na barra dela) ou ao lado da seleção
 - [x] Buscar dentro da RA: a peça encontrada em destaque (laranja, o resto transparente), com zoom nela na mesa
-  (só a vizinhança desenhada) ou trazida para a frente em tamanho real
+  (só a vizinhança desenhada)
+- [x] Em tamanho real, localizar a peça como um AirTag: seta até ela, distância, lado, acima/abaixo, contorno e
+  marcador através das paredes, vibração ao se aproximar; “Ver de perto” / “Voltar ao lugar”; “Só o item”
+- [x] Acertar posição em tamanho real (toque no pé de um ou dois equipamentos); da caminhada, começa sob os pés
 
 ## Engenharia, manutenção e BIM ✅
 - [x] Corte em qualquer direção: plano por uma face clicada, profundidade, inverter, olhar de frente

@@ -7,24 +7,30 @@
 // - on the table (Mesa, 1:20, 1:50, 1:100): one finger drags the model, two fingers scale and turn it;
 // - at real size: you stand inside it. A thumb stick walks (the model moves the other way), ▲ ▼ go
 //   up and down a deck, one finger pulls the floor, two fingers turn the model around you. There
-//   is nothing to aim at: you are put in at once, the start point on the floor just in front of
-//   you. It is where the walk mode stood (looking the same way), else next to the selection, else
-//   the middle of the model. "Mover" aims again, to put it on a chosen spot of the floor.
+//   is nothing to aim at: you are put in at once. From the walk mode you start under your own feet,
+//   looking the way the walk mode looked; else the start point is on the floor just in front of you,
+//   next to the selection or in the middle of the model. "Mover" aims again, to put it on a chosen
+//   spot of the floor.
+//
+// "Acertar posição" (real size) puts the model on the real place: choose an equipment near you and
+// tap the floor at its foot; a second one, a few metres from the first, also fixes the direction.
+//
+// "Buscar" finds an item by name or code: it turns orange and everything else transparent. On the
+// table the view zooms in on it (only what is around it is drawn). At real size the model stays
+// where it is and the item is found like a lost tracker: a card at the top with an arrow pointing to
+// it, how far it is, which side and how high; its box and a pin over it are drawn through the walls;
+// the phone buzzes as you get closer; "Ver de perto" brings it in front of you, "Voltar ao lugar"
+// takes it back. "✕ name" takes the highlight away. Without typing (the keyboard may not open over
+// the camera picture), the list offers the systems (bigramas), then the equipment of the one chosen.
 //
 // "Ir até… › Na RA" walks a route at real size: the model starts where the route starts (you stand
 // there, facing the way it goes) and is hidden — the blue band and its arrows lie on the real
-// floor, an arrow at the top points where to go, with the next step and the distance. "Acertar
-// posição" fixes where you are: tap the floor at the foot of an equipment; a second one, a few
-// metres from the first, also fixes the direction.
-//
-// "Buscar" finds an item by name or code: it turns orange and everything else transparent; on the
-// table the view zooms in on it (only what is around it is drawn), at real size it comes in front
-// of you. "✕ name" takes the highlight away. Without typing (the keyboard may not open over the
-// camera picture), the list offers the systems (bigramas), then the equipment of the one chosen.
+// floor, an arrow at the top points where to go, with the next step and the distance.
 import * as THREE from "three";
 import { $, status, VERSION } from "./util.js";
 import { itemPicker } from "./picker.js";
 import { along } from "../lib/navpath.js";
+import { findInfo, findLine, closerStep } from "../lib/arfind.js";
 
 const TABLE = 0.5; // metres: "Mesa" makes the largest side of what is shown this long
 const SCALES = { 20: 1 / 20, 50: 1 / 50, 100: 1 / 100, real: 1 };
@@ -45,6 +51,9 @@ const HINT = {
 
 export function initAR(app) {
   const ui = $("#arUi"), hint = $("#arHint"), scaleLbl = $("#arScale");
+  // the hint fades out after a few seconds once placed: each new message shows again
+  new MutationObserver(() => { hint.style.animation = "none"; void hint.offsetWidth; hint.style.animation = ""; })
+    .observe(hint, { childList: true, characterData: true, subtree: true });
   const buttons = [$("#arBtn"), $("#mAr"), $("#walkAr")].filter(Boolean);
   for (const b of buttons) b.onclick = () => start({ real: b.id === "walkAr" }); // from the walk mode: real size, right there
   app.startAR = start;
@@ -86,9 +95,15 @@ export function initAR(app) {
   let focus = null; // the found item: {nodes, box, name, ghost, sel} (ghost and selection from before)
   let zoom = null;  // the view zoomed on it: {anchor, clip}; the anchor replaces the preset's
   let tween = null; // a smooth move of the model: {t0, dur, p0, p1, s0, s1}
-  let nav = null;   // walking a route: {route, steps, name, s, cal: [{M, R}], shown, hideModel, done}
+  let nav = null;   // walking a route: {route, steps, cum, s, shownAt, done}
   let navCal = null; // the equipment whose foot is being tapped to fix the position: {nodes, box, name}
   let hitOk = false; // a surface under the ring this frame
+  let cal = [];      // the last taps of "Acertar posição": [{M (model), R (room)}]
+  let align = "none"; // how the model sits on the real place: none · walk · start (of a route) · pos · full
+  let startAtFeet = false; // real size starts under your feet (from the walk mode, on a route)
+  let modelHidden = false; // only the helpers drawn over the camera picture (route, found item)
+  let near = null;   // "Ver de perto": the found item brought in front of you; {pos} where the model was
+  let finder = { shownAt: 0, last: Infinity, arrived: false, index: -1 };
 
   const real = () => preset === "real";
   const anchor = () => (zoom ? zoom.anchor : real() ? realAnchor : tableAnchor);
@@ -100,16 +115,18 @@ export function initAR(app) {
     tween = null;
     if (zoom) { zoom = null; app.xr.clipSphere(null); } // a scale chip goes back to the whole model
     // between the table and real size the model goes somewhere else: aim again
+    near = null;
     if (was !== real() || (zoomed && real())) {
       turned = false;
       if (real()) {
+        if (phase !== "search") align = "none"; // from the table: no longer on the real place
         enterReal(); // no aiming: in at once (or at the first frame)
-        if (focus && phase === "placed") zoomTo(focus.box); // with an item found: in front of it
       } else if (phase !== "search") setPhase("aim");
     }
     ui.classList.toggle("real", real());
     showScale();
     setPhase(phase);
+    syncGuide();
   }
   function showScale() {
     const r = 1 / scale, dec = (x) => (x < 10 ? x.toFixed(1).replace(".", ",").replace(",0", "") : String(Math.round(x)));
@@ -133,7 +150,8 @@ export function initAR(app) {
     M.premultiply(T.makeTranslation(pos.x, pos.y, pos.z));
     return M;
   }
-  // real size: the start point on the floor 0.8 m in front of the phone, the model turned
+  // real size: the start point on the floor 0.8 m in front of the phone (under it, from the walk
+  // mode or on a route), the model turned
   function enterReal() {
     const cam = app.renderer.xr.getCamera();
     if (!session || !cam.cameras.length) { if (phase !== "search") setPhase("search"); return; } // no pose yet: onFrame does it
@@ -143,7 +161,7 @@ export function initAR(app) {
     if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
     fwd.normalize();
     const y = floorY !== null && floorY < camPos.y - 0.9 ? floorY : camPos.y - 1.4;
-    const ahead = nav ? 0 : 0.8; // a route starts where you stand
+    const ahead = startAtFeet ? 0 : 0.8;
     pos.set(camPos.x + fwd.x * ahead, y, camPos.z + fwd.z * ahead);
     faceCamera();
     setPhase("placed");
@@ -189,8 +207,11 @@ export function initAR(app) {
       nav = route ? startNav(route) : null;
       if (nav) app.navShowRoute?.(true);
       const from = app.xr.begin();
+      const fromWalk = !nav && !!(from && from.cam);
       if (nav) { realAnchor.set(...route.route.points[0]); realYaw = nav.yaw0; }
       else { realAnchor.copy(from ? from.point : tableAnchor); realYaw = from ? from.yaw : null; }
+      startAtFeet = !!nav || fromWalk;
+      align = nav ? "start" : fromWalk ? "walk" : "none";
       r.xr.setReferenceSpaceType("local");
       await r.xr.setSession(session);
       refSpace = r.xr.getReferenceSpace();
@@ -206,10 +227,12 @@ export function initAR(app) {
     pos.set(0, 0, -1);
     floorY = null;
     phase = "search";
+    cal = []; near = null; navCal = null;
+    modelHidden = !!nav;
+    app.xr.hideModel(modelHidden);
     setPreset(opts.real || nav ? "real" : "table");
-    ui.classList.toggle("nav", !!nav);
-    $("#arNav").hidden = !nav;
-    if (nav) { app.xr.hideModel(nav.hideModel); showNavModel(); hint.textContent = "Fique no começo do caminho, virado para onde ele vai. Depois, “Acertar posição” num equipamento perto."; }
+    if (nav) hint.textContent = "Fique no começo do caminho, virado para onde ele vai. Depois, “Acertar posição” num equipamento perto.";
+    else if (fromWalk) hint.textContent = "Você está onde parou na caminhada: fique nesse lugar, olhando para o mesmo lado. “Acertar posição” corrige.";
     showSpeed();
     $("#arVersion").textContent = "v" + VERSION;
     ui.hidden = false;
@@ -231,11 +254,11 @@ export function initAR(app) {
     if (focus) { app.setGhost(focus.ghost); focus = null; }
     zoom = null; tween = null;
     if (nav) { app.navShowRoute?.(false); nav = null; }
-    navCal = null;
+    navCal = null; near = null; cal = []; modelHidden = false;
     navArrow.visible = false;
-    ui.classList.remove("nav");
-    $("#arNav").hidden = true;
+    findMarks.visible = false;
     showFocus();
+    syncGuide();
     closeSearch();
     app.xr.end();
   }
@@ -279,7 +302,7 @@ export function initAR(app) {
       const k = Math.min(1, (t - (tween.t0 ??= t)) / tween.dur), e = k * k * (3 - 2 * k);
       pos.lerpVectors(tween.p0, tween.p1, e);
       scale = tween.s0 * Math.pow(tween.s1 / tween.s0, e);
-      if (k >= 1) tween = null;
+      if (k >= 1) { const done = tween.done; tween = null; done?.(); }
     }
     // walking at real size: the model moves the other way
     if (phase === "placed" && real() && dt && (joy.x || joy.y || joy.vert)) {
@@ -291,7 +314,10 @@ export function initAR(app) {
     }
     ring.visible = found && (phase !== "placed" || !!navCal);
     if (ring.visible) ring.matrix.makeTranslation(hitPos.x, hitPos.y, hitPos.z);
-    if (nav && phase === "placed") navFrame(cam, t); else navArrow.visible = false;
+    findMarks.visible = false;
+    if (phase === "placed" && focus && real() && !near) findFrame(cam, t);
+    else if (nav && phase === "placed") navFrame(cam, t);
+    else navArrow.visible = false;
     app.xr.place(phase === "search" ? null : modelMatrix());
     adaptLod(t);
     app.xr.render(lod.px, marks);
@@ -412,7 +438,7 @@ export function initAR(app) {
       const tap = !g.moved && !g.multi && performance.now() - g.t0 < 500;
       g = null;
       if (tap && navCal) { if (hitOk) applyCalib(); else hint.textContent = "Aponte para o piso até aparecer o anel, e toque."; }
-      else if (tap && phase === "aim") { setPhase("placed"); if (focus) zoomTo(focus.box); }
+      else if (tap && phase === "aim") { setPhase("placed"); if (focus && !real()) zoomTo(focus.box); }
     } else if (touches.size === 1) { // one finger left: the turn / scale is over, nothing until it lifts
       g.moved = true;
     }
@@ -446,24 +472,35 @@ export function initAR(app) {
     if (!session) return;
     if (parts.some((p) => !app.partVisible[p])) app.setVisible(nodes, true);
     if (!focus) focus = { ghost: app.ghost, sel: [...app.selNodes] };
+    if (near) backFromNear(false);
     focus.nodes = nodes;
     focus.name = title || (nodes.length === 1 ? app.tree.names[nodes[0]] : `${nodes.length} itens`);
     focus.box = app.nodesBox(nodes);
+    // each item on its own (a whole system: the arrow goes to the nearest one)
+    focus.items = nodes.map((n) => ({ n, b: app.nodesBox([n]) })).filter((x) => !x.b.isEmpty())
+      .map((x) => ({ n: x.n, box: [x.b.min.x, x.b.min.y, x.b.min.z, x.b.max.x, x.b.max.y, x.b.max.z] }));
+    focus.boxes = focus.items.map((x) => x.box);
+    finder = { shownAt: 0, last: Infinity, arrived: false, index: -1 };
     app.select(nodes, "replace");
     app.setGhost(true);
     showFocus();
-    if (phase === "placed" && !focus.box.isEmpty()) zoomTo(focus.box);
+    if (phase === "placed" && !focus.box.isEmpty() && !real()) zoomTo(focus.box);
     setPhase(phase);
-    hint.textContent = focus.name + (phase === "placed" ? " em destaque" : " em destaque: ponha o modelo para ver");
+    syncGuide();
+    hint.textContent = real()
+      ? (align === "none" ? `Para a seta apontar certo, use “Acertar posição” num equipamento perto de você.` : `Siga a seta até ${focus.name}.`)
+      : focus.name + (phase === "placed" ? " em destaque" : " em destaque: ponha o modelo para ver");
   }
   function clearFocus() {
     if (!focus) return;
+    if (near) backFromNear(true);
     app.select(focus.sel, "replace");
     app.setGhost(focus.ghost);
     focus = null;
     showFocus();
     if (zoom && !real()) setPreset("table"); // the zoomed-in table view: back to the whole model
     setPhase(phase);
+    syncGuide();
   }
   function showFocus() {
     chip.hidden = !focus;
@@ -527,14 +564,13 @@ export function initAR(app) {
     const P = cur.route.points, cum = [0];
     for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]));
     const a = along(cur.route, 0);
-    return { route: cur.route, steps: cur.steps, to: cur.to, from: cur.from, cum, s: 0, cal: [], hideModel: true, done: false, shownAt: 0,
+    return { route: cur.route, steps: cur.steps, to: cur.to, from: cur.from, cum, s: 0, done: false, shownAt: 0,
       yaw0: Math.atan2(a.dir[1], a.dir[0]) };
   }
-  function showNavModel() { $("#arNavModel").textContent = nav && nav.hideModel ? "Mostrar modelo" : "Ocultar modelo"; }
-  $("#arNavModel").onclick = () => { if (!nav) return; nav.hideModel = !nav.hideModel; app.xr.hideModel(nav.hideModel); showNavModel(); };
-  $("#arNavCal").onclick = () => {
-    if (!nav) return;
-    if (navCal) { navCal = null; hint.textContent = ""; return; }
+  $("#arNavModel").onclick = () => { modelHidden = !modelHidden; app.xr.hideModel(modelHidden); syncGuide(); };
+  $("#arCal").onclick = () => {
+    if (!real() || phase === "search") return;
+    if (navCal) { navCal = null; hint.textContent = "Acerto cancelado."; return; }
     pickFor = "calib";
     q.value = "";
     openSearch();
@@ -549,8 +585,9 @@ export function initAR(app) {
   }
   // equipment near where you are, to fix the position on (with the route's start first)
   let eqCache = null;
+  app.on("model", () => { eqCache = null; });
   function nearRows() {
-    if (!nav) return [];
+    if (!session) return [];
     if (!eqCache) {
       eqCache = [];
       for (const g of (app.bigramaList || []).filter((x) => x.code)) for (const n of picker.equipmentOf(g.code)) {
@@ -559,7 +596,7 @@ export function initAR(app) {
       }
     }
     const u = userInModel(), rows = [];
-    if (nav.from && nav.from.kind === "item") rows.push({ label: nav.from.name, sub: "ponto de partida do caminho", nodes: nav.from.nodes, title: nav.from.name });
+    if (nav && nav.from && nav.from.kind === "item") rows.push({ label: nav.from.name, sub: "ponto de partida do caminho", nodes: nav.from.nodes, title: nav.from.name });
     const near = eqCache.map((e) => ({ ...e, d: Math.hypot(e.c.x - u.x, e.c.y - u.y) + Math.abs(e.b.min.z - u.feet) * 2 }))
       .filter((e) => e.d < 25).sort((a, b) => a.d - b.d).slice(0, 12);
     for (const e of near) rows.push({ label: app.tree.names[e.n], sub: `a uns ${Math.max(1, Math.round(e.d))} m daqui`, nodes: [e.n], title: app.tree.names[e.n] });
@@ -570,6 +607,7 @@ export function initAR(app) {
     pickFor = "find";
     const box = app.nodesBox(nodes);
     if (box.isEmpty()) { hint.textContent = "Esse item não tem geometria carregada."; return; }
+    if (near) backFromNear(false); // the model goes back on the real place first
     navCal = { nodes, box, name };
     hint.textContent = `Aponte para o piso junto ao pé de ${name}, do lado em que você está, e toque quando aparecer o anel.`;
   }
@@ -577,21 +615,23 @@ export function initAR(app) {
   function applyCalib() {
     const u = userInModel(), b = navCal.box;
     const mx = Math.max(b.min.x, Math.min(b.max.x, u.x)), my = Math.max(b.min.y, Math.min(b.max.y, u.y));
-    // the floor at its foot: the route's floor near there, unless the equipment stands on it
+    // the floor at its foot: its base (on a route: the route's floor near there, unless it stands on it)
     let mz = b.min.z, bd = 4;
-    for (const p of nav.route.points) { const d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; if (Math.abs(p[2] - b.min.z) > 0.6) mz = p[2]; else mz = b.min.z; } }
+    if (nav) for (const p of nav.route.points) { const d = Math.hypot(p[0] - mx, p[1] - my); if (d < bd) { bd = d; if (Math.abs(p[2] - b.min.z) > 0.6) mz = p[2]; else mz = b.min.z; } }
     const M = new THREE.Vector3(mx, my, mz), R = hitPos.clone();
-    const prev = nav.cal[nav.cal.length - 1];
+    const prev = cal[cal.length - 1];
     let turnedNow = false;
     if (prev && Math.hypot(M.x - prev.M.x, M.y - prev.M.y) > 2 && Math.hypot(R.x - prev.R.x, R.z - prev.R.z) > 1.5) {
       yaw = angle(R.x - prev.R.x, R.z - prev.R.z) - Math.atan2(M.x - prev.M.x, -(M.y - prev.M.y));
       turnedNow = true;
     }
-    nav.cal.push({ M, R });
-    if (nav.cal.length > 2) nav.cal.shift();
+    cal.push({ M, R });
+    if (cal.length > 2) cal.shift();
     zoom = null; tween = null; turned = true;
     realAnchor.copy(M);
     pos.copy(R);
+    align = turnedNow || align === "full" ? "full" : "pos";
+    finder.last = Infinity;
     hint.textContent = turnedNow ? `Posição e direção acertadas em ${navCal.name}.`
       : `Posição acertada em ${navCal.name}. Para acertar também a direção, faça o mesmo num equipamento a alguns metros dali.`;
     navCal = null;
@@ -644,5 +684,114 @@ export function initAR(app) {
     }
     if ($("#arNavText").textContent !== text) $("#arNavText").textContent = text;
     if ($("#arNavDist").textContent !== dist) $("#arNavDist").textContent = dist;
+  }
+
+  // ------------------------------------------------------------ finding the item at real size
+  // The card at the top (shared with the route), its buttons, and the layout: with a card the AR's
+  // bar goes to the bottom and the thumb stick goes away (you walk for real).
+  function syncGuide() {
+    const finding = !!session && !!focus && real();
+    const show = finding || !!nav;
+    $("#arNav").hidden = !show;
+    $("#arNav").classList.toggle("find", finding);
+    ui.classList.toggle("guide", show && !!session);
+    $("#arNavNear").hidden = !finding;
+    $("#arNavNear").textContent = near ? "Voltar ao lugar" : "Ver de perto";
+    $("#arNavModel").textContent = modelHidden ? "Mostrar modelo" : finding ? "Só o item" : "Ocultar modelo";
+    if (!show) $("#arNav").classList.remove("arrived", "off");
+    if (finding && near) {
+      $("#arNavText").textContent = focus.name;
+      $("#arNavDist").textContent = "de perto, na sua frente · “Voltar ao lugar” para a seta";
+      $("#arNavArrow").style.transform = "";
+    } else if (finding) finder.shownAt = 0; // the next frame writes the card
+  }
+  $("#arNavNear").onclick = () => {
+    if (!focus || !real()) return;
+    if (near) { backFromNear(true); return; }
+    near = { pos: pos.clone() };
+    const it = focus.items[finder.index] || focus.items[0];
+    zoomTo(it ? new THREE.Box3(new THREE.Vector3(...it.box.slice(0, 3)), new THREE.Vector3(...it.box.slice(3))) : focus.box);
+    syncGuide();
+  };
+  // the model back on the real place (smoothly, or at once)
+  function backFromNear(smooth) {
+    if (!near) return;
+    const back = near.pos;
+    near = null;
+    if (smooth && zoom) {
+      // where the zoomed point goes when the model is back: the same matrix as before "Ver de perto"
+      const z = zoom, p = pos.clone();
+      zoom = null; pos.copy(back);
+      const p1 = z.anchor.clone().applyMatrix4(modelMatrix());
+      zoom = z; pos.copy(p);
+      tween = { t0: null, dur: 700, p0: p, p1, s0: scale, s1: scale, done: () => { zoom = null; pos.copy(back); } };
+    } else {
+      tween = null; zoom = null; pos.copy(back);
+    }
+    syncGuide();
+  }
+
+  // the item's box and a pin over it (room coordinates, drawn over everything: seen through walls)
+  const findMarks = new THREE.Group();
+  const findBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+    new THREE.LineBasicMaterial({ color: 0xff8c00, depthTest: false, transparent: true, opacity: 0.95 }));
+  findBox.matrixAutoUpdate = false;
+  findBox.renderOrder = 19;
+  const pin = new THREE.Group();
+  {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff8c00, depthTest: false, transparent: true, opacity: 0.95 });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.32, 20).rotateX(Math.PI), mat); // points down
+    cone.position.y = 0.16;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.7, 8), mat);
+    stem.position.y = 0.67;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), mat);
+    head.position.y = 1.05;
+    for (const m of [cone, stem, head]) { m.renderOrder = 19; pin.add(m); }
+  }
+  findMarks.add(findBox, pin);
+  findMarks.visible = false;
+  marks.add(findMarks);
+  const _h = new THREE.Vector3(), _bc = new THREE.Vector3(), _bs = new THREE.Vector3(), _bm = new THREE.Matrix4();
+  const buzz = (p) => { try { navigator.vibrate?.(p); } catch { /* no vibration */ } };
+  function findFrame(cam, t) {
+    const u = userInModel();
+    // the way the phone points, in the model's plan
+    const e = cam.matrix.elements;
+    _h.set(camPos.x - e[8], camPos.y, camPos.z - e[10]).applyMatrix4(_inv);
+    const info = findInfo(u, [_h.x - u.x, _h.y - u.y], focus.boxes);
+    if (!info) { navArrow.visible = false; return; }
+    const it = focus.items[info.index], b = it.box, mm = modelMatrix();
+    // the box and the pin, bigger when far so that it is still seen
+    _bc.set((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
+    _bs.set(Math.max(0.05, b[3] - b[0]), Math.max(0.05, b[4] - b[1]), Math.max(0.05, b[5] - b[2]));
+    findBox.matrix.copy(mm).multiply(_bm.makeTranslation(_bc.x, _bc.y, _bc.z)).multiply(T.makeScale(_bs.x, _bs.y, _bs.z));
+    _t.set(_bc.x, _bc.y, b[5]).applyMatrix4(mm);
+    const far = _t.distanceTo(camPos);
+    pin.position.set(_t.x, _t.y + 0.05 + 0.06 * Math.sin(t / 260), _t.z);
+    pin.scale.setScalar(Math.max(0.6, Math.min(5, far / 5)));
+    findMarks.visible = !navCal;
+    // the 3D arrow in front of you, pointing to it
+    _t.set(...info.target).applyMatrix4(mm);
+    const fx = -e[8], fz = -e[10], fl = Math.hypot(fx, fz) || 1;
+    navArrow.position.set(camPos.x + fx / fl * 1.1, camPos.y - 0.55, camPos.z + fz / fl * 1.1);
+    navArrow.rotation.set(0, Math.atan2(-(_t.x - camPos.x), -(_t.z - camPos.z)), 0);
+    navArrow.visible = !navCal && !info.arrived;
+    // the card, a few times a second; a buzz when getting closer
+    if (t - finder.shownAt < 150) return;
+    finder.shownAt = t;
+    if (info.index !== finder.index) { finder.index = info.index; finder.last = Infinity; finder.arrived = false; }
+    const step = closerStep(finder.last, info.dist);
+    if (step && finder.last !== Infinity) buzz(step <= 2 ? [60, 40, 60] : 50);
+    finder.last = info.dist;
+    if (info.arrived && !finder.arrived) { finder.arrived = true; buzz([120, 80, 120]); app.flashNodes([it.n], 6000); }
+    else if (!info.arrived && info.dist > 2) finder.arrived = false;
+    $("#arNavArrow").style.transform = info.arrived ? "" : `rotate(${info.rel.toFixed(3)}rad)`;
+    const box = $("#arNav");
+    box.classList.toggle("arrived", info.arrived);
+    const name = app.tree.names[it.n];
+    const text = info.arrived ? `Está aqui: ${name}` : focus.items.length > 1 ? `${focus.name} · o mais perto: ${name}` : name;
+    const line = findLine(info) + (align === "none" && !info.arrived ? " · acerte a posição para a seta apontar certo" : "");
+    if ($("#arNavText").textContent !== text) $("#arNavText").textContent = text;
+    if ($("#arNavDist").textContent !== line) $("#arNavDist").textContent = line;
   }
 }
