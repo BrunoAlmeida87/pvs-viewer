@@ -5,7 +5,8 @@
 //               {type:"task", id, parts:[{part, name, file?: File}]}
 // Messages out: {type:"chunk", min, max, nv, ni, ne, verts: Uint16Array, nrm: Int8Array, idx: Uint16Array,
 //                edges: Uint16Array, items: Uint32Array, colors: Uint8Array, layers: string[] (per item)}
-//               {type:"done", id, tris, missing, boxParts, boxes}
+//               {type:"done", id, tris, missing, missingNames, boxParts, boxes}
+//               (missingNames: the .ol files absent or unreadable in this task)
 // Vertices are welded by position + normal (smooth shading keeps creases). The CAD edges of
 // section 2 are stored as index pairs into the same vertices.
 import { loadOL, weld, edgeOwners } from "./ol.js";
@@ -31,13 +32,14 @@ async function runTask(m) {
   // three size classes: large, medium (< 5 × small) and small parts
   const big = new ChunkWriter(false), medium = new ChunkWriter(false), little = new ChunkWriter(true);
   let tris = 0, missing = 0;
-  const boxParts = [], boxes = [];
+  const boxParts = [], boxes = [], missingNames = [];
+  const lost = (name) => { missing++; missingNames.push(name); };
   for (const { part, name, file } of m.parts) {
     let buf;
-    try { buf = await readFile(name, file); } catch { missing++; continue; }
-    if (!buf) { missing++; continue; }
+    try { buf = await readFile(name, file); } catch { lost(name); continue; }
+    if (!buf) { lost(name); continue; }
     let ol;
-    try { ol = loadOL(new Uint8Array(buf)); } catch { missing++; continue; }
+    try { ol = loadOL(new Uint8Array(buf)); } catch { lost(name); continue; }
     const groups = ol.groups;
     // each layer's edges go with that layer's largest colour group
     const owner = edgeOwners(groups);
@@ -64,7 +66,7 @@ async function runTask(m) {
   medium.flush();
   little.flush();
   const bp = Uint32Array.from(boxParts), bb = Float32Array.from(boxes);
-  self.postMessage({ type: "done", id: m.id, tris, missing, boxParts: bp, boxes: bb }, [bp.buffer, bb.buffer]);
+  self.postMessage({ type: "done", id: m.id, tris, missing, missingNames, boxParts: bp, boxes: bb }, [bp.buffer, bb.buffer]);
 }
 
 async function readFile(name, file) {

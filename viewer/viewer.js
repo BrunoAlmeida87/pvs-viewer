@@ -58,7 +58,13 @@ const mobile = document.documentElement.classList.contains("mobile");
 const listeners = {};
 export const app = {
   on(ev, fn) { (listeners[ev] || (listeners[ev] = [])).push(fn); },
-  emit(ev, ...a) { (listeners[ev] || []).forEach((f) => f(...a)); },
+  // A listener's error is logged and does not stop the others, nor the code that emitted the event.
+  // (A copy of the list: a listener added during the call runs from the next one, as with forEach.)
+  emit(ev, ...a) {
+    for (const f of (listeners[ev] || []).slice()) {
+      try { f(...a); } catch (e) { console.error(`Erro num ouvinte do evento “${ev}”:`, e); }
+    }
+  },
   title: "", tree: null, nNodes: 0, nParts: 0,
   selNodes: new Set(), focus: -1, ghost: false, lastResults: [],
   access: null, // how to read model files (thumbnails): {dir} | {files} | {base}
@@ -945,7 +951,7 @@ async function pickModel() {
         $("#openErr").textContent = "";
         try {
           const result = await convertModel(window.desktop, status);
-          if (result) status(`Modelo convertido em ${result}. Abra essa pasta para visualizar.`);
+          if (result) status(`Modelo convertido em ${result.folder}.` + missingText(result.missing.length, result.missing) + " Abra essa pasta para visualizar.");
         } catch (e) { fail(e); }
         finally { button.disabled = false; }
       };
@@ -1134,6 +1140,12 @@ function rememberPath(r) {
 }
 
 const NO_MODEL = "A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.";
+// Parts left without geometry by a conversion (.ol absent or unreadable): count and some names.
+function missingText(count, names) {
+  if (!count) return "";
+  return ` Atenção: ${count.toLocaleString("pt-BR")} peça(s) sem arquivo .ol legível ficaram sem geometria` +
+    (names && names.length ? ` (${names.slice(0, 3).join(", ")}${count > 3 ? "…" : ""})` : "") + ".";
+}
 
 async function fromDesktop(r) {
   if (r.converted) return { kind: "converted", src: httpSrc(r.base) };
@@ -1324,6 +1336,8 @@ async function loadConverted(src, ask) {
   source = { kind: "converted", src, meta, v2: (meta.format || 1) >= 2, loaded: new Uint8Array(meta.chunks.length) };
   try { app.pvsBoxes = new Float32Array(await src.buf("pvsbox.bin")); } catch { app.pvsBoxes = null; } // older folders lack it
   await loadFirst(ask === "auto" ? (meta.tris || Infinity) > MOBILE_PREVIEW_TRIANGLES : ask, touch);
+  // a folder converted with parts missing (chunks.json "missing", written since this was added)
+  if (meta.missing && meta.missing.count > 0) status($("#load").textContent + " ·" + missingText(meta.missing.count, meta.missing.names) + " (na conversão)");
   app.emit("loaded");
 }
 
@@ -1393,20 +1407,25 @@ async function loadRawParts(want) {
   for (let s = 0; s < total; s += TASK) tasks.push(todo.slice(s, s + TASK));
   const nWorkers = Math.max(1, Math.min(touch ? 2 : 8, (navigator.hardwareConcurrency || 4) - 1));
   const bar = $("#bar > div");
-  let missing = 0, next = 0, doneParts = 0;
+  let missing = 0, next = 0, doneParts = 0, partial = 0;
   const files = m.access.files;
-  const runWorker = () => new Promise((resolve, reject) => {
+  const runWorker = () => new Promise((resolve) => {
     const w = new Worker(new URL("./lib/olworker.js", import.meta.url), { type: "module" });
     w.postMessage({ type: "init", dir: m.access.dir, base: m.access.base, small: source.small });
-    let cur = null;
+    let cur = null, got = null; // the task being read, and its parts that already sent geometry
     const send = () => {
       if (next >= tasks.length) { w.terminate(); resolve(); return; }
       cur = tasks[next++];
+      got = new Set();
       const parts = cur.map((p) => ({ part: p, name: t.shapes[p], file: files ? files.get(t.shapes[p]) || null : undefined }));
       w.postMessage({ type: "task", id: next, parts });
     };
-    const progress = () => {
-      for (const p of cur) app.partLoaded[p] = 1;
+    // A task read to the end marks all its parts loaded (a missing .ol has nothing more to load). A
+    // task that failed marks only the parts that already sent geometry: the others stay "not loaded",
+    // so "Carregar…" tries them again, and nothing is drawn twice.
+    const progress = (ok) => {
+      for (const p of cur) if (ok || got.has(p)) app.partLoaded[p] = 1;
+      if (!ok) partial += got.size; // geometry received before the error: maybe not all of it
       doneParts = Math.min(total, doneParts + cur.length);
       bar.style.width = (100 * doneParts / total).toFixed(1) + "%";
       const secs = ((performance.now() - t0) / 1000).toFixed(0);
@@ -1415,48 +1434,59 @@ async function loadRawParts(want) {
     w.onmessage = (e) => {
       const d = e.data;
       if (d.type === "chunk") {
+        for (const p of d.items) got.add(p);
         const io = addItems(d.items, d.colors, d.layers);
         addChunk(d, d.verts, d.nrm, d.idx, d.ne ? d.edges : null, io, d.items.length);
       } else if (d.type === "error") {
         console.error("worker:", d.message);
-        missing += cur.length;
-        progress();
+        progress(false);
         send();
       } else if (d.type === "done") {
         missing += d.missing;
         // geometry bounding boxes replace the ones stored in the PVS (not always accurate)
         for (let i = 0; i < d.boxParts.length; i++) partBox.set(d.boxes.subarray(i * 6, i * 6 + 6), d.boxParts[i] * 6);
-        progress();
+        progress(true);
         send();
       }
     };
-    w.onerror = (e) => { w.terminate(); reject(new Error(e.message || "erro no worker")); };
+    // the worker itself failed (out of memory, an error in its script): its task counts as failed and
+    // the other workers go on with the remaining tasks
+    w.onerror = (e) => { console.error("worker:", e.message || e); w.terminate(); if (cur) progress(false); resolve(); };
     send();
   });
   await Promise.all(Array.from({ length: Math.min(nWorkers, Math.max(1, tasks.length)) }, runWorker));
+  let failed = 0;
+  for (const p of todo) if (!app.partLoaded[p]) failed++;
   const secs = ((performance.now() - t0) / 1000).toFixed(0);
-  status(`${total.toLocaleString("pt-BR")} peças carregadas em ${secs}s` + (missing ? ` · ${missing} arquivo(s) .ol ausente(s) ou ilegível(is)` : ""));
+  status(`${(total - failed).toLocaleString("pt-BR")} peças carregadas em ${secs}s` + (missing ? ` · ${missing} arquivo(s) .ol ausente(s) ou ilegível(is)` : "") +
+    (failed ? ` · ${failed.toLocaleString("pt-BR")} peça(s) não lida(s) por erro: use Carregar… para tentar de novo` : "") +
+    (partial ? ` · ${partial.toLocaleString("pt-BR")} peça(s) com erro na leitura podem estar incompletas` : ""));
+  if (failed || partial) console.error(`erro na leitura: ${failed} peça(s) não lida(s), ${partial} possivelmente incompleta(s)`);
   const all = partsBox(todo);
   if (!all.isEmpty()) {
     const b = new THREE.Box3(new THREE.Vector3(...modelMin), new THREE.Vector3(...modelMax));
     if (!want) b.copy(all); else b.union(all);
     modelMin = b.min.toArray(); modelMax = b.max.toArray();
   }
+  return failed;
 }
 
-// Load geometry for parts (Uint8Array flags, or null = everything not loaded yet).
-let loading = false;
-async function loadParts(want, preview = false) {
-  if (loading) return;
-  loading = true;
-  try {
-    if (source.kind === "converted") await loadConvertedParts(want, preview);
-    else await loadRawParts(want);
-  } finally { loading = false; }
+// Load geometry for parts (Uint8Array flags, or null = everything not loaded yet). A call made while
+// a load runs waits for it and then loads what is still missing (before, it returned at once without
+// loading anything: an NFC tag read while the model opened, for example, found its part not loaded).
+let loadQueue = Promise.resolve();
+function loadParts(want, preview = false) {
+  const run = loadQueue.then(() => loadPartsNow(want, preview));
+  loadQueue = run.catch(() => {});
+  return run;
+}
+async function loadPartsNow(want, preview) {
+  const failed = source.kind === "converted" ? (await loadConvertedParts(want, preview), 0) : await loadRawParts(want);
   const total = app.availableParts.reduce((s, v) => s + v, 0);
   const n = app.partLoaded.reduce((s, v, p) => s + (app.availableParts[p] ? v : 0), 0);
   $("#loadMoreBtn").hidden = n >= total;
-  if (n < total) status(`${source.previewed ? "Prévia pronta · " : ""}${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas · use Carregar… para o resto`);
+  if (n < total) status(`${source.previewed ? "Prévia pronta · " : ""}${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas` +
+    (failed ? ` · ${failed.toLocaleString("pt-BR")} não lida(s) por erro` : "") + " · use Carregar… para o resto");
   if (!userMoved) {
     if (source.kind === "converted" && source.previewed && chunks.length) {
       const box = new THREE.Box3();

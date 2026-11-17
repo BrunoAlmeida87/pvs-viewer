@@ -44,9 +44,27 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - **Mudança funcional (aprovada):** só as mensagens; quando tudo é verificado, os textos são os mesmos de
   antes (medido abaixo).
 
+### Lote 4 — Carga e conversão sem falhas silenciosas (DAD-02, CONF-03, CONF-05)
+- **Mudou (`viewer/viewer.js`, `viewer/lib/convert.js`, `viewer/lib/olworker.js`):**
+  - `app.emit`: o erro de um ouvinte vai para o console e não impede os outros nem quem emitiu o evento.
+  - `loadParts`: uma carga pedida durante outra espera e carrega o que ainda faltar (antes: voltava na hora
+    sem carregar nada — uma tag NFC lida durante a abertura, por exemplo, não achava a peça carregada).
+  - Leitura do modelo original: peças de uma tarefa que falhou ficam “não carregadas” (contadas no status;
+    **Carregar…** tenta de novo); as que já receberam geometria antes da falha ficam carregadas, com o
+    aviso “podem estar incompletas”, e nada é desenhado duas vezes. Se um worker cai, só a tarefa dele
+    conta como falha e os outros continuam (antes: “Erro: …” e o botão Carregar sumia).
+  - Conversão no desktop: os `.ol` ausentes ou ilegíveis são informados ao terminar (com os nomes) e
+    gravados em `chunks.json` como `missing: {count, names}`; ao abrir essa pasta, o visualizador avisa.
+    O worker passou a enviar `missingNames` na mensagem `done` (campo novo; quem não o usa o ignora).
+- **Benefício:** nenhuma peça fica “carregada” sem geometria em silêncio; falhas podem ser refeitas; uma
+  conversão incompleta não passa por completa.
+- **Compatibilidade:** `missing` é um campo novo e opcional: versões anteriores abrem a pasta normalmente
+  (medido). Exportações feitas a partir dessa pasta (celular, ZIP, estrutura reorganizada) copiam o campo e
+  mostram o mesmo aviso “(na conversão)”.
+
 ## Em andamento
 
-- Lote 4 — Carga e conversão sem falhas silenciosas (DAD-02, CONF-03, CONF-05).
+- Nenhuma.
 
 ## Pendentes (aprovação não solicitada ainda)
 
@@ -117,3 +135,28 @@ execução, nas duas versões.
 
 - `npm test`: 31 passam. ESLint sem avisos nos 3 arquivos.
 - **Não testado:** a interface no celular (os textos novos ficam no mesmo lugar dos antigos).
+- Workflow **Testes** no GitHub após o push: ver o registro do lote 4.
+
+### Lote 4
+Chromium; modelo de exemplo (convertido) e modelo original de teste (`.pvs` + 3 `.ol`). Falhas do worker
+injetadas no `olworker.js` pela interceptação de rede do navegador; conversão do desktop com um
+`window.desktop` simulado que guarda em memória os arquivos que seriam gravados.
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Ouvinte de evento com erro durante uma seleção | a exceção chega a quem selecionou; o ouvinte seguinte **não roda** | isolada; o seguinte roda |
+| Duas cargas pedidas ao mesmo tempo | **1 de 2** peças carregadas | 2 de 2 |
+| Modelo original, sem falha | 3 peças, 2 malhas | idêntico |
+| Worker falha antes de enviar geometria | “3 arquivo(s) .ol ausente(s)” (falso), peças “carregadas” sem geometria, sem como tentar de novo | “0 de 3 peças carregadas · 3 não lida(s) por erro”, **Carregar** visível; tentando de novo: 3 peças, 2 malhas |
+| Worker falha depois de enviar geometria | “3 arquivo(s) .ol ausente(s)” (falso) | “3 peças carregadas · 3 peça(s) com erro na leitura podem estar incompletas”; tentar de novo não duplica (2 malhas) |
+| Worker cai | “Erro: …”, botão **Carregar** escondido | igual à falha antes da geometria (recuperável) |
+| Conversão sem falta | 7 arquivos | **idênticos byte a byte** |
+| Conversão sem `p2.ol` | “Modelo convertido…”, sem aviso | aviso com o nome; `missing: {count: 1, names: ["p2.ol"]}` |
+| Abrir a pasta convertida sem `p2.ol` | o visualizador anterior abre normalmente | abre e avisa “(na conversão)” |
+
+- Modelo original com `.ol` ausente ou corrompido: mesmo comportamento de antes (“1 arquivo(s) .ol
+  ausente(s) ou ilegível(is)”). Abertura geral no desktop e no celular (emulado): ~0,8–0,9 s, sem erros
+  no console.
+- `npm test`: 31 passam; `tools/test_parsers.py`: 5 passam. ESLint: nenhum aviso novo (os 2 de
+  `viewer.js` já existiam: `mobile` sem uso, escape desnecessário).
+- **Pendente:** conversão real no aplicativo desktop (Windows) com um modelo real.
