@@ -256,25 +256,27 @@ class ChunkWriter:
         self._reset()
 
 
-def main():
-    pvs_path, out_dir = sys.argv[1], sys.argv[2]
-    workers = int(sys.argv[3]) if len(sys.argv) > 3 else max(1, (os.cpu_count() or 2) - 1)
-    base = os.path.dirname(os.path.abspath(pvs_path))
-    os.makedirs(out_dir, exist_ok=True)
-    t0 = time.time()
-    model = PVS(pvs_path)
-    comps = model.components
-    root = model.roots()[0]
-    print("structure: %d components, %.1fs" % (len(comps), time.time() - t0), flush=True)
-
-    # DFS: tree nodes + parts in order
+def flatten_tree(comps, root):
+    """DFS of the component tree from `root`: tree nodes + parts in order (the same walk as
+    buildTree() in viewer/lib/pvs.js). A corrupt file can make a component hold itself, directly or
+    through others: that raises ValueError instead of growing without end. A component used several
+    times (the same part in two places) is expanded each time."""
+    if not comps:
+        raise ValueError("PVS sem componentes (arquivo vazio ou corrompido)")
     names, parents, part_of, ends, shapes, node_comp, part_comp = [], [], [], [], [], [], []
+    on_path = set()  # components between the root and the current node
     stack = [(root, -1, False)]
     while stack:
         ci, parent, done = stack.pop()
         if done:
             ends[parent] = len(shapes)  # parent holds node index here
+            on_path.discard(ci)
             continue
+        if not 0 <= ci < len(comps):
+            raise ValueError("PVS corrompido: referência a um componente inexistente (%s)" % ci)
+        if ci in on_path:
+            raise ValueError("PVS corrompido: o componente “%s” contém a si mesmo" % comps[ci]["name"])
+        on_path.add(ci)
         node = len(names)
         c = comps[ci]
         names.append(c["name"])
@@ -290,6 +292,22 @@ def main():
         stack.append((ci, node, True))
         for inst in reversed(c["children"]):
             stack.append((inst["comp"], node, False))
+    return names, parents, part_of, ends, shapes, node_comp, part_comp
+
+
+def main():
+    pvs_path, out_dir = sys.argv[1], sys.argv[2]
+    workers = int(sys.argv[3]) if len(sys.argv) > 3 else max(1, (os.cpu_count() or 2) - 1)
+    base = os.path.dirname(os.path.abspath(pvs_path))
+    os.makedirs(out_dir, exist_ok=True)
+    t0 = time.time()
+    model = PVS(pvs_path)
+    comps = model.components
+    roots = model.roots()
+    root = roots[0] if roots else len(comps) - 1  # no root: a cycle, reported by flatten_tree
+    print("structure: %d components, %.1fs" % (len(comps), time.time() - t0), flush=True)
+
+    names, parents, part_of, ends, shapes, node_comp, part_comp = flatten_tree(comps, root)
     # a node's parts are the contiguous range [p0, p1) of DFS-ordered parts
     pstart = [0] * len(names)
     running = 0

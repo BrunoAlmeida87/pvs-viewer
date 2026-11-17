@@ -13,6 +13,7 @@
 // are written, children before parents and the root last (as in the files Creo View writes).
 import { gzipSync } from "../vendor/fflate.js";
 import { gunzipMember } from "./gz.js";
+import { checkComponent } from "./pvs.js";
 
 const utf8 = new TextEncoder();
 
@@ -141,12 +142,16 @@ export function nodeComponents(comps) {
   for (const c of comps) for (const k of c.kids) used[k] = 1;
   let root = comps.length - 1;
   for (let i = comps.length - 1; i >= 0; i--) if (!used[i]) { root = i; break; }
-  const out = [], stack = [root];
+  const out = [], onPath = new Uint8Array(comps.length), stack = [[root, false]];
   while (stack.length) {
-    const ci = stack.pop();
+    const [ci, done] = stack.pop();
+    if (done) { onPath[ci] = 0; continue; }
+    checkComponent(comps, ci, onPath); // a cycle in a corrupt file stops here, as in buildTree()
+    onPath[ci] = 1;
     out.push(ci);
+    stack.push([ci, true]);
     const k = comps[ci].kids;
-    for (let j = k.length - 1; j >= 0; j--) stack.push(k[j]);
+    for (let j = k.length - 1; j >= 0; j--) stack.push([k[j], false]);
   }
   return out;
 }

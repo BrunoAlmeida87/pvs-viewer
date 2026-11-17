@@ -35,6 +35,8 @@ function records(b) {
     p += 8;
     const tag = word & 0xffffff;
     if (tag === 0) { if (stack.length > 1) stack.pop(); p += Math.max(ln, 0); continue; }
+    // a negative length would point back at this header and read it again forever
+    if (ln < 0) throw new Error("arquivo .ol corrompido: registro com tamanho negativo");
     const r = { tag, o: p, n: ln, kids: [] };
     p += ln;
     stack[stack.length - 1].kids.push(r);
@@ -198,8 +200,12 @@ export function loadOL(u8) {
     }
   }
   const byLayer = new Map();
-  if (secs[2]) {
-    const { root, dv } = records(secs[2]);
+  // The edges are optional: damaged edge records leave the faces without edges. A file with no
+  // faces and damaged edges is still an unreadable file (counted as such by the loaders).
+  let edgeRecords = null;
+  if (secs[2]) { try { edgeRecords = records(secs[2]); } catch (e) { if (!groups.size) throw e; } }
+  if (edgeRecords) {
+    const { root, dv } = edgeRecords;
     walk(root, (vp) => {
       if (vp.tag !== 0x16) return;
       const pool = readPool(dv, vp, false);

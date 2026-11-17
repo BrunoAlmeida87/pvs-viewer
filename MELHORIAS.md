@@ -12,9 +12,24 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - **Benefício:** uma mudança que quebra um teste aparece antes de chegar ao `main` e não gera executável.
 - **Verificado:** ver a seção do lote em “Resultados medidos”.
 
+### Lote 2 — Parsers `.ol`/`.pvs` que não travam (CONF-01, CONF-02)
+- **Mudou:**
+  - `viewer/lib/ol.js` e `tools/ol.py`: um registro com tamanho negativo é “arquivo .ol corrompido” (antes:
+    laço infinito). Arestas danificadas deixam a peça sem arestas, com as faces; sem faces, o arquivo
+    continua ilegível.
+  - `viewer/lib/pvs.js` (`buildTree`), `viewer/lib/pvswrite.js` (`nodeComponents`) e `tools/build.py`
+    (`flatten_tree`, extraído de `main` para poder ser testado): componente que contém a si mesmo ou
+    referência a componente inexistente dão erro com mensagem (antes: árvore crescendo até estourar a
+    memória). A mesma peça usada em vários lugares continua aparecendo em cada um.
+  - Testes novos: `desktop/test/ol.test.js`, `desktop/test/pvs.test.js`, `tools/test_parsers.py`; o
+    workflow **Testes** ganhou o job `python`.
+- **Benefício:** um arquivo danificado (cópia interrompida, disco ruim) passa a ser contado como “ausente ou
+  ilegível”, sem travar ou derrubar a aba, o worker de leitura, a ferramenta Medir ou o `build.py`.
+- **Compatibilidade:** nenhum formato de arquivo mudou; para arquivos válidos a saída é idêntica (medido
+  abaixo).
+
 ## Em andamento
 
-- Lote 2 — Parsers `.ol`/`.pvs` que não travam (CONF-01, CONF-02).
 - Lote 3 — Verificações que mostram o que não verificaram (ENG-01, ENG-04, ENG-02 a/c/d).
 - Lote 4 — Carga e conversão sem falhas silenciosas (DAD-02, CONF-03, CONF-05).
 
@@ -41,6 +56,27 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   código 1; sem ele, código 0.
 - YAML dos dois workflows lido sem erro; o passo **Testes** fica entre “Instalar dependências” e “Gerar o
   executável”.
+- Workflow **Testes** executado no GitHub após o push do lote: sucesso (execução nº 1).
 - **Pendente:** o passo **Testes** do `desktop.yml` só roda no Windows quando houver push no `main` (ou
   “Run workflow”); a forma usada (`node --test "test/*.test.js"`, padrão expandido pelo próprio Node) não
   depende do shell.
+
+### Lote 2
+- `npm test`: 31 testes, 31 passam (23 anteriores + 8 novos). `tools/test_parsers.py`: 5 passam.
+- Os testes novos falham no código anterior: `.ol` com tamanho negativo não termina em 5 s (JS e Python);
+  `.pvs` cíclico estoura a memória do worker de teste.
+- Comparação código anterior × novo (cópias fora do repositório):
+  - `loadOL` em 3.001 arquivos (o válido + 3.000 danificados ao acaso): 2.678 idênticos; 201 erro → erro
+    (só a mensagem); 84 antes erro → agora faces sem as arestas danificadas; 27 antes “vazio” silencioso →
+    agora “corrompido”; 3 antes laço infinito → agora “corrompido”; 8 antes geometria → agora “corrompido”
+    (nos 8, a geometria antiga era diferente da do arquivo válido: dados lidos fora do lugar).
+  - `buildTree` e `nodeComponents` em 500 árvores válidas aleatórias (com peças repetidas): 500 idênticas.
+  - `tools/build.py` num modelo original de teste (`.pvs` + 3 `.ol`) e no mesmo modelo sem um `.ol`: os 7
+    arquivos de saída idênticos byte a byte. Com um `.ol` corrompido: o anterior trava; o novo termina com
+    `WARN p3.ol: arquivo .ol corrompido…`.
+- No navegador (Chromium, modelo original de teste aberto por `?pvs=`): com o `.ol` corrompido, a versão
+  anterior derruba a aba; a nova abre as 3 peças, mostra “1 arquivo(s) .ol ausente(s) ou ilegível(is)”, e
+  Medir nessa peça responde em ~13 ms. Tempo de Medir numa peça válida: 10–26 ms nas duas versões (5 + 5
+  medições, duas vezes).
+- ESLint (regras recomendadas) sem avisos nos arquivos alterados.
+- **Pendente:** confirmar com um modelo real (SBR) que abre e converte como antes.
