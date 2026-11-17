@@ -1206,6 +1206,12 @@ function setModel(name, t, boxes, lo, hi) {
   modelMin = lo; modelMax = hi;
   const nParts = partBox.length / 6;
   app.nParts = nParts;
+  // This version of the model: name, number of parts and the names of the part files (the same rule as
+  // ui/structure.js and ui/anim.js). Saved views and selection sets record it, so that applying them to
+  // another version of the model (parts added or removed: other part numbers) asks first.
+  let hash = 2166136261;
+  for (const s of t.shapes) for (let i = 0; i < s.length; i++) hash = Math.imul(hash ^ s.charCodeAt(i), 16777619);
+  app.modelSignature = `${name}:${nParts}:${(hash >>> 0).toString(16)}`;
   app.partVisible = new Uint8Array(nParts).fill(1);
   app.partSel = new Uint8Array(nParts);
   app.partColor = new Int32Array(nParts).fill(-1);

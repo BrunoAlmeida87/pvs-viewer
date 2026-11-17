@@ -52,7 +52,7 @@ export function initViews(app) {
     return {
       nb: app.nbState ? app.nbState() : null,
       layers: [...app.hiddenLayers],
-      v: 1, model: app.title, camera: app.getCamera(),
+      v: 1, model: app.title, sig: app.modelSignature, camera: app.getCamera(),
       display: { ...app.display, perf: undefined },
       clip: JSON.parse(JSON.stringify(app.clip)), explode: { ...app.explode },
       visible: runs(base ? base.visible : app.partVisible, 1), color: runs(app.partColor, -1), opacity: runs(base ? base.opacity : app.partOpacity, 255),
@@ -90,6 +90,16 @@ export function initViews(app) {
   }
   app.captureView = capture;
   app.applyView = apply;
+  // A view records the version of the model it was made on (sig). Applied by hand to another version,
+  // its colours, visibility and selection would land on other parts: the user is asked first. Views
+  // saved before this was recorded have no sig: they apply as before, with a note.
+  const otherVersion = (s) => !!(s && s.sig && s.sig !== app.modelSignature);
+  function confirmVersion(s, what) {
+    if (!otherVersion(s)) return true;
+    return confirm(`${what} foi salva em outra versão do modelo${s.model && s.model !== app.title ? ` (“${s.model}”)` : ""}. ` +
+      "As peças podem não corresponder: cores, visibilidade e seleção podem ir para outras peças. Aplicar mesmo assim?");
+  }
+  const legacyNote = (s) => (s && !s.sig ? " Vista salva antes da identificação da versão do modelo: confira se as peças correspondem." : "");
 
   // ------------------------------------------------------------ saved views
   $("#viewSave").onclick = () => {
@@ -107,9 +117,10 @@ export function initViews(app) {
     const d = load();
     if (!d.views.length) box.append(el("div.muted", { text: "Nenhuma vista salva." }));
     for (const v of d.views) {
+      const other = otherVersion(v.state);
       box.append(el("div.item", null,
-        el("span.nm", { text: v.name, title: v.name }),
-        el("button", { text: "Aplicar", onclick: () => apply(v.state) }),
+        el("span.nm", { text: v.name + (other ? " ⚠" : ""), title: other ? v.name + " — salva em outra versão do modelo" : v.name }),
+        el("button", { text: "Aplicar", onclick: () => { if (!confirmVersion(v.state, "Esta vista")) return; apply(v.state); if (!v.state.sig) say(legacyNote(v.state).trim()); } }),
         el("button", { text: "Atualizar", title: "Substitui pela vista atual", onclick: () => { const x = load(); const y = x.views.find((z) => z.name === v.name); if (y) y.state = capture(); save(x); } }),
         el("button", { text: "✕", title: "Excluir", onclick: () => { const x = load(); x.views = x.views.filter((y) => y.name !== v.name); save(x); renderViews(); } })));
     }
@@ -130,13 +141,21 @@ export function initViews(app) {
   $("#viewFile").onchange = async () => {
     const f = $("#viewFile").files[0];
     if (!f) return;
-    try { apply(JSON.parse(await f.text())); say("Vista importada: " + f.name); } catch (e) { alert("Arquivo de vista inválido: " + e.message); }
+    try {
+      const s = JSON.parse(await f.text());
+      if (confirmVersion(s, "A vista do arquivo")) { apply(s); say("Vista importada: " + f.name + "." + legacyNote(s)); }
+      else say("Vista não aplicada: é de outra versão do modelo.");
+    } catch (e) { alert("Arquivo de vista inválido: " + e.message); }
     $("#viewFile").value = "";
   };
   app.on("loaded", async () => {
     const m = location.hash.match(/vista=([\w-]+)/);
     if (!m) return;
-    try { apply(await unpack(m[1])); say("Vista do link aplicada."); } catch (e) { console.warn("link de vista inválido", e); }
+    try {
+      const s = await unpack(m[1]);
+      if (confirmVersion(s, "A vista do link")) { apply(s); say("Vista do link aplicada." + legacyNote(s)); }
+      else say("Vista do link não aplicada: é de outra versão do modelo.");
+    } catch (e) { console.warn("link de vista inválido", e); }
   });
 
   // ------------------------------------------------------------ PNG

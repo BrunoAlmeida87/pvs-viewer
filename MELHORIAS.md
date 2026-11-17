@@ -81,6 +81,19 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - **Benefício:** um arraste acidental não descarta seleção, cortes, medições e marcações.
 - **Não incluído:** aviso ao fechar a página com trabalho não salvo (`beforeunload`).
 
+### DAD-01 — Vista ou conjunto de outra versão do modelo (opção “avisar”)
+- **Mudou:** `viewer/viewer.js` calcula `app.modelSignature` (nome, nº de peças e os nomes dos arquivos
+  das peças — a mesma regra de `ui/structure.js` e `ui/anim.js`); `viewer/ui/views.js` e
+  `viewer/ui/sets.js` gravam essa assinatura (`sig`) em vistas, links, arquivos de vista, conjuntos e
+  esquemas. Ao aplicar por ação do usuário (“Aplicar”, “Selecionar”, “+”, “Isolar”, arquivo, link) algo
+  de outra versão, o visualizador pergunta antes; na lista, esses itens aparecem com ⚠. Itens salvos
+  antes (sem `sig`) funcionam como antes, com uma nota.
+- **Benefício:** depois de uma revisão do modelo, uma vista ou um conjunto não muda cores, visibilidade e
+  seleção de outras peças sem aviso.
+- **Compatibilidade:** só um campo novo (`sig`); nada foi apagado nem migrado. As chaves de armazenamento
+  não mudaram. **Não incluído:** remapear as peças por código/nome (opção b) e as abas de vista (já
+  separadas por nome + nº de peças).
+
 ## Em andamento
 
 - Nenhuma.
@@ -210,3 +223,18 @@ trocado por um registrador durante o teste (nada foi aberto de fato).
   (“Modelo guardado neste aparelho…”).
 - Abertura geral no desktop e no celular (emulado): sem erros no console. `npm test`: 35 passam. ESLint:
   nenhum aviso novo.
+
+### DAD-01
+Modelo de exemplo (versão A, 21 peças) e versão B com o **mesmo nome de arquivo** e uma placa nova no
+começo (toda a numeração desloca). Na versão A: bomba isolada e selecionada, vista “V1” e conjunto “S1”
+salvos, link `#vista=` gerado; depois o mesmo armazenamento na versão B.
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| A: aplicar V1 | só a BOMBA DE AGUA visível e selecionada | idêntico, sem pergunta |
+| B: aplicar V1 | visíveis **ESCADA E-02 e TUBO 8 POL**, selecionado **EQUIPAMENTOS** (peças erradas, sem aviso) | pergunta; “Cancelar”: nada muda (22 peças visíveis); “OK”: aplica |
+| B: conjunto S1 › Selecionar | seleciona **EQUIPAMENTOS** | pergunta; “Cancelar”: nada selecionado |
+| B: abrir o link `#vista=` | “Vista do link aplicada.” (peças erradas) | pergunta; “Cancelar”: “Vista do link não aplicada: é de outra versão do modelo.” |
+| A: V1 salva sem assinatura (como as atuais) | — | aplica normalmente, com a nota “salva antes da identificação da versão…” |
+
+- `npm test`: 35 passam. ESLint: nenhum aviso novo. Abertura geral sem erros no console.
