@@ -155,7 +155,8 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 
 ## Validação pendente (fora deste ambiente)
 
-- `.exe` com Electron 44 no Windows (placa dedicada e integrada), com um modelo real: abrir, converter,
+- `.exe` com Electron 44 no Windows (artefato **VisualizadorPVS-windows** da execução nº 32 do workflow do
+  executável), em placa dedicada e integrada, com um modelo real: abrir, converter,
   exportar (SEG-01, lotes 4 e 5, CSP).
 - Job `release` (lote 7): só roda numa tag `v*`; validar na próxima versão publicada.
 - Modelo real (SBR): abertura, conversão e verificações com peças fechadas (lotes 2 a 4, ENG-03).
@@ -184,9 +185,8 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - YAML dos dois workflows lido sem erro; o passo **Testes** fica entre “Instalar dependências” e “Gerar o
   executável”.
 - Workflow **Testes** executado no GitHub após o push do lote: sucesso (execução nº 1).
-- **Pendente:** o passo **Testes** do `desktop.yml` só roda no Windows quando houver push no `main` (ou
-  “Run workflow”); a forma usada (`node --test "test/*.test.js"`, padrão expandido pelo próprio Node) não
-  depende do shell.
+- O passo **Testes** do `desktop.yml` foi validado no Windows na execução manual nº 32 (ver “Lote 7”):
+  `node --test "test/*.test.js"` (padrão expandido pelo próprio Node) aprovado no runner Windows.
 
 ### Lote 2
 - `npm test`: 31 testes, 31 passam (23 anteriores + 8 novos). `tools/test_parsers.py`: 5 passam.
@@ -369,8 +369,10 @@ Electron 44, o mesmo roteiro com a política desligada (código anterior) e liga
   job `release` com `contents: write`, `needs: build`, só em tags `v*`. (O verificador `actionlint` não
   pôde ser baixado neste ambiente.)
 - Execução manual do workflow no branch de trabalho (nº 32, Electron 44, build só com leitura):
-  dependências instaladas e **passo Testes aprovado no Windows** (pendência do lote 1 resolvida); geração
-  do `.exe` em andamento no momento deste registro — o resultado entra no próximo commit.
+  dependências instaladas, **passo Testes aprovado no Windows** (pendência do lote 1 resolvida), `.exe`
+  gerado com ícone e versão gravados (`signAndEditExecutable`, electron-builder 26) em 2 min 39 s e anexado
+  como artefato **VisualizadorPVS-windows** (110 MB, válido até 15/02/2027); job `release` **pulado**,
+  como esperado fora de uma tag.
 - Varredura final de ESLint em todos os 80 arquivos JavaScript do projeto: só os 4 avisos que já existiam
   na auditoria (`goto.js`, `picker.js`, `viewer.js` ×2).
 - **Pendente:** o job `release` só roda numa tag `v*`.
