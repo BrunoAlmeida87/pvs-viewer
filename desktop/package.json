@@ -14,7 +14,7 @@
     "dist:dir": "npm run copy && electron-builder --win dir --publish never"
   },
   "devDependencies": {
-    "electron": "44.11.3",
+    "electron": "45.4.1",
     "electron-builder": "26.18.1"
   },
   "build": {
