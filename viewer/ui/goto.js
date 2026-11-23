@@ -9,7 +9,7 @@
 // patterns of ladders and of parts to leave out (doors, hatches), links drawn by hand, forbidden
 // areas, and the sizes (free height, step, body).
 import * as THREE from "three";
-import { $, el, status } from "./util.js";
+import { $, el } from "./util.js";
 import { itemPicker } from "./picker.js";
 import { navClient, NAV_DEFAULTS } from "../lib/navclient.js";
 import { along } from "../lib/navpath.js";

@@ -118,7 +118,7 @@ você mexe no modelo.
   - Precisa do Chrome no Android, do NFC ligado no celular e do site em https (como no GitHub Pages). O iPhone abre o
     link de uma tag já gravada, mas não grava tags pelo navegador. Tags gravadas com o site de um endereço abrem
     esse mesmo endereço.
-- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.6.1`).
+- **Versão**: aparece no topo de **Ferramentas** e na realidade aumentada (por exemplo, `v1.7.0`).
 - **Instalar**: no menu do Chrome, **Adicionar à tela inicial** instala o visualizador como aplicativo; depois de
   aberto uma vez, ele funciona sem internet. (O site precisa estar em https, como no GitHub Pages.)
 
@@ -271,6 +271,13 @@ convertida pelo `build.py`, que abre em segundos.
 - **Busca** de texto na estrutura (ou `/regex/`), com lista de **bigramas** pronta para escolher e opção de buscar
   também nas propriedades. Em texto, maiúsculas, acentos, traços e espaços não contam (`LPREX` acha `LPR-EX20003`);
   várias palavras = todas precisam aparecer. Ações em todos os resultados (selecionar, isolar, ocultar, colorir, zoom, listar).
+  **Por propriedade**, na mesma caixa: `Material=S355*` (`*` qualquer texto, `?` um caractere), `Thickness>10`
+  (`>` `<` `>=` `<=`, vírgula ou ponto decimal, unidade depois do número aceita), `Thickness=8|10|12` (um ou outro),
+  `Description~TUBE` (contém), `Material!=S355` (tem a propriedade, com outro valor). Nome de propriedade com espaço
+  entre aspas: `"Unit weight">50`. Maiúsculas, acentos e separadores no nome da propriedade não contam
+  (`unit_weight>50` também vale). Condições e palavras se somam (`bomba Material=S355*`). Só vira condição o que tem
+  à esquerda o nome de uma propriedade do modelo; o resto é buscado como texto, como antes. A linha de resultados
+  mostra as condições entendidas (“condição: Thickness > 10”).
 - **Barra lateral redimensionável**: arraste a linha entre ela e o modelo (duplo clique volta a 340 px); a largura fica salva.
 - **Seleção**: clique, Ctrl+clique (soma/remove), Shift+arrastar (área), Alt+clique (sobe um nível); inverter,
   pai/filhos/irmãos, mesma cor, mesmo valor de uma propriedade.

@@ -11,7 +11,7 @@ import { BIGRAMA_KEY } from "../lib/bigrama.js";
 
 const MAX_RESULTS = 50;
 // as in the Search tab: lower case, no accents, no separators ("LPREX" finds "LPR-EX20003")
-export const norm = (s) => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s\-_.\/]+/g, "");
+export const norm = (s) => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[\s\-_./]+/g, "");
 
 export function itemPicker(app, { list, input, onPick, allSystem = false, extra = null }) {
   let index = null; // normalized "name|code" of every node, built at the first search

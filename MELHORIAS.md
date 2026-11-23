@@ -3,6 +3,7 @@
 Acompanha a implementação das melhorias da auditoria técnica de 17/11/2026 (revisão `aabb22a`, v1.6.1).
 Os IDs (QA-01, CONF-01…) são os do relatório da auditoria. Cada item diz o que mudou, o benefício esperado,
 como foi verificado e o que ainda depende de validação fora deste ambiente (Windows, celular, modelo real).
+A **revisão geral de 23/11/2026** (v1.7.0, lotes 8 a 12) segue o mesmo formato.
 
 ## Concluídas
 
@@ -149,6 +150,64 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
   mais permissão de escrita no repositório.
 - **Não incluído:** fixar as actions por SHA e Dependabot (parte restante de SEG-03).
 
+### Revisão geral de 23/11/2026 (v1.7.0)
+Revisão de todo o `viewer.js`, dos módulos de busca, árvore, desfazer, armazenamento no aparelho, service worker
+e do aplicativo desktop, procurando defeitos, otimizações e funcionalidades que faltavam. Cinco grupos de
+mudanças, cada um verificado contra a versão anterior (ver “Resultados medidos › Revisão geral”).
+
+#### Lote 8 — Bloco ilegível da pasta convertida ou do ZIP não trava a abertura
+- **Mudou (`viewer/viewer.js`, `loadConvertedParts` / `loadPartsNow`):** cada arquivo de bloco (`c/NNNNN.bin`) é
+  lido e conferido (tamanho mínimo pelo `chunks.json`) antes de ir para a placa de vídeo. Um bloco que não pode ser
+  lido (ausente, cortado ao meio, danificado dentro do ZIP) é contado, fica “não carregado” e os outros continuam;
+  ao terminar aparece “20 de 21 peças carregadas · 1 bloco(s) do modelo não lido(s) por erro · use Carregar… para o
+  resto”, e **Carregar…** tenta de novo. É o que o lote 4 já fazia para o modelo original (`.pvs` + `.ol`).
+- **Antes:** a abertura parava para sempre em “Carregando geometria 20/21”, nenhuma peça contava como carregada, o
+  evento “modelo aberto” não acontecia (sem Exportar, sem Carregar…, sem link de peça/tag NFC, sem guardar o ZIP no
+  aparelho).
+- **Compatibilidade:** modelos íntegros carregam exatamente como antes (mesma ordem, mesmos blocos).
+
+#### Lote 9 — Geometria das peças para Medir, Interferência, Manequim e Rota ~100× mais rápida
+- **Mudou (`viewer/viewer.js`, `geomFromChunks`):** a geometria de uma peça da pasta convertida era montada
+  percorrendo **todos os itens do modelo** e, para cada item da peça, **todos os vértices e triângulos do bloco**
+  (até 65 mil vértices). Agora usa o índice de itens por peça (já existente, `itemsIndex`) e, para cada arquivo de
+  bloco lido, um índice de vértices, triângulos e arestas por item, montado uma vez e guardado com o arquivo
+  (cache de 6 blocos, agora descartando o menos usado).
+- **Benefício:** cada peça custa o próprio tamanho. Interferência, folga, manequim e rota de retirada pedem
+  centenas de peças seguidas.
+- **Compatibilidade:** a saída é a mesma, na mesma ordem (conferido byte a byte, ver resultados).
+
+#### Lote 10 — Pequenas correções
+- **Atalhos de teclado antes de abrir um modelo** (`viewer.js`): `A`, `Esc`, `I`, `H`, `G`, `F`, setas etc.
+  davam erros no console atrás do cartão de abertura (“Cannot read properties of undefined (reading 'fill')”,
+  “modelMin is not iterable”); agora não fazem nada até haver um modelo.
+- **Cópias de ZIP pela metade no aparelho** (`lib/recent.js`, `trimKept`): uma cópia interrompida (página fechada
+  no meio) deixava o arquivo `.parcial` para sempre no armazenamento do site. Agora é apagado depois de 6 horas (o
+  prazo protege uma cópia em andamento em outra aba).
+- **Painel Desempenho** (`viewer.js`): monta as linhas com texto, não HTML (o nome da placa de vídeo vem do driver).
+- **Ajuda de atalhos** (`index.html`): faltavam `B` (bigramas), `V` (animação) e as teclas da caminhada.
+- **Avisos antigos do ESLint** zerados: import sem uso (`goto.js`), constante sem uso (`viewer.js`), barras
+  escapadas sem necessidade em duas expressões regulares (mesmo significado).
+
+#### Lote 11 — ARQ-02: uma só assinatura do modelo
+- **Mudou:** `ui/structure.js` (Minha estrutura) e `ui/anim.js` (animações) usam `app.modelSignature`, calculada
+  uma vez em `setModel`, em vez de repetir o mesmo cálculo.
+- **Compatibilidade:** a mesma regra, o mesmo texto: as chaves de armazenamento não mudam (estruturas e animações
+  salvas continuam abrindo). Conferido no navegador: assinatura nova = cálculo antigo.
+
+#### Lote 12 — Nova funcionalidade: condições de propriedade na Busca
+- **Mudou:** `viewer/lib/query.js` (novo, sem dependências, testado em `desktop/test/query.test.js`) e
+  `viewer/ui/search.js`. Na caixa de busca, além das palavras: `Material=S355*` (curingas `*` e `?`),
+  `Thickness>10` (`>` `<` `>=` `<=`; vírgula ou ponto; “12 mm” vale 12), `Thickness=8|10|12` (alternativas),
+  `Description~TUBE` (contém), `Material!=S355` (tem a propriedade, com outro valor), `"Unit weight">50` (aspas
+  para espaços). A linha de resultados mostra as condições entendidas. Comparação com valor que não é número
+  (“Thickness>grosso”) mostra o erro em vez de resultados.
+- **Por quê:** o ROADMAP marcava “Busca por propriedade (`Material = S355*`, `Thickness > 10`…)” como feita, mas
+  ela tinha sido retirada na simplificação da busca (commit `5d9036d`); só restava buscar texto nos valores.
+- **Compatibilidade:** uma palavra só vira condição quando o que está antes do operador é o nome de uma
+  propriedade **do modelo aberto**; sem nenhuma condição, a busca usa exatamente o código anterior (as mesmas
+  palavras, o mesmo resultado). Funciona também na busca rápida do celular.
+- **Versão:** `VERSION` 1.6.1 → **1.7.0** (`viewer/ui/util.js`).
+
 ## Em andamento
 
 - Nenhuma.
@@ -161,12 +220,21 @@ como foi verificado e o que ainda depende de validação fora deste ambiente (Wi
 - Job `release` (lote 7): só roda numa tag `v*`; validar na próxima versão publicada.
 - Modelo real (SBR): abertura, conversão e verificações com peças fechadas (lotes 2 a 4, ENG-03).
 - Celular: textos novos das verificações e soltar arquivo (lotes 3 e 6).
+- Revisão geral (v1.7.0): busca por condição num modelo real (nomes de propriedades do SBR) e no celular
+  real; tempo de Interferência/Rota no SBR com o lote 9.
 
 ## Pendentes (aprovação não solicitada ainda)
 
-- SEG-03 restante: fixar actions por SHA; Dependabot para npm e GitHub Actions.
-- Etapas 2 a 4 do relatório (desempenho, refatoração, modernização), incluindo ARQ-02 (usar
-  `app.modelSignature` em `structure.js` e `anim.js`, hoje com o mesmo cálculo repetido).
+- SEG-03 restante: fixar actions por SHA; Dependabot para npm e GitHub Actions (o Dependabot abre pull
+  requests sozinho: precisa do seu de acordo).
+- Etapas 2 a 4 do relatório (desempenho, refatoração, modernização). ARQ-02 foi feito na revisão geral.
+- Sugestões da revisão geral de 23/11/2026, não implementadas:
+  - aviso ao fechar a página com marcações, medições ou notas ainda não salvas numa vista (`beforeunload`);
+    precisa definir o que conta como “não salvo” para não incomodar a cada saída;
+  - salvar uma busca com condições como conjunto dinâmico (refeita ao abrir outra versão do modelo, em vez de
+    guardar números de peça), o que também resolveria parte de DAD-01 opção b;
+  - `viewer.js` tem ~3.400 linhas: separar câmera/navegação, caminhada e fontes do modelo em módulos próprios
+    (refatoração sem mudança de comportamento, a fazer com os testes de navegador desta revisão).
 
 ## Bloqueadas (aguardam decisão)
 
@@ -376,3 +444,31 @@ Electron 44, o mesmo roteiro com a política desligada (código anterior) e liga
 - Varredura final de ESLint em todos os 80 arquivos JavaScript do projeto: só os 4 avisos que já existiam
   na auditoria (`goto.js`, `picker.js`, `viewer.js` ×2).
 - **Pendente:** o job `release` só roda numa tag `v*`.
+
+### Revisão geral (v1.7.0)
+Chromium (Playwright, WebGL por software), versão anterior (`4c07595`) × nova, lado a lado. Modelos: o de
+exemplo (`tools/navsample.py`, 21 peças), uma cópia dele com o bloco `00005.bin` cortado ao meio e um modelo
+sintético de **40.000 peças** (45.715 itens, 23 blocos; uma em cada 7 peças com dois itens; propriedades Material,
+Thickness, Unit weight e Description).
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| Geometria de todas as 21 peças do exemplo (hash de posições, triângulos e arestas) | 2060408813 | **idêntico** |
+| Geometria de 300 peças espalhadas pelo modelo de 40 mil (lê os 23 blocos) | ~1.100 ms | ~830–950 ms, hash idêntico |
+| Geometria de 1.500 peças vizinhas (mesmos blocos, como na interferência), 3 repetições | 947–1.271 ms | **6–14 ms**, hash idêntico |
+| Bloco `00005.bin` cortado ao meio | para em “Carregando geometria 20/21”; 0 peças carregadas; sem Carregar/Exportar | “20 de 21 peças carregadas · 1 bloco(s) do modelo não lido(s) por erro…”; Carregar e Exportar visíveis |
+| O mesmo, depois de consertar o arquivo e usar Carregar › Tudo | — | “Modelo carregado”, 21 de 21 |
+| 24 atalhos de teclado no cartão de abertura (sem modelo) | 5 erros na página | nenhum |
+| Assinatura do modelo (Minha estrutura, animações) | `instalacao_teste.pvs:21:53d1993a` | idêntica |
+| Busca de texto: `bomba`, `lpr dt`, `/^LPR/` | 2 · 2 · 8 resultados | idênticos |
+| Busca de texto `peca 12` / `lpr dt0001` no modelo de 40 mil (mediana de 7) | 7,2–7,5 ms / 2,0 ms | 7,9–9,9 ms / 2,0–2,4 ms (desenho da lista; mesma ordem de grandeza) |
+| `Bigrama=DT` · `Description=*BOMBA*` (exemplo) | 0 · 0 (texto literal) | 2 · 2 (condição) |
+| `Material=S355*\|S2* Thickness>=20` (40 mil) | 0 | **10.664** resultados em ~25 ms |
+| Celular emulado (Pixel 7, `?mobile`): busca rápida `Bigrama=DT` | — | 2 resultados, sem erros |
+
+- `npm test`: **47** passam (41 + 6 novos em `desktop/test/query.test.js`, inclusive 60 mil nós com
+  condições em menos de 0,5 s). `tools/test_parsers.py`: 5 passam.
+- ESLint (regras recomendadas, com `NDEFReader` como global do navegador) em todo o projeto: **nenhum aviso**.
+- Abertura do exemplo e do modelo de 40 mil, desktop e celular emulado: sem erros no console.
+- **Não testado aqui:** aplicativo desktop (Electron) — a mudança é só no visualizador, copiado sem alteração para
+  o `.exe`; o `index.html` mudou fora dos scripts embutidos, então o hash da CSP não muda.

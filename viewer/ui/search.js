@@ -1,6 +1,8 @@
 // Search tab: free text (or /regex/) over the structure, optionally restricted to one bigrama,
-// and actions on the results.
+// with conditions on properties (Material=S355*, Thickness>10: lib/query.js), and actions on the
+// results.
 import { $, el, fmt, parseHex } from "./util.js";
+import { parseQuery, passes, describe } from "../lib/query.js";
 
 const MAX_ROWS = 1000;
 
@@ -93,7 +95,7 @@ export function initSearch(app) {
     if (inProps && !normVals) normVals = P.vals.map(norm);
 
     // what a node offers to the text test: its name and, optionally, every property value
-    let test;
+    let test, conds = [];
     const re = /^\/(.+)\/$/.exec(query);
     if (query && re) {
       let rx;
@@ -104,13 +106,20 @@ export function initSearch(app) {
         return false;
       };
     } else if (query) {
-      const terms = query.split(/\s+/).map(norm).filter(Boolean);
-      if (!terms.length) return;
-      test = (n) => {
+      // words such as Material=S355* or Thickness>10 (a property of the model on the left) are
+      // conditions; without any, the words are split and searched exactly as before
+      const q = parseQuery(query, P.keys);
+      if (q.error) { $("#qCount").textContent = q.error; $("#qActions").hidden = false; return; }
+      conds = q.conds;
+      const terms = (conds.length ? q.words : query.split(/\s+/)).map(norm).filter(Boolean);
+      if (!terms.length && !conds.length) return;
+      const textTest = (n) => {
         const parts = [normNames[n]];
         if (inProps) for (let i = P.start[n]; i < P.start[n + 1]; i++) parts.push(normVals[P.kv[2 * i + 1]]);
         return terms.every((w) => parts.some((s) => s.includes(w)));
       };
+      const condTest = (n) => conds.every((c) => passes(c, (ki) => app.prop(n, ki)));
+      test = !conds.length ? textTest : !terms.length ? condTest : (n) => condTest(n) && textTest(n);
     }
 
     const eff = app.bigramaEff;
@@ -122,14 +131,15 @@ export function initSearch(app) {
       if (test && !test(n)) continue;
       hits.push(n);
     }
-    showResults(hits);
+    showResults(hits, conds.length ? "condição: " + conds.map(describe).join(" e ") : "");
   }
 
-  function showResults(hits) {
+  // note: what the search understood, after the counts (the conditions on properties)
+  function showResults(hits, note = "") {
     app.lastResults = hits;
     const parts = app.leafNodes(hits).length;
     $("#qActions").hidden = false;
-    $("#qCount").textContent = `${fmt(hits.length)} resultado(s) · ${fmt(parts)} peça(s)` + (hits.length > MAX_ROWS ? ` · mostrando ${fmt(MAX_ROWS)}` : "");
+    $("#qCount").textContent = `${fmt(hits.length)} resultado(s) · ${fmt(parts)} peça(s)` + (hits.length > MAX_ROWS ? ` · mostrando ${fmt(MAX_ROWS)}` : "") + (note ? ` · ${note}` : "");
     $("#mobileFilterHint").textContent = hits.length ? `${fmt(hits.length)} resultado(s) encontrado(s). Escolha o que mostrar.` : "Nenhum resultado. Tente outro nome ou tipo.";
     $("#mobileFilterOnly").disabled = hits.length === 0;
     $("#mobileFilterHide").disabled = hits.length === 0;
