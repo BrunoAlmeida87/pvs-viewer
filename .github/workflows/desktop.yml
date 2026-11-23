@@ -28,9 +28,9 @@ jobs:
       run:
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -57,7 +57,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Anexar o executável à execução
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VisualizadorPVS-windows
           path: desktop/dist/*.exe
@@ -71,7 +71,7 @@ jobs:
       contents: write
     steps:
       - name: Baixar o executável gerado
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: VisualizadorPVS-windows
           path: dist
