@@ -12,6 +12,7 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 - [x] Busca por propriedade na caixa de busca (`Material=S355*`, `Thickness>10`, `Description~TUBE`, `Material!=S355`)
   — removida na simplificação da busca e refeita na revisão de 23/11/2026 (v1.7.0)
 - [x] Filtros combinados: condições e palavras somam (E); alternativas num valor com `|` (OU)
+- [x] Buscas salvas com nome, que valem para qualquer modelo (v1.7.0)
 - [x] Ações sobre resultados (um ou todos): selecionar, isolar, ocultar, colorir, zoom, listar
 - [x] Seleção múltipla (Ctrl+clique, Shift+arrastar), inverter, selecionar pai/filhos/irmãos
 - [x] Selecionar tudo com a mesma cor / mesmo valor de propriedade

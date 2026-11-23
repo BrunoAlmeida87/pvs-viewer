@@ -1,0 +1,29 @@
+# Dependabot: once a month, one pull request per ecosystem with the available updates (security
+# updates, when turned on in the repository's settings, come separately and at once). Each pull
+# request runs the "Testes" workflow; nothing is merged by itself.
+#  - npm in desktop/: Electron and electron-builder (only the desktop .exe uses them; the site has no
+#    npm dependencies — three.js and fflate are copied into viewer/vendor/).
+#  - GitHub Actions used by the workflows (checkout, setup-node, setup-python, upload/download-artifact).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      desktop:
+        patterns: ["*"]
+    commit-message:
+      prefix: "Desktop"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "CI"

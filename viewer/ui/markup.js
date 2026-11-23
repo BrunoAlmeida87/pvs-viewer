@@ -168,5 +168,6 @@ export function initMarkup(app) {
   // ------------------------------------------------------------ saved views
   // Only markups that belong to the current view go into it.
   app.getMarkup = () => (items.length && sameView() ? { cam, items } : null);
+  app.markupItems = () => items; // all of them, also when the view has moved (ui/unsaved.js)
   app.setMarkup = (m) => { items = m && Array.isArray(m.items) ? m.items : []; cam = m ? m.cam : null; draw(); };
 }

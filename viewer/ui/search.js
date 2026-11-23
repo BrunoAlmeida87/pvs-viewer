@@ -1,10 +1,13 @@
 // Search tab: free text (or /regex/) over the structure, optionally restricted to one bigrama,
 // with conditions on properties (Material=S355*, Thickness>10: lib/query.js), and actions on the
 // results.
-import { $, el, fmt, parseHex } from "./util.js";
+import { $, el, fmt, parseHex, store } from "./util.js";
 import { parseQuery, passes, describe } from "../lib/query.js";
 
 const MAX_ROWS = 1000;
+// Saved searches: the query itself (text, bigrama, kind of item, properties), not the parts found, so
+// that it works on any model and on a new version of the same one. One list for all models.
+const SAVED = "pvs-viewer:searches", MAX_SAVED = 50;
 
 // Lower case, no accents, and no separators: "LPREX" finds "LPR-EX20003", "tubulacao" finds "TUBULAÇÃO".
 const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.]+|\//g, "");
@@ -76,6 +79,44 @@ export function initSearch(app) {
     const open = $("#searchTab").classList.toggle("advancedSearch");
     $("#mobileAdvancedSearch").setAttribute("aria-expanded", String(open));
     $("#mobileAdvancedSearch").textContent = open ? "Busca avançada ▴" : "Busca avançada ▾";
+  };
+
+  // ------------------------------------------------------------ saved searches
+  const savedList = () => { const l = store.get(SAVED, []); return Array.isArray(l) ? l.filter((s) => s && typeof s.name === "string") : []; };
+  function renderSaved(pick = "") {
+    const sel = $("#qSaved");
+    sel.replaceChildren(el("option", { value: "", text: "Buscas salvas…" }),
+      ...savedList().map((s) => el("option", { value: s.name, text: s.name, title: s.q + (s.bg ? ` · bigrama ${s.bg}` : "") })));
+    sel.value = pick;
+    $("#qSavedDel").disabled = !sel.value;
+  }
+  renderSaved();
+  $("#qSave").onclick = () => {
+    const s = { q: $("#q").value.trim(), bg: $("#qBg").value, scope: $("#qScope").value, props: $("#qProps").checked };
+    if (!s.q && !s.bg) { $("#qCount").textContent = "Digite uma busca (ou escolha um bigrama) antes de salvar."; $("#qActions").hidden = false; return; }
+    const name = (prompt("Nome da busca salva:", s.q || "Bigrama " + s.bg) || "").trim();
+    if (!name) return;
+    const list = savedList().filter((x) => x.name !== name);
+    list.unshift({ name, ...s });
+    if (!store.set(SAVED, list.slice(0, MAX_SAVED))) { alert("Não foi possível salvar: o armazenamento do navegador está cheio ou bloqueado."); return; }
+    renderSaved(name);
+  };
+  $("#qSaved").onchange = () => {
+    const s = savedList().find((x) => x.name === $("#qSaved").value);
+    $("#qSavedDel").disabled = !s;
+    if (!s) return;
+    $("#q").value = s.q || "";
+    $("#qBg").value = s.bg || "";
+    if ($("#qBg").value !== (s.bg || "")) $("#qBg").value = ""; // that bigrama is not in this model
+    $("#qScope").value = ["all", "parts", "asm"].includes(s.scope) ? s.scope : "all";
+    $("#qProps").checked = !!s.props;
+    if (app.tree) run();
+  };
+  $("#qSavedDel").onclick = () => {
+    const name = $("#qSaved").value;
+    if (!name || !confirm(`Excluir a busca salva “${name}”?`)) return;
+    store.set(SAVED, savedList().filter((x) => x.name !== name));
+    renderSaved();
   };
 
   $("#qRun").onclick = run;

@@ -87,6 +87,7 @@ export function initViews(app) {
     app.setCamera(s.camera);
     // hand markups belong to this camera (views saved before them have none)
     if (app.setMarkup) app.setMarkup(s.markup ? { cam: s.camera, items: s.markup.items } : null);
+    app.markSaved?.(); // what the view brings is saved in it (ui/unsaved.js)
   }
   app.captureView = capture;
   app.applyView = apply;
@@ -108,6 +109,7 @@ export function initViews(app) {
     d.views = d.views.filter((v) => v.name !== name);
     d.views.push({ name, state: capture() });
     save(d);
+    app.markSaved?.();
     $("#viewName").value = "";
     renderViews();
   };
@@ -121,7 +123,7 @@ export function initViews(app) {
       box.append(el("div.item", null,
         el("span.nm", { text: v.name + (other ? " ⚠" : ""), title: other ? v.name + " — salva em outra versão do modelo" : v.name }),
         el("button", { text: "Aplicar", onclick: () => { if (!confirmVersion(v.state, "Esta vista")) return; apply(v.state); if (!v.state.sig) say(legacyNote(v.state).trim()); } }),
-        el("button", { text: "Atualizar", title: "Substitui pela vista atual", onclick: () => { const x = load(); const y = x.views.find((z) => z.name === v.name); if (y) y.state = capture(); save(x); } }),
+        el("button", { text: "Atualizar", title: "Substitui pela vista atual", onclick: () => { const x = load(); const y = x.views.find((z) => z.name === v.name); if (y) y.state = capture(); save(x); app.markSaved?.(); } }),
         el("button", { text: "✕", title: "Excluir", onclick: () => { const x = load(); x.views = x.views.filter((y) => y.name !== v.name); save(x); renderViews(); } })));
     }
   }
@@ -130,12 +132,14 @@ export function initViews(app) {
   $("#viewLink").onclick = async () => {
     const s = capture();
     const url = location.origin + location.pathname + location.search + "#vista=" + await pack(s);
+    app.markSaved?.();
     try { await navigator.clipboard.writeText(url); say(`Link copiado (${fmt(url.length)} caracteres). Quem abrir precisa abrir o mesmo modelo.`); }
     catch { prompt("Copie o link:", url); }
   };
   $("#viewExport").onclick = () => {
     const name = (app.title || "modelo").replace(/\.pvs$/i, "") + "-vista.json";
     saveBlob(name, new Blob([JSON.stringify(capture())], { type: "application/json" }));
+    app.markSaved?.();
   };
   $("#viewImport").onclick = () => $("#viewFile").click();
   $("#viewFile").onchange = async () => {

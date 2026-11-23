@@ -277,7 +277,9 @@ convertida pelo `build.py`, que abre em segundos.
   entre aspas: `"Unit weight">50`. Maiúsculas, acentos e separadores no nome da propriedade não contam
   (`unit_weight>50` também vale). Condições e palavras se somam (`bomba Material=S355*`). Só vira condição o que tem
   à esquerda o nome de uma propriedade do modelo; o resto é buscado como texto, como antes. A linha de resultados
-  mostra as condições entendidas (“condição: Thickness > 10”).
+  mostra as condições entendidas (“condição: Thickness > 10”). **Buscas salvas**: “Salvar busca” guarda a busca
+  (texto, bigrama, tipo de item e a opção das propriedades) com um nome; escolhê-la na lista busca de novo. Vale para
+  qualquer modelo e para uma nova versão do mesmo modelo (guarda a busca, não os números das peças).
 - **Barra lateral redimensionável**: arraste a linha entre ela e o modelo (duplo clique volta a 340 px); a largura fica salva.
 - **Seleção**: clique, Ctrl+clique (soma/remove), Shift+arrastar (área), Alt+clique (sobe um nível); inverter,
   pai/filhos/irmãos, mesma cor, mesmo valor de uma propriedade.
@@ -357,7 +359,9 @@ convertida pelo `build.py`, que abre em segundos.
   densidade para as peças sem ele). Os pontos se ajustam a vértices e arestas.
 - **Vistas**: vistas salvas (câmera, visibilidade, cores, estilo, corte, explosão, seleção, notas e medições),
   link e arquivo para compartilhar, PNG em alta resolução, notas 3D e as **figuras do Creo View** (`ann*.ast`) da
-  pasta do modelo.
+  pasta do modelo. Medições, marcações à mão e manequins só ficam guardados numa vista (ou no link / arquivo dela):
+  no navegador, fechar a aba, recarregar ou abrir outro modelo com algum deles mudado desde a última vista salva faz o
+  navegador perguntar antes de sair. (Notas 3D, Minha estrutura e animações se salvam sozinhas.)
 - **Análise**: comparação com outra versão do `.pvs` (alteradas, removidas, novas) e verificação de interferências e
   contatos entre a seleção e as peças visíveis.
 

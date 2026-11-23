@@ -3,7 +3,7 @@
 Acompanha a implementação das melhorias da auditoria técnica de 17/11/2026 (revisão `aabb22a`, v1.6.1).
 Os IDs (QA-01, CONF-01…) são os do relatório da auditoria. Cada item diz o que mudou, o benefício esperado,
 como foi verificado e o que ainda depende de validação fora deste ambiente (Windows, celular, modelo real).
-A **revisão geral de 23/11/2026** (v1.7.0, lotes 8 a 12) segue o mesmo formato.
+A **revisão geral de 23/11/2026** (v1.7.0, lotes 8 a 16) segue o mesmo formato.
 
 ## Concluídas
 
@@ -208,6 +208,41 @@ mudanças, cada um verificado contra a versão anterior (ver “Resultados medid
   palavras, o mesmo resultado). Funciona também na busca rápida do celular.
 - **Versão:** `VERSION` 1.6.1 → **1.7.0** (`viewer/ui/util.js`).
 
+#### Lote 13 — Buscas salvas
+- **Mudou (`viewer/ui/search.js`, `index.html`):** na aba Busca, “Salvar busca” guarda texto, bigrama, tipo de
+  item e a opção das propriedades com um nome (lista única, até 50, em `pvs-viewer:searches`); escolher na lista
+  preenche os campos e busca; ✕ exclui (com confirmação). Busca vazia não é salva (aviso na linha de resultados).
+- **Por quê:** guarda a pergunta, não as peças: funciona em qualquer modelo e numa nova versão do mesmo modelo —
+  a parte de DAD-01 opção b que dá para resolver sem remapear números de peça.
+- **Compatibilidade:** só uma chave nova no armazenamento; nada existente muda.
+
+#### Lote 14 — Aviso ao sair com trabalho só na tela
+- **Mudou:** `viewer/ui/unsaved.js` (novo), `ui/views.js` (pontos de salvamento) e `ui/markup.js`
+  (`app.markupItems`). Medições, marcações à mão e manequins só ficam guardados numa vista; se algum mudou desde a
+  última vez em que foi salvo (salvar ou atualizar uma vista, copiar o link, exportar o arquivo, aplicar uma vista),
+  fechar a aba, recarregar ou “Abrir outro modelo” faz o navegador perguntar antes de sair.
+- **Não incluído no aplicativo desktop:** no Electron, uma página que pede para ficar impede a janela de fechar sem
+  mostrar pergunta nenhuma; lá o comportamento continua o de antes.
+- **Compatibilidade:** sem medições, marcações ou manequins (ou com eles salvos), nada muda ao sair.
+
+#### Lote 15 — SEG-03: Dependabot
+- **Mudou:** `.github/dependabot.yml` (novo): uma vez por mês, um pull request agrupado para o npm do aplicativo
+  desktop (Electron, electron-builder) e outro para as GitHub Actions dos workflows; cada um passa pelo workflow
+  **Testes**; nada é aceito sozinho.
+- **Não incluído:** fixar as actions por SHA (o Dependabot atualiza as versões; fixar por SHA pede consultar os
+  repositórios das actions, fora do acesso desta sessão). Atualizações de segurança imediatas dependem de ligar
+  “Dependabot security updates” nas configurações do repositório.
+
+#### Lote 16 — `viewer.js` menor (refatoração sem mudança de comportamento)
+- **Mudou:** os shaders (GLSL, ~170 linhas) foram para `viewer/lib/shaders.js` e a leitura de fontes do modelo
+  (servidor, pasta do navegador, lista de arquivos, pasta do aplicativo desktop) para `viewer/lib/sources.js`, este
+  com testes novos (`desktop/test/sources.test.js`). `viewer.js`: ~3.390 → ~3.190 linhas.
+- **Verificado:** os 7 textos de shader comparados com os do arquivo anterior: idênticos (a comparação pegou e
+  corrigiu um `export` posto por engano dentro do GLSL pelo script de mudança); imagens renderizadas, seleção por
+  clique e mapa de caminhada idênticos byte a byte (ver resultados).
+- **Ainda em `viewer.js`:** câmera/navegação e caminhada, que dividem muito estado com o laço de desenho; separar
+  pede mais cuidado e fica para uma próxima etapa.
+
 ## Em andamento
 
 - Nenhuma.
@@ -225,22 +260,18 @@ mudanças, cada um verificado contra a versão anterior (ver “Resultados medid
 
 ## Pendentes (aprovação não solicitada ainda)
 
-- SEG-03 restante: fixar actions por SHA; Dependabot para npm e GitHub Actions (o Dependabot abre pull
-  requests sozinho: precisa do seu de acordo).
+- SEG-03 restante: fixar actions por SHA (o Dependabot foi configurado no lote 15).
 - Etapas 2 a 4 do relatório (desempenho, refatoração, modernização). ARQ-02 foi feito na revisão geral.
-- Sugestões da revisão geral de 23/11/2026, não implementadas:
-  - aviso ao fechar a página com marcações, medições ou notas ainda não salvas numa vista (`beforeunload`);
-    precisa definir o que conta como “não salvo” para não incomodar a cada saída;
-  - salvar uma busca com condições como conjunto dinâmico (refeita ao abrir outra versão do modelo, em vez de
-    guardar números de peça), o que também resolveria parte de DAD-01 opção b;
-  - `viewer.js` tem ~3.400 linhas: separar câmera/navegação, caminhada e fontes do modelo em módulos próprios
-    (refatoração sem mudança de comportamento, a fazer com os testes de navegador desta revisão).
+- `viewer.js`: separar câmera/navegação e caminhada em módulos (shaders e fontes do modelo já saíram, lote 16).
+- Aviso de trabalho não salvo no aplicativo desktop: tratar `will-prevent-unload` no `main.js` com um diálogo
+  próprio (Sair / Ficar) e então ligar o lote 14 lá também.
 
 ## Bloqueadas (aguardam decisão)
 
 - CSP no site (GitHub Pages): escolher entre mover os scripts embutidos para arquivos (com o hash do
   `importmap` conferido no CI) ou não aplicar no site (ver “CSP no aplicativo desktop”).
-- DAD-01 opção b (remapear vistas/conjuntos de outra versão por código/nome) e as abas de vista.
+- DAD-01 opção b (remapear vistas/conjuntos de outra versão por código/nome) e as abas de vista. As buscas salvas
+  (lote 13) já servem de “conjunto” que vale em qualquer versão.
 - ENG-02: apoio lateral (parede encostada) em movimento horizontal continua ignorado; mudar exige outra
   regra (por exemplo, detectar só penetração além da inicial).
 
@@ -472,3 +503,21 @@ Thickness, Unit weight e Description).
 - Abertura do exemplo e do modelo de 40 mil, desktop e celular emulado: sem erros no console.
 - **Não testado aqui:** aplicativo desktop (Electron) — a mudança é só no visualizador, copiado sem alteração para
   o `.exe`; o `index.html` mudou fora dos scripts embutidos, então o hash da CSP não muda.
+
+### Revisão geral, segunda parte (lotes 13 a 16)
+Chromium (Playwright), versão da primeira parte (`e433f1b`) × nova, modelo de exemplo.
+
+| Cenário | Antes | Depois |
+|---|---|---|
+| 9 imagens (`app.screenshot`): sombreado, arestas, linhas ocultas, só arestas, raio-X, sombreado plano + luz do céu, caixa de corte, vista explodida, fantasma | — | **idênticas byte a byte** |
+| Clique no centro da tela (peça e ponto) | nó 2, (5,8218; 7,3663; 0,0198) | idêntico |
+| Mapa de caminhada (`navSlices`, 16 fatias, hash) | 4031522605 | idêntico |
+| Salvar busca `Bigrama=DT` (só peças) como “Sistema DT”, limpar, escolher na lista | — | campos refeitos, 2 resultados |
+| Salvar com a busca vazia · excluir | — | aviso, nada salvo · lista vazia |
+| Sair sem nada / com medição salva numa vista / link / arquivo / medições apagadas / vista aplicada | sai | sai |
+| Sair com medição nova, marcação, manequim, ou medição feita depois de salvar a vista | sai (perdia o trabalho) | **o navegador pergunta** |
+
+- O aviso foi conferido com navegação real (`location.href`); o fechamento pela automação (`page.close`) não mostra
+  a pergunta do navegador, por isso não foi usado.
+- `npm test`: **51** passam (47 + 4 em `desktop/test/sources.test.js`). `tools/test_parsers.py`: 5. ESLint: nenhum
+  aviso. Celular emulado e modelo de 40 mil peças: sem erros; geometria de 1.500 peças em 9–16 ms.
