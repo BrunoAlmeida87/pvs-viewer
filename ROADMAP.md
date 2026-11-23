@@ -9,8 +9,10 @@ miniatura `.jpg` por peça, anotações do Creo (`ann*.ast`).
 ## Fase 1 — base do dia a dia ✅
 - [x] Painel de propriedades da peça selecionada (+ miniatura `.jpg`, quando o modelo é aberto direto da pasta original)
 - [x] Busca por texto, regex e palavra exata — no nome ou em qualquer propriedade
-- [x] Busca por propriedade (`Material = S355*`, `Thickness > 10`, `Section contém TUBE`)
-- [x] Filtros combinados E/OU
+- [x] Busca por propriedade na caixa de busca (`Material=S355*`, `Thickness>10`, `Description~TUBE`, `Material!=S355`)
+  — removida na simplificação da busca e refeita na revisão de 23/11/2026 (v1.7.0)
+- [x] Filtros combinados: condições e palavras somam (E); alternativas num valor com `|` (OU)
+- [x] Buscas salvas com nome, que valem para qualquer modelo (v1.7.0)
 - [x] Ações sobre resultados (um ou todos): selecionar, isolar, ocultar, colorir, zoom, listar
 - [x] Seleção múltipla (Ctrl+clique, Shift+arrastar), inverter, selecionar pai/filhos/irmãos
 - [x] Selecionar tudo com a mesma cor / mesmo valor de propriedade

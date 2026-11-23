@@ -581,9 +581,7 @@ export function initAnim(app) {
   app.on("model", () => {
     deactivate(false);
     prep = null;
-    let hash = 2166136261;
-    for (const name of app.tree.shapes) for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 16777619);
-    signature = `${app.title}:${app.nParts}:${(hash >>> 0).toString(16)}`;
+    signature = app.modelSignature; // name, parts and part files: the key of this model's animations
     try { doc = valid(store.get(key(), null)); } catch { doc = { list: [newAnim("Animação 1")], cur: 0 }; }
     sel = -1; t = 0;
     renderSel(); renderSteps(); showTime();

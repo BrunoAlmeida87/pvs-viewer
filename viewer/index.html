@@ -221,13 +221,15 @@
           <div><kbd>I</kbd> isolar</div><div><kbd>H</kbd> ocultar</div><div><kbd>A</kbd> mostrar tudo</div>
           <div><kbd>G</kbd> fantasma</div><div><kbd>E</kbd> arestas</div><div><kbd>X</kbd> raio-X</div>
           <div><kbd>C</kbd> corte</div><div><kbd>N</kbd> vizinhança</div><div><kbd>K</kbd> camadas</div><div><kbd>M</kbd> medir</div>
-          <div><kbd>L</kbd> lista de peças</div><div><kbd>R</kbd> rótulos</div><div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
+          <div><kbd>L</kbd> lista de peças</div><div><kbd>R</kbd> rótulos</div><div><kbd>B</kbd> bigramas</div><div><kbd>V</kbd> animação</div>
+          <div><kbd>P</kbd> desempenho</div><div><kbd>Esc</kbd> limpar seleção</div>
           <div><kbd>Ctrl</kbd><kbd>Z</kbd> desfazer</div><div><kbd>Ctrl</kbd><kbd>Y</kbd> refazer</div>
           <hr>
           <div><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> girar a vista · com <kbd>Shift</kbd> desloca</div>
           <div><kbd>+</kbd><kbd>−</kbd> zoom · <kbd>Home</kbd> enquadrar tudo</div>
           <div><kbd>1</kbd> frente <kbd>2</kbd> lado <kbd>3</kbd> topo <kbd>4</kbd> isométrica <kbd>5</kbd> ortográfica</div>
           <div><kbd>⌫</kbd> vista anterior · com <kbd>Shift</kbd> a seguinte</div>
+          <div>Caminhada: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> anda · <kbd>Q</kbd><kbd>E</kbd> desce/sobe · <kbd>Shift</kbd> mais rápido · <kbd>G</kbd> chão · <kbd>C</kbd> colisão · <kbd>P</kbd> posicionar · <kbd>Esc</kbd> sai</div>
           <hr>
           <div>Arrastar: gira em torno do ponto · botão direito ou do meio: desloca · roda: zoom</div>
           <div>Ctrl+clique soma · Shift+arrastar seleciona área · Alt+clique sobe um nível</div>
@@ -299,7 +301,7 @@
         <button id="mobileAdvancedSearch" type="button" aria-expanded="false">Busca avançada ▾</button>
       </div>
       <div class="searchBox">
-        <input id="q" placeholder="Buscar na estrutura… (texto, ou /regex/)" autocomplete="off">
+        <input id="q" placeholder="Buscar na estrutura… (texto, /regex/ ou Material=S355*)" autocomplete="off">
         <div class="row2">
           <select id="qBg" title="Só equipamentos deste bigrama (o sistema do código, como o DT de LPR-DT20003)" disabled><option value="">Todos os bigramas</option></select>
         </div>
@@ -309,6 +311,12 @@
         </div>
         <label class="chk"><input type="checkbox" id="qProps"> buscar também nas propriedades (material, descrição…)</label>
         <p class="hint">Em texto, traços e espaços não contam: <b>LPREX</b> acha <b>LPR-EX20003</b>. Várias palavras: todas precisam aparecer.</p>
+        <p class="hint">Por propriedade: <b>Material=S355*</b> (<b>*</b> qualquer texto), <b>Thickness&gt;10</b> (<b>&gt; &lt; &gt;= &lt;=</b>), <b>Thickness=8|10</b> (um ou outro), <b>Description~TUBE</b> (contém), <b>Material!=S355</b> (outro valor). Nome com espaço entre aspas: <b>"Unit weight"&gt;50</b>. Junte com palavras: <b>bomba Material=S355*</b>.</p>
+        <div class="row2">
+          <select id="qSaved" title="Buscas salvas: escolha uma para buscar de novo (valem para qualquer modelo e para novas versões dele)"><option value="">Buscas salvas…</option></select>
+          <button id="qSave" title="Salvar esta busca com um nome">Salvar busca</button>
+          <button id="qSavedDel" title="Excluir a busca salva escolhida" disabled>✕</button>
+        </div>
       </div>
       <div id="qActions" hidden>
         <div id="qCount"></div>

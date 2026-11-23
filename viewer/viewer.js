@@ -45,14 +45,16 @@ import { initGoto } from "./ui/goto.js";
 import { initExports } from "./ui/exports.js";
 import { initDrawing } from "./ui/drawing.js";
 import { initNFC } from "./ui/nfc.js";
+import { initUnsaved } from "./ui/unsaved.js";
 import { tileTops } from "./lib/navgrid.js";
+import { VERT, FRAG, EDGE_VERT, EDGE_FRAG, NAV_FRAG } from "./lib/shaders.js";
+import { ok, httpSrc, fromDesktop, fromDirectory, fromFileList } from "./lib/sources.js";
 
 const DATA = "data/";
 const TEX_W = 4096;
-// "touch": finger as the main pointer (phones and tablets): lighter defaults. "mobile": a phone,
-// which also gets the compact full-screen layout (ui/mobile.js).
+// "touch": finger as the main pointer (phones and tablets): lighter defaults. (A phone also has the
+// class "mobile", for the compact full-screen layout of ui/mobile.js.)
 const touch = document.documentElement.classList.contains("touch");
-const mobile = document.documentElement.classList.contains("mobile");
 
 // ---------------------------------------------------------------- app / events
 const listeners = {};
@@ -136,172 +138,7 @@ function resize() {
 new ResizeObserver(resize).observe(view);
 
 // ---------------------------------------------------------------- shaders
-// itemTex: one texel per draw item.  rgb = colour, a = state:
-//   0 = hidden, otherwise bit 7 = selected and bits 0..6 = opacity (127 = opaque).
-// offTex: per item xyz offset (exploded view).
-// Every chunk is drawn twice: pass 0 draws opaque items, pass 1 the translucent ones.
-// pickMode 1 writes item ids, 2 writes the view depth (float bits).
-const COMMON = /* glsl */ `
-precision highp float;
-precision highp int;
-uniform int pickMode;
-uniform int style;
-uniform int clipOn;
-uniform int clipInvert;
-uniform vec3 clipMin;
-uniform vec3 clipMax;
-uniform int planeOn;  // free section plane: removes where dot(w, plane.xyz) > plane.w
-uniform vec4 plane;
-uniform int nbClip;   // neighbourhood cut: 0 off, 1 sphere, 2 box
-uniform vec3 nbC;
-uniform float nbR;
-uniform vec3 nbMin;
-uniform vec3 nbMax;
-bool clipped(vec3 w) {
-  if (planeOn == 1 && dot(w, plane.xyz) > plane.w) return true;
-  if (nbClip == 1 && distance(w, nbC) > nbR) return true;
-  if (nbClip == 2 && (any(lessThan(w, nbMin)) || any(greaterThan(w, nbMax)))) return true;
-  if (clipOn == 0) return false;
-  bool inside = all(greaterThanEqual(w, clipMin)) && all(lessThanEqual(w, clipMax));
-  return clipInvert == 1 ? inside : !inside;
-}
-vec4 packId(uint id) {
-  return vec4(float(id & 255u), float((id >> 8) & 255u), float((id >> 16) & 255u), float(id >> 24)) / 255.0;
-}`;
-
-const VERT_HEAD = /* glsl */ `
-in uvec4 qpos;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-uniform vec3 bmin;
-uniform vec3 bext;
-uniform int itemOffset;
-uniform int exploded;
-uniform sampler2D itemTex;
-uniform sampler2D offTex;
-out vec3 vView;
-out vec3 vWorld;
-flat out vec4 vCol;
-flat out float vSel;
-flat out uint vId;
-int op;
-bool sel;
-vec4 itemState(out ivec2 tc) {
-  int idx = itemOffset + int(qpos.w);
-  tc = ivec2(idx & 4095, idx >> 12);
-  vec4 t = texelFetch(itemTex, tc, 0);
-  int av = int(t.a * 255.0 + 0.5);
-  op = av & 127;
-  sel = av >= 128;
-  vId = uint(idx + 1);
-  vSel = sel ? 1.0 : 0.0;
-  return t;
-}
-vec4 place(ivec2 tc) {
-  vec3 p = bmin + vec3(qpos.xyz) * (bext / 65535.0);
-  if (exploded == 1) p += texelFetch(offTex, tc, 0).xyz;
-  vWorld = p;
-  vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  vView = mv.xyz;
-  return projectionMatrix * mv;
-}`;
-
-const VERT = COMMON + VERT_HEAD + /* glsl */ `
-in vec4 nrm;
-uniform mat3 normalMatrix;
-uniform int pass;
-out vec3 vNormal;
-const int XRAY_OP = 20;
-void main() {
-  ivec2 tc;
-  vec4 t = itemState(tc);
-  if (style == 4 && pickMode == 0 && !sel && op > XRAY_OP) op = XRAY_OP;
-  bool draw = op > 0 && (pass == 0 ? op == 127 : op < 127);
-  if (pickMode != 0 && pass == 1) draw = false;
-  vCol = vec4(t.rgb, float(op) / 127.0);
-  vNormal = normalMatrix * nrm.xyz;
-  vec4 p = place(tc);
-  gl_Position = draw ? p : vec4(0.0, 0.0, 2.0, 1.0);
-}`;
-
-const FRAG = COMMON + /* glsl */ `
-in vec3 vView;
-in vec3 vWorld;
-in vec3 vNormal;
-flat in vec4 vCol;
-flat in float vSel;
-flat in uint vId;
-uniform int pass;
-uniform int ortho;
-uniform int smoothOn;
-uniform int capOn;
-uniform vec3 light;   // ambient, diffuse, specular
-uniform vec3 skyDir;  // view space
-uniform float skyMix;
-uniform float bright;
-out vec4 outColor;
-void main() {
-  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
-  if (pickMode == 1) { outColor = packId(vId); return; }
-  if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
-  vec3 base = vCol.rgb;
-  if (style == 2) base = vec3(1.0);
-  if (vSel > 0.5) base = mix(base, vec3(1.0, 0.42, 0.05), style == 2 ? 0.35 : 0.7);
-  if (capOn == 1 && (clipOn == 1 || nbClip > 0 || planeOn == 1) && !gl_FrontFacing) {
-    // inside of a cut solid: flat hatched cap
-    vec3 c = base * 0.62 * bright;
-    if (mod(gl_FragCoord.x - gl_FragCoord.y, 7.0) < 1.3) c *= 0.55;
-    outColor = vec4(c, 1.0);
-    return;
-  }
-  if (style == 2) { outColor = vec4(base, 1.0); return; }
-  vec3 fn = normalize(cross(dFdx(vView), dFdy(vView))); // faces the camera
-  vec3 n = fn;
-  if (smoothOn == 1) {
-    float l = length(vNormal);
-    if (l > 0.05) {
-      vec3 s = vNormal / l;
-      if (!gl_FrontFacing) s = -s;
-      if (dot(s, fn) > 0.82) n = s; // a normal far from the facet comes from a crease: stay flat
-    }
-  }
-  vec3 V = ortho == 1 ? vec3(0.0, 0.0, 1.0) : normalize(-vView);
-  float d = max(dot(n, V), 0.0);
-  float dif = mix(d, 0.55 * d + 0.45 * (0.5 + 0.5 * dot(n, skyDir)), skyMix);
-  vec3 c = (base * (light.x + light.y * dif) + vec3(light.z) * pow(d, 30.0)) * bright;
-  float a = 1.0;
-  if (pass == 1) {
-    a = vCol.a;
-    if (style == 4 && vSel < 0.5) { float f = 1.0 - d; a = clamp(a * (0.6 + 2.4 * f * f), 0.04, 0.6); }
-  }
-  outColor = vec4(c, a);
-}`;
-
-const EDGE_VERT = COMMON + VERT_HEAD + /* glsl */ `
-void main() {
-  ivec2 tc;
-  vec4 t = itemState(tc);
-  bool draw = op > 0 && (style == 3 || op == 127);
-  vCol = vec4(t.rgb, float(op) / 127.0);
-  vec4 p = place(tc);
-  gl_Position = draw ? p : vec4(0.0, 0.0, 2.0, 1.0);
-}`;
-
-const EDGE_FRAG = COMMON + /* glsl */ `
-in vec3 vView;
-in vec3 vWorld;
-flat in vec4 vCol;
-flat in float vSel;
-flat in uint vId;
-out vec4 outColor;
-void main() {
-  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
-  if (pickMode == 1) { outColor = packId(vId); return; }
-  if (pickMode == 2) { outColor = packId(floatBitsToUint(-vView.z)); return; }
-  vec3 c = style == 3 ? vCol.rgb * 0.9 : style == 2 ? vec3(0.08) : vCol.rgb * 0.22;
-  if (vSel > 0.5) c = style == 3 ? vec3(1.0, 0.42, 0.05) : vec3(0.7, 0.22, 0.0);
-  outColor = vec4(c, 1.0);
-}`;
+// (GLSL: lib/shaders.js — itemTex, offTex and the passes are described there)
 
 const shared = {
   itemTex: { value: null }, offTex: { value: null }, pickMode: { value: 0 }, ortho: { value: 0 },
@@ -864,31 +701,8 @@ app.clipFromBox = function (box) {
 };
 
 // ---------------------------------------------------------------- model sources
-// A model is either a folder converted by tools/build.py (chunks.json, tree.json, ...)
-// or an original Creo View folder (.pvs + .ol files) that is parsed here in the browser.
-// Local folders are read by the browser and are never uploaded.
-function ok(r, name) { if (!r.ok) throw new Error(name + ": HTTP " + r.status); return r; }
-
-const httpSrc = (base) => ({
-  json: (n) => fetch(base + n).then((r) => ok(r, n).json()),
-  buf: (n) => fetch(base + n).then((r) => ok(r, n).arrayBuffer()),
-});
+// (reading folders, files and servers: lib/sources.js)
 const httpConverted = httpSrc(DATA);
-
-function filesConverted(all, prefix) {
-  const get = (n) => { const f = all.get(prefix + n); if (!f) throw new Error("arquivo ausente: " + n); return f; };
-  return { json: async (n) => JSON.parse(await get(n).text()), buf: async (n) => get(n).arrayBuffer() };
-}
-
-function dirConverted(dir) {
-  const file = async (n) => {
-    const parts = n.split("/");
-    let d = dir;
-    for (const s of parts.slice(0, -1)) d = await d.getDirectoryHandle(s);
-    return (await d.getFileHandle(parts[parts.length - 1])).getFile();
-  };
-  return { json: async (n) => JSON.parse(await (await file(n)).text()), buf: async (n) => (await file(n)).arrayBuffer() };
-}
 
 // Read a file of the original model folder (used for thumbnails); null if unavailable.
 app.readModelFile = async function (name) {
@@ -1151,45 +965,11 @@ function rememberPath(r) {
   if (r && r.folder && window.desktop.openFolder) addRecent({ kind: "path", name: String(r.folder).split(/[\\/]/).filter(Boolean).pop() || r.folder, path: r.folder });
 }
 
-const NO_MODEL = "A pasta não tem arquivo .pvs nem um modelo convertido (chunks.json). Escolha a pasta que contém o .pvs e os arquivos .ol.";
 // Parts left without geometry by a conversion (.ol absent or unreadable): count and some names.
 function missingText(count, names) {
   if (!count) return "";
   return ` Atenção: ${count.toLocaleString("pt-BR")} peça(s) sem arquivo .ol legível ficaram sem geometria` +
     (names && names.length ? ` (${names.slice(0, 3).join(", ")}${count > 3 ? "…" : ""})` : "") + ".";
-}
-
-async function fromDesktop(r) {
-  if (r.converted) return { kind: "converted", src: httpSrc(r.base) };
-  if (!r.pvs) throw new Error(NO_MODEL);
-  const buf = await fetch(r.base + encodeURIComponent(r.pvs)).then((x) => ok(x, r.pvs).arrayBuffer());
-  return { kind: "raw", name: r.pvs, pvs: buf, access: { base: r.base, list: r.files } };
-}
-
-async function fromDirectory(dir) {
-  try { await dir.getFileHandle("chunks.json"); return { kind: "converted", src: dirConverted(dir) }; } catch { /* not converted */ }
-  let found = null;
-  for await (const [name, h] of dir.entries()) {
-    if (h.kind === "file" && name.toLowerCase().endsWith(".pvs")) { found = h; break; }
-  }
-  if (!found) throw new Error(NO_MODEL);
-  const f = await found.getFile();
-  return { kind: "raw", name: f.name, pvs: await f.arrayBuffer(), access: { dir } };
-}
-
-async function fromFileList(files) {
-  const all = new Map();
-  for (const f of files) all.set((f.webkitRelativePath || f.name).replace(/\\/g, "/"), f);
-  const keys = [...all.keys()];
-  const meta = keys.filter((k) => k.endsWith("chunks.json")).sort((a, b) => a.length - b.length)[0];
-  if (meta) return { kind: "converted", src: filesConverted(all, meta.slice(0, -"chunks.json".length)) };
-  const pvs = keys.filter((k) => k.toLowerCase().endsWith(".pvs")).sort((a, b) => a.length - b.length)[0];
-  if (!pvs) throw new Error(NO_MODEL);
-  const prefix = pvs.slice(0, pvs.lastIndexOf("/") + 1);
-  const byName = new Map();
-  for (const [k, f] of all) if (k.startsWith(prefix) && !k.slice(prefix.length).includes("/")) byName.set(k.slice(prefix.length), f);
-  const f = all.get(pvs);
-  return { kind: "raw", name: f.name, pvs: await f.arrayBuffer(), access: { files: byName } };
 }
 
 // ---------------------------------------------------------------- model setup
@@ -1206,9 +986,9 @@ function setModel(name, t, boxes, lo, hi) {
   modelMin = lo; modelMax = hi;
   const nParts = partBox.length / 6;
   app.nParts = nParts;
-  // This version of the model: name, number of parts and the names of the part files (the same rule as
-  // ui/structure.js and ui/anim.js). Saved views and selection sets record it, so that applying them to
-  // another version of the model (parts added or removed: other part numbers) asks first.
+  // This version of the model: name, number of parts and the names of the part files. Saved views and
+  // selection sets record it, so that applying them to another version of the model (parts added or
+  // removed: other part numbers) asks first; "Minha estrutura" and the animations are stored under it.
   let hash = 2166136261;
   for (const s of t.shapes) for (let i = 0; i < s.length; i++) hash = Math.imul(hash ^ s.charCodeAt(i), 16777619);
   app.modelSignature = `${name}:${nParts}:${(hash >>> 0).toString(16)}`;
@@ -1369,20 +1149,34 @@ async function loadConvertedParts(want, preview = false) {
   });
   const selected = preview ? previewChunks(meta.chunks, list) : list;
   source.previewed = selected.length < list.length;
-  let next = 0, done = 0;
+  let next = 0, done = 0, failed = 0;
   const bar = $("#bar > div");
+  // A chunk file that cannot be read (missing, cut short, damaged inside the ZIP) is counted and stays
+  // "not loaded" — "Carregar…" tries it again —, and the other chunks go on loading. (Before, the first
+  // such file stopped the whole opening with "Erro: …": the model never finished opening.)
   async function fetcher() {
     while (next < selected.length) {
       const k = selected[next++], c = meta.chunks[k];
-      const buf = await src.buf("c/" + c.f);
-      if (v2) {
-        const o1 = c.nv * 8, o2 = o1 + c.nv * 4, o3 = o2 + c.ni * 2;
-        addChunk(c, new Uint16Array(buf, 0, c.nv * 4), new Int8Array(buf, o1, c.nv * 4), new Uint16Array(buf, o2, c.ni),
-          c.ne ? new Uint16Array(buf, o3, c.ne).slice() : null, c.io, c.ic);
-      } else {
-        addChunk(c, new Uint16Array(buf, 0, c.nv * 4), null, new Uint16Array(buf, c.nv * 8, c.ni), null, c.io, c.ic);
+      let arrays;
+      try {
+        const buf = await src.buf("c/" + c.f);
+        const need = v2 ? c.nv * 12 + c.ni * 2 + (c.ne || 0) * 2 : c.nv * 8 + c.ni * 2;
+        if (!(buf.byteLength >= need)) throw new Error(`bloco ${c.f} incompleto (${buf.byteLength} de ${need} bytes)`);
+        if (v2) {
+          const o1 = c.nv * 8, o2 = o1 + c.nv * 4, o3 = o2 + c.ni * 2;
+          arrays = [new Uint16Array(buf, 0, c.nv * 4), new Int8Array(buf, o1, c.nv * 4), new Uint16Array(buf, o2, c.ni),
+            c.ne ? new Uint16Array(buf, o3, c.ne).slice() : null];
+        } else {
+          arrays = [new Uint16Array(buf, 0, c.nv * 4), null, new Uint16Array(buf, c.nv * 8, c.ni), null];
+        }
+      } catch (e) {
+        failed++;
+        console.error("bloco do modelo não lido:", c.f, e);
       }
-      source.loaded[k] = 1;
+      if (arrays) {
+        addChunk(c, ...arrays, c.io, c.ic);
+        source.loaded[k] = 1;
+      }
       done++;
       bar.style.width = (100 * done / selected.length).toFixed(1) + "%";
       status(done < selected.length ? `Carregando geometria ${done}/${selected.length}` : "Modelo carregado" + (v2 ? "" : " · formato antigo: rode tools/build.py de novo para ter arestas e sombreado suave"));
@@ -1391,6 +1185,7 @@ async function loadConvertedParts(want, preview = false) {
   await Promise.all(Array.from({ length: touch ? 3 : 6 }, fetcher));
   // A part can span several chunks: count it as complete only after all its chunks load.
   app.partLoaded.set(completedParts(meta.chunks, itemPart, source.loaded, app.nParts));
+  return failed;
 }
 
 async function loadRaw(m, ask) {
@@ -1499,12 +1294,14 @@ function loadParts(want, preview = false) {
   return run;
 }
 async function loadPartsNow(want, preview) {
-  const failed = source.kind === "converted" ? (await loadConvertedParts(want, preview), 0) : await loadRawParts(want);
+  const converted = source.kind === "converted";
+  // failures: chunk files of a converted folder, or parts of an original model
+  const failed = converted ? await loadConvertedParts(want, preview) : await loadRawParts(want);
   const total = app.availableParts.reduce((s, v) => s + v, 0);
   const n = app.partLoaded.reduce((s, v, p) => s + (app.availableParts[p] ? v : 0), 0);
   $("#loadMoreBtn").hidden = n >= total;
   if (n < total) status(`${source.previewed ? "Prévia pronta · " : ""}${n.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} peças carregadas` +
-    (failed ? ` · ${failed.toLocaleString("pt-BR")} não lida(s) por erro` : "") + " · use Carregar… para o resto");
+    (failed ? ` · ${failed.toLocaleString("pt-BR")} ${converted ? "bloco(s) do modelo não lido(s)" : "não lida(s)"} por erro` : "") + " · use Carregar… para o resto");
   if (!userMoved) {
     if (source.kind === "converted" && source.previewed && chunks.length) {
       const box = new THREE.Box3();
@@ -1892,20 +1689,7 @@ const _pv2 = new THREE.Vector3();
 // `sub` pixels per cell side, drawn in tiles. on.start(grid) comes first, then on.slice(rx, ry,
 // rw, rh, tops, inside) gets each slice of each tile reduced to cells (lib/navgrid.js tileTops),
 // the lowest cut first; on.progress(fraction) now and then.
-const NAV_FRAG = COMMON + /* glsl */ `
-in vec3 vView;
-in vec3 vWorld;
-flat in vec4 vCol;
-flat in float vSel;
-flat in uint vId;
-out vec4 outColor;
-void main() {
-  if ((clipOn == 1 || nbClip > 0 || planeOn == 1) && clipped(vWorld)) discard;
-  float d = -vView.z;
-  outColor = packId(floatBitsToUint(gl_FrontFacing ? d : -d));
-  // a face of a solid standing on a floor and that floor are at the same depth: the inside wins
-  gl_FragDepth = gl_FrontFacing ? gl_FragCoord.z : max(0.0, gl_FragCoord.z - 4e-6);
-}`;
+// (NAV_FRAG: lib/shaders.js)
 let navTex = null;
 app.navSlices = async function ({ cell, sub, dz, exclude = null, signal = null }, on) {
   if (!chunks.length || !modelMin) throw new Error("Nenhum modelo carregado.");
@@ -2205,40 +1989,70 @@ async function geomFromOL(p) {
   for (const a of P) { pos.set(a, o); o += a.length; }
   return { pos, idx: Uint32Array.from(I), edges: Uint32Array.from(E) };
 }
-async function chunkBuffer(c) {
-  if (chunkBufCache.has(c.f)) return chunkBufCache.get(c.f);
+// Elements 0..n-1 grouped by their item (0..ic-1; -1 or out of range: left out), each group in
+// ascending order: the members of item l are list[start[l]] .. list[start[l + 1] - 1].
+function groupByItem(n, ic, itemOf) {
+  const start = new Uint32Array(ic + 2), of = new Int32Array(n);
+  for (let j = 0; j < n; j++) {
+    const l = itemOf(j);
+    of[j] = l >= 0 && l < ic ? l : -1;
+    if (of[j] >= 0) start[of[j] + 2]++;
+  }
+  for (let l = 0; l < ic; l++) start[l + 2] += start[l + 1];
+  const list = new Uint32Array(start[ic + 1]);
+  for (let j = 0; j < n; j++) if (of[j] >= 0) list[start[of[j] + 1]++] = j;
+  return { start, list };
+}
+// A chunk file read for part geometry, with its vertices, triangles and edges grouped by item (a
+// triangle or an edge goes with the item of its first vertex). Built once per file and kept with it:
+// a part then costs its own size, not a pass over the whole chunk for each of its items.
+async function chunkData(c) {
+  if (chunkBufCache.has(c.f)) { const d = chunkBufCache.get(c.f); chunkBufCache.delete(c.f); chunkBufCache.set(c.f, d); return d; } // the least used goes first
   const buf = await source.src.buf("c/" + c.f);
-  chunkBufCache.set(c.f, buf);
+  const verts = new Uint16Array(buf, 0, c.nv * 4);
+  const o2 = c.nv * 12, idx = new Uint16Array(buf, o2, c.ni), edg = c.ne ? new Uint16Array(buf, o2 + c.ni * 2, c.ne) : null;
+  const itemOfVertex = (v) => (v < c.nv ? verts[v * 4 + 3] : -1);
+  const d = {
+    verts, idx, edg, map: new Int32Array(c.nv).fill(-1),
+    V: groupByItem(c.nv, c.ic, itemOfVertex),
+    T: groupByItem(Math.floor(c.ni / 3), c.ic, (t) => itemOfVertex(idx[t * 3])),
+    E: edg ? groupByItem(Math.floor(c.ne / 2), c.ic, (e) => itemOfVertex(edg[e * 2])) : null,
+  };
+  chunkBufCache.set(c.f, d);
   while (chunkBufCache.size > 6) chunkBufCache.delete(chunkBufCache.keys().next().value);
-  return buf;
+  return d;
 }
 async function geomFromChunks(p) {
   const list = source.meta.chunks;
   const P = [], I = [], E = [];
   let nv = 0;
-  for (let i = 0; i < nItems; i++) {
-    if (itemPart[i] !== p || layerHidden[itemLayer[i]]) continue;
+  // only the items of this part, in the same order as a scan of all the items (the index is built
+  // once): measuring, clearance, interference and the routes ask for hundreds of parts in a row
+  const { start, list: items } = itemsIndex();
+  for (let s = start[p]; s < start[p + 1]; s++) {
+    const i = items[s];
+    if (layerHidden[itemLayer[i]]) continue;
     let lo = 0, hi = list.length - 1; // chunk with io <= i < io + ic
     while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (list[mid].io <= i) lo = mid; else hi = mid - 1; }
-    const c = list[lo];
-    const buf = await chunkBuffer(c);
-    const verts = new Uint16Array(buf, 0, c.nv * 4), local = i - c.io;
-    const o2 = c.nv * 12, idx = new Uint16Array(buf, o2, c.ni), edg = c.ne ? new Uint16Array(buf, o2 + c.ni * 2, c.ne) : null;
-    const map = new Int32Array(c.nv).fill(-1);
+    const c = list[lo], local = i - c.io;
+    const { verts, idx, edg, map, V, T, E: G } = await chunkData(c);
     const ext = [0, 1, 2].map((a) => Math.max(c.max[a] - c.min[a], 1e-6));
-    for (let v = 0; v < c.nv; v++) {
-      if (verts[v * 4 + 3] !== local) continue;
+    // the same vertices, triangles and edges, in the same order, as testing every one of the chunk:
+    // a vertex of this item gets its number; a triangle (edge) is kept when all its vertices have one
+    for (let q = V.start[local]; q < V.start[local + 1]; q++) {
+      const v = V.list[q];
       map[v] = nv++;
       P.push(c.min[0] + verts[v * 4] / 65535 * ext[0], c.min[1] + verts[v * 4 + 1] / 65535 * ext[1], c.min[2] + verts[v * 4 + 2] / 65535 * ext[2]);
     }
-    for (let k = 0; k < c.ni; k += 3) {
-      const a = map[idx[k]], b = map[idx[k + 1]], d = map[idx[k + 2]];
+    for (let q = T.start[local]; q < T.start[local + 1]; q++) {
+      const k = T.list[q] * 3, a = map[idx[k]], b = map[idx[k + 1]], d = map[idx[k + 2]];
       if (a >= 0 && b >= 0 && d >= 0) I.push(a, b, d);
     }
-    if (edg) for (let k = 0; k < c.ne; k += 2) {
-      const a = map[edg[k]], b = map[edg[k + 1]];
+    if (G) for (let q = G.start[local]; q < G.start[local + 1]; q++) {
+      const k = G.list[q] * 2, a = map[edg[k]], b = map[edg[k + 1]];
       if (a >= 0 && b >= 0) E.push(a, b);
     }
+    for (let q = V.start[local]; q < V.start[local + 1]; q++) map[V.list[q]] = -1; // ready for the next item
   }
   if (!I.length) return null;
   return { pos: Float32Array.from(P), idx: Uint32Array.from(I), edges: Uint32Array.from(E) };
@@ -2520,7 +2334,7 @@ renderer.domElement.addEventListener("pointerleave", clearHover);
 app.on("model", clearHover);
 app.on("display", () => { if (!app.display.hover) clearHover(); });
 
-// Left drag: orbit around the point under the cursor (or look around while walking).// Left drag: orbit around the point under the cursor (or look around while walking).
+// Left drag: orbit around the point under the cursor (or look around while walking).
 const Z = new THREE.Vector3(0, 0, 1);
 function dragRotate(e) {
   if (!rot.started) {
@@ -3002,9 +2816,12 @@ window.addEventListener("keydown", (e) => {
     return;
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // before a model opens there is nothing to act on (the part arrays do not exist yet: the
+  // shortcuts below would only throw errors behind the opening card)
+  if (!app.tree) return;
   // navigation: arrows turn the view (Shift: slide it), + / - zoom, Home fits, 1-4 standard views
   const A = THREE.MathUtils.degToRad(15);
-  if (k.startsWith("arrow") && app.tree) {
+  if (k.startsWith("arrow")) {
     const dx = k === "arrowleft" ? -1 : k === "arrowright" ? 1 : 0, dy = k === "arrowup" ? 1 : k === "arrowdown" ? -1 : 0;
     if (e.shiftKey) panBy(dx * 0.12, dy * 0.12); else orbitBy(dx * A, dy * A * 0.66);
     e.preventDefault();
@@ -3015,7 +2832,7 @@ window.addEventListener("keydown", (e) => {
   if (k === "home") { fitAll(true, true); e.preventDefault(); return; }
   if (k === "backspace") { histGo(e.shiftKey ? 1 : -1); e.preventDefault(); return; }
   const std = { 1: "front", 2: "side", 3: "top", 4: "iso" }[k];
-  if (std && app.tree) { frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[std].clone().normalize(), true); return; }
+  if (std) { frame(app.selNodes.size ? app.nodesBox([...app.selNodes]) : modelBox(), VIEWS[std].clone().normalize(), true); return; }
   if (k === "5") { $("#ortho").click(); return; }
   if (k === "f") $("#fit").click();
   else if (k === "z") $("#zoomSel").click();
@@ -3233,8 +3050,14 @@ function showPerf(now, cpuMs, moving) {
   const el = $("#perf");
   el.hidden = false;
   const total = chunks.reduce((s, c) => s + c.ni / 3, 0);
-  el.innerHTML = "";
-  const line = (k, v, cls) => { const d = document.createElement("div"); if (cls) d.className = cls; d.innerHTML = `<span>${k}</span><b>${v}</b>`; el.append(d); };
+  el.replaceChildren();
+  // text only (the graphics card name comes from the driver): nothing here is read as HTML
+  const line = (k, v, cls) => {
+    const d = document.createElement("div");
+    if (cls) d.className = cls;
+    d.append(Object.assign(document.createElement("span"), { textContent: k }), Object.assign(document.createElement("b"), { textContent: v }));
+    el.append(d);
+  };
   line("Placa de vídeo", gpuName.replace(/^ANGLE \(|\)$/g, "").replace(/ Direct3D.*$/, ""), app.gpuIntegrated ? "warn" : "");
   line("Quadros/s", moving || fps > 0 ? fps.toFixed(0) : "parado");
   line("Envio do quadro (CPU)", cpuMs.toFixed(1) + " ms");
@@ -3284,11 +3107,12 @@ initGoto(app);
 initExports(app);
 initDrawing(app);
 initNFC(app);
+initUnsaved(app);
 
 // ---------------------------------------------------------------- link to one part
 // ...?peca=LPR-DT20003 opens the model, selects the equipment with that code (or name) and frames it.
 function wantedCode() { return parseTag(location.href)?.code || ""; }
-const normCode = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.\/]+/g, "");
+const normCode = (t) => String(t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_./]+/g, "");
 app.findByCode = function (code) {
   const want = normCode(code), t = app.tree, ki = app.keyIndex("part_objectid");
   if (!want) return [];

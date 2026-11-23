@@ -1,8 +1,13 @@
 // Search tab: free text (or /regex/) over the structure, optionally restricted to one bigrama,
-// and actions on the results.
-import { $, el, fmt, parseHex } from "./util.js";
+// with conditions on properties (Material=S355*, Thickness>10: lib/query.js), and actions on the
+// results.
+import { $, el, fmt, parseHex, store } from "./util.js";
+import { parseQuery, passes, describe } from "../lib/query.js";
 
 const MAX_ROWS = 1000;
+// Saved searches: the query itself (text, bigrama, kind of item, properties), not the parts found, so
+// that it works on any model and on a new version of the same one. One list for all models.
+const SAVED = "pvs-viewer:searches", MAX_SAVED = 50;
 
 // Lower case, no accents, and no separators: "LPREX" finds "LPR-EX20003", "tubulacao" finds "TUBULAÇÃO".
 const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[\s\-_.]+|\//g, "");
@@ -76,6 +81,44 @@ export function initSearch(app) {
     $("#mobileAdvancedSearch").textContent = open ? "Busca avançada ▴" : "Busca avançada ▾";
   };
 
+  // ------------------------------------------------------------ saved searches
+  const savedList = () => { const l = store.get(SAVED, []); return Array.isArray(l) ? l.filter((s) => s && typeof s.name === "string") : []; };
+  function renderSaved(pick = "") {
+    const sel = $("#qSaved");
+    sel.replaceChildren(el("option", { value: "", text: "Buscas salvas…" }),
+      ...savedList().map((s) => el("option", { value: s.name, text: s.name, title: s.q + (s.bg ? ` · bigrama ${s.bg}` : "") })));
+    sel.value = pick;
+    $("#qSavedDel").disabled = !sel.value;
+  }
+  renderSaved();
+  $("#qSave").onclick = () => {
+    const s = { q: $("#q").value.trim(), bg: $("#qBg").value, scope: $("#qScope").value, props: $("#qProps").checked };
+    if (!s.q && !s.bg) { $("#qCount").textContent = "Digite uma busca (ou escolha um bigrama) antes de salvar."; $("#qActions").hidden = false; return; }
+    const name = (prompt("Nome da busca salva:", s.q || "Bigrama " + s.bg) || "").trim();
+    if (!name) return;
+    const list = savedList().filter((x) => x.name !== name);
+    list.unshift({ name, ...s });
+    if (!store.set(SAVED, list.slice(0, MAX_SAVED))) { alert("Não foi possível salvar: o armazenamento do navegador está cheio ou bloqueado."); return; }
+    renderSaved(name);
+  };
+  $("#qSaved").onchange = () => {
+    const s = savedList().find((x) => x.name === $("#qSaved").value);
+    $("#qSavedDel").disabled = !s;
+    if (!s) return;
+    $("#q").value = s.q || "";
+    $("#qBg").value = s.bg || "";
+    if ($("#qBg").value !== (s.bg || "")) $("#qBg").value = ""; // that bigrama is not in this model
+    $("#qScope").value = ["all", "parts", "asm"].includes(s.scope) ? s.scope : "all";
+    $("#qProps").checked = !!s.props;
+    if (app.tree) run();
+  };
+  $("#qSavedDel").onclick = () => {
+    const name = $("#qSaved").value;
+    if (!name || !confirm(`Excluir a busca salva “${name}”?`)) return;
+    store.set(SAVED, savedList().filter((x) => x.name !== name));
+    renderSaved();
+  };
+
   $("#qRun").onclick = run;
   $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
   $("#qBg").onchange = run;
@@ -93,7 +136,7 @@ export function initSearch(app) {
     if (inProps && !normVals) normVals = P.vals.map(norm);
 
     // what a node offers to the text test: its name and, optionally, every property value
-    let test;
+    let test, conds = [];
     const re = /^\/(.+)\/$/.exec(query);
     if (query && re) {
       let rx;
@@ -104,13 +147,20 @@ export function initSearch(app) {
         return false;
       };
     } else if (query) {
-      const terms = query.split(/\s+/).map(norm).filter(Boolean);
-      if (!terms.length) return;
-      test = (n) => {
+      // words such as Material=S355* or Thickness>10 (a property of the model on the left) are
+      // conditions; without any, the words are split and searched exactly as before
+      const q = parseQuery(query, P.keys);
+      if (q.error) { $("#qCount").textContent = q.error; $("#qActions").hidden = false; return; }
+      conds = q.conds;
+      const terms = (conds.length ? q.words : query.split(/\s+/)).map(norm).filter(Boolean);
+      if (!terms.length && !conds.length) return;
+      const textTest = (n) => {
         const parts = [normNames[n]];
         if (inProps) for (let i = P.start[n]; i < P.start[n + 1]; i++) parts.push(normVals[P.kv[2 * i + 1]]);
         return terms.every((w) => parts.some((s) => s.includes(w)));
       };
+      const condTest = (n) => conds.every((c) => passes(c, (ki) => app.prop(n, ki)));
+      test = !conds.length ? textTest : !terms.length ? condTest : (n) => condTest(n) && textTest(n);
     }
 
     const eff = app.bigramaEff;
@@ -122,14 +172,15 @@ export function initSearch(app) {
       if (test && !test(n)) continue;
       hits.push(n);
     }
-    showResults(hits);
+    showResults(hits, conds.length ? "condição: " + conds.map(describe).join(" e ") : "");
   }
 
-  function showResults(hits) {
+  // note: what the search understood, after the counts (the conditions on properties)
+  function showResults(hits, note = "") {
     app.lastResults = hits;
     const parts = app.leafNodes(hits).length;
     $("#qActions").hidden = false;
-    $("#qCount").textContent = `${fmt(hits.length)} resultado(s) · ${fmt(parts)} peça(s)` + (hits.length > MAX_ROWS ? ` · mostrando ${fmt(MAX_ROWS)}` : "");
+    $("#qCount").textContent = `${fmt(hits.length)} resultado(s) · ${fmt(parts)} peça(s)` + (hits.length > MAX_ROWS ? ` · mostrando ${fmt(MAX_ROWS)}` : "") + (note ? ` · ${note}` : "");
     $("#mobileFilterHint").textContent = hits.length ? `${fmt(hits.length)} resultado(s) encontrado(s). Escolha o que mostrar.` : "Nenhum resultado. Tente outro nome ou tipo.";
     $("#mobileFilterOnly").disabled = hits.length === 0;
     $("#mobileFilterHide").disabled = hits.length === 0;

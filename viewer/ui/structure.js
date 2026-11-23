@@ -97,10 +97,9 @@ export function initStructure(app) {
     for (const g of groups.filter((x) => x.parent === null)) visit(g, 0);
   };
   app.on("model", () => {
-    // Distinguish revisions with the same filename and part count.
-    let hash = 2166136261;
-    for (const name of app.tree.shapes) for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 16777619);
-    signature = `${app.title}:${app.nParts}:${(hash >>> 0).toString(16)}`;
+    // Distinguish revisions with the same filename and part count (name, parts and a hash of the
+    // part file names: computed once by the viewer, the same as saved views and sets use).
+    signature = app.modelSignature;
     const saved = store.get(key(), null);
     try { groups = saved ? valid(saved) : []; } catch { groups = []; }
     render();

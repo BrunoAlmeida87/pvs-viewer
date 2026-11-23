@@ -65,7 +65,7 @@ export async function allow(handle) {
 // the browser closes the tab, the model is gone. So a copy is kept in the site's private storage
 // on the device (Origin Private File System): it survives closing the browser and reopens with no
 // file selector. Only the browser of this device sees it; it is erased with the site's data.
-const DIR = "modelos", KEEP = 3;
+const DIR = "modelos", KEEP = 3, STALE_PART = 6 * 3600e3; // ms after which a half copy is abandoned
 const opfsOk = () => !!(navigator.storage && navigator.storage.getDirectory);
 async function savedDir() { return (await navigator.storage.getDirectory()).getDirectoryHandle(DIR, { create: true }); }
 const savedName = (file) => (file.name.replace(/[^\w.\- ]+/g, "_").replace(/\.zip$/i, "") || "modelo") + "-" + file.size + ".zip";
@@ -123,11 +123,20 @@ export async function dropKept(name) {
 async function trimKept() {
   const kept = (await listRecent()).filter((r) => r.kind === "kept");
   for (const r of kept.slice(KEEP)) { await dropKept(r.path); await removeRecent(r.id); }
-  // copies not in the list any more (e.g. the list was cleared)
+  // copies not in the list any more (e.g. the list was cleared), and half copies left behind by a
+  // copy that never finished (the page closed in the middle): those are kept for some hours, in case
+  // another tab is still writing one
   try {
     const known = new Set(kept.slice(0, KEEP).map((r) => r.path));
     const dir = await savedDir();
-    for await (const [n] of dir.entries()) if (!known.has(n) && !n.endsWith(".parcial")) await dir.removeEntry(n).catch(() => {});
+    for await (const [n, h] of dir.entries()) {
+      if (known.has(n)) continue;
+      if (n.endsWith(".parcial")) {
+        const age = Date.now() - (await h.getFile().then((f) => f.lastModified, () => Date.now()));
+        if (age < STALE_PART) continue;
+      }
+      await dir.removeEntry(n).catch(() => {});
+    }
   } catch { /* storage unavailable */ }
 }
 export { mb as sizeText };
