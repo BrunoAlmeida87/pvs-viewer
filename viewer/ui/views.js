@@ -41,7 +41,8 @@ function saveBlob(name, blob) {
 export function initViews(app) {
   const key = () => "pvs-viewer:views:" + app.title;
   const load = () => store.get(key(), { views: [], notes: [] });
-  const save = (d) => { if (!store.set(key(), d)) alert("Não foi possível salvar: o armazenamento do navegador está cheio ou bloqueado."); };
+  // true when stored (false: full or blocked storage, after telling the user)
+  const save = (d) => { if (store.set(key(), d)) return true; alert("Não foi possível salvar: o armazenamento do navegador está cheio ou bloqueado."); return false; };
   const say = (t) => { $("#load").textContent = t; };
   let notes = [];
 
@@ -107,9 +108,9 @@ export function initViews(app) {
     const d = load();
     const name = $("#viewName").value.trim() || `Vista ${d.views.length + 1}`;
     d.views = d.views.filter((v) => v.name !== name);
-    d.views.push({ name, state: capture() });
-    save(d);
-    app.markSaved?.();
+    const state = capture();
+    d.views.push({ name, state });
+    if (save(d)) app.markSaved?.(state); // only what went into the view, and only once it is stored
     $("#viewName").value = "";
     renderViews();
   };
@@ -123,7 +124,7 @@ export function initViews(app) {
       box.append(el("div.item", null,
         el("span.nm", { text: v.name + (other ? " ⚠" : ""), title: other ? v.name + " — salva em outra versão do modelo" : v.name }),
         el("button", { text: "Aplicar", onclick: () => { if (!confirmVersion(v.state, "Esta vista")) return; apply(v.state); if (!v.state.sig) say(legacyNote(v.state).trim()); } }),
-        el("button", { text: "Atualizar", title: "Substitui pela vista atual", onclick: () => { const x = load(); const y = x.views.find((z) => z.name === v.name); if (y) y.state = capture(); save(x); app.markSaved?.(); } }),
+        el("button", { text: "Atualizar", title: "Substitui pela vista atual", onclick: () => { const x = load(); const y = x.views.find((z) => z.name === v.name); if (!y) return; y.state = capture(); if (save(x)) app.markSaved?.(y.state); } }),
         el("button", { text: "✕", title: "Excluir", onclick: () => { const x = load(); x.views = x.views.filter((y) => y.name !== v.name); save(x); renderViews(); } })));
     }
   }
@@ -132,14 +133,15 @@ export function initViews(app) {
   $("#viewLink").onclick = async () => {
     const s = capture();
     const url = location.origin + location.pathname + location.search + "#vista=" + await pack(s);
-    app.markSaved?.();
+    app.markSaved?.(s);
     try { await navigator.clipboard.writeText(url); say(`Link copiado (${fmt(url.length)} caracteres). Quem abrir precisa abrir o mesmo modelo.`); }
     catch { prompt("Copie o link:", url); }
   };
   $("#viewExport").onclick = () => {
     const name = (app.title || "modelo").replace(/\.pvs$/i, "") + "-vista.json";
-    saveBlob(name, new Blob([JSON.stringify(capture())], { type: "application/json" }));
-    app.markSaved?.();
+    const s = capture();
+    saveBlob(name, new Blob([JSON.stringify(s)], { type: "application/json" }));
+    app.markSaved?.(s);
   };
   $("#viewImport").onclick = () => $("#viewFile").click();
   $("#viewFile").onchange = async () => {

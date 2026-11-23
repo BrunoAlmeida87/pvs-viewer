@@ -3,21 +3,24 @@
 // If any of them changed since the last time they were saved, closing the tab, reloading or opening
 // another model asks first (the browser's own "leave the site?" question).
 //
-// What counts as saved: saving or updating a view, copying its link, exporting it to a file, and
-// applying a view (what it brings is saved already). A new model starts with nothing to save.
+// What counts as saved: what went into a view that was stored (saving or updating it — not when the
+// browser's storage refused it), into its link or its file, and what an applied view brings. Hand
+// markups drawn for another camera position do not go into a view, so they stay unsaved. A new model
+// starts with nothing to save.
 //
 // Not in the desktop app: there, a page that asks to stay keeps the window from closing without any
 // question (Electron shows no dialog by itself).
 export function initUnsaved(app) {
   if (window.desktop) { app.markSaved = () => {}; return; }
-  const work = () => {
-    const m = app.measurements ? app.measurements() : [];
-    const k = app.markupItems ? app.markupItems() : [];
-    const q = app.getMannequins ? app.getMannequins() : [];
-    return m.length + k.length + q.length ? JSON.stringify([m, k, q]) : "";
-  };
+  const print = (m, k, q) => (m.length + k.length + q.length ? JSON.stringify([m, k, q]) : "");
+  // everything on screen now (all the markups, also those of another camera position)
+  const work = () => print(app.measurements ? app.measurements() : [], app.markupItems ? app.markupItems() : [],
+    app.getMannequins ? app.getMannequins() : []);
   let saved = "";
-  app.markSaved = () => { saved = work(); };
+  // state: a captured view (ui/views.js) — what it holds is saved; none: everything on screen is
+  app.markSaved = (state) => {
+    saved = state ? print(state.measurements || [], (state.markup && state.markup.items) || [], state.mannequins || []) : work();
+  };
   app.unsavedWork = () => { const w = work(); return !!w && w !== saved; };
   app.on("model", () => { saved = ""; });
   window.addEventListener("beforeunload", (e) => {

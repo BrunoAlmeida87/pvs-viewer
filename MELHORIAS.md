@@ -516,7 +516,11 @@ Chromium (Playwright), versão da primeira parte (`e433f1b`) × nova, modelo de 
 | Salvar com a busca vazia · excluir | — | aviso, nada salvo · lista vazia |
 | Sair sem nada / com medição salva numa vista / link / arquivo / medições apagadas / vista aplicada | sai | sai |
 | Sair com medição nova, marcação, manequim, ou medição feita depois de salvar a vista | sai (perdia o trabalho) | **o navegador pergunta** |
+| Salvar ou atualizar a vista com o armazenamento do navegador cheio (alerta) | — | o navegador **continua perguntando** ao sair |
+| Marcações feitas numa posição da câmera, câmera girada, vista salva ou link copiado (as marcações não entram) | — | o navegador **continua perguntando** |
 
+- Os dois últimos casos vieram da revisão automática do Codex na pull request #9 (uma vista não guardada
+  ou marcações que não entram nela eram dadas como salvas): corrigidos antes do merge; 16 cenários conferidos.
 - O aviso foi conferido com navegação real (`location.href`); o fechamento pela automação (`page.close`) não mostra
   a pergunta do navegador, por isso não foi usado.
 - `npm test`: **51** passam (47 + 4 em `desktop/test/sources.test.js`). `tools/test_parsers.py`: 5. ESLint: nenhum
